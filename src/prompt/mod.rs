@@ -42,7 +42,8 @@ pub struct PromptMetrics {
 pub struct PromptPipeline {
     /// System prompt template
     system_prompt: String,
-    /// Max tokens for context
+    /// Max tokens for context (reserved for future use)
+    #[allow(dead_code)]
     max_context_tokens: i32,
 }
 
@@ -194,7 +195,7 @@ impl PromptPipeline {
         )
     }
 
-    fn build_user_prompt(&self, card: &Card, context: &PromptContext) -> String {
+    fn build_user_prompt(&self, _card: &Card, context: &PromptContext) -> String {
         let mut prompt = String::new();
 
         if let Some(ctx) = &context.card_context {
