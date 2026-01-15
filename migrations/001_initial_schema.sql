@@ -237,3 +237,18 @@ CREATE TABLE IF NOT EXISTS websocket_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_ws_subs_connection ON websocket_subscriptions(connection_id);
 CREATE INDEX IF NOT EXISTS idx_ws_subs_heartbeat ON websocket_subscriptions(last_heartbeat);
+
+-------------------------------------------------------------------------------
+-- CHAT MESSAGES TABLE (Loop conversation history)
+-------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id TEXT PRIMARY KEY NOT NULL,
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    tokens INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_card ON chat_messages(card_id);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_created ON chat_messages(card_id, created_at ASC);

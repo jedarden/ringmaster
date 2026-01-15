@@ -19,6 +19,7 @@ use ringmaster::{
     db::init_database,
     events::EventBus,
     loops::LoopManager,
+    monitor::{IntegrationMonitor, MonitorConfig},
     static_files::static_handler,
 };
 
@@ -106,10 +107,41 @@ async fn run_server(host: &str, port: u16, db_path: &str) -> anyhow::Result<()> 
     let loop_manager = Arc::new(RwLock::new(LoopManager::new()));
 
     let app_state = AppState {
-        pool,
-        event_bus,
+        pool: pool.clone(),
+        event_bus: event_bus.clone(),
         loop_manager,
     };
+
+    // Start integration monitor (background task)
+    let mut monitor = IntegrationMonitor::new(
+        pool,
+        event_bus,
+        MonitorConfig::default(),
+    );
+
+    // Configure monitor from environment variables
+    if let (Ok(token), Ok(owner), Ok(repo)) = (
+        std::env::var("GITHUB_TOKEN"),
+        std::env::var("GITHUB_OWNER"),
+        std::env::var("GITHUB_REPO"),
+    ) {
+        tracing::info!("GitHub Actions monitoring enabled for {}/{}", owner, repo);
+        monitor = monitor.with_github(token, owner, repo);
+    }
+
+    if let (Ok(url), Ok(token)) = (
+        std::env::var("ARGOCD_URL"),
+        std::env::var("ARGOCD_AUTH_TOKEN"),
+    ) {
+        tracing::info!("ArgoCD monitoring enabled at {}", url);
+        monitor = monitor.with_argocd(url, token);
+    }
+
+    // Start monitor in background
+    let monitor = Arc::new(monitor);
+    tokio::spawn(async move {
+        monitor.start().await;
+    });
 
     // Build CORS layer
     let cors = CorsLayer::new()
