@@ -10,7 +10,7 @@ import { useCreateCard } from '../../hooks/useCards';
 
 export function NewCardDialog() {
   const { showNewCardDialog, setShowNewCardDialog, selectedProjectId } = useUIStore();
-  const { data: projects } = useProjects();
+  const { projects } = useProjects();
   const createCard = useCreateCard();
 
   const [title, setTitle] = useState('');

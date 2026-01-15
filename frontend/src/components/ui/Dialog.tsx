@@ -5,12 +5,17 @@ import { Button } from './Button';
 
 export interface DialogProps {
   open: boolean;
-  onClose: () => void;
+  onClose?: () => void;
+  onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   className?: string;
 }
 
-export function Dialog({ open, onClose, children, className }: DialogProps) {
+export function Dialog({ open, onClose, onOpenChange, children, className }: DialogProps) {
+  const handleClose = () => {
+    if (onClose) onClose();
+    if (onOpenChange) onOpenChange(false);
+  };
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -28,14 +33,14 @@ export function Dialog({ open, onClose, children, className }: DialogProps) {
     const dialog = dialogRef.current;
     if (!dialog) return;
 
-    const handleCancel = (e: Event) => {
+    const onCancel = (e: Event) => {
       e.preventDefault();
-      onClose();
+      handleClose();
     };
 
-    dialog.addEventListener('cancel', handleCancel);
-    return () => dialog.removeEventListener('cancel', handleCancel);
-  }, [onClose]);
+    dialog.addEventListener('cancel', onCancel);
+    return () => dialog.removeEventListener('cancel', onCancel);
+  }, [onClose, onOpenChange]);
 
   return (
     <dialog
@@ -47,7 +52,7 @@ export function Dialog({ open, onClose, children, className }: DialogProps) {
       )}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          onClose();
+          handleClose();
         }
       }}
     >
@@ -102,4 +107,14 @@ export function DialogFooter({
       {children}
     </div>
   );
+}
+
+export function DialogTitle({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <h2 className={cn('text-lg font-semibold', className)}>{children}</h2>;
 }

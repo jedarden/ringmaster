@@ -42,9 +42,11 @@ export interface Project {
   id: string;
   name: string;
   description?: string;
-  repoUrl: string;
-  repoPath: string;
+  repositoryUrl: string;
+  repositoryPath?: string;
   defaultBranch: string;
+  techStack?: string[];
+  codingConventions?: string;
   cardCount: number;
   activeLoops: number;
   totalCostUsd: number;

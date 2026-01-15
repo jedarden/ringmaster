@@ -5,12 +5,14 @@ mod projects;
 mod loops;
 mod errors;
 mod ws;
+mod integrations;
 
 pub use cards::*;
 pub use projects::*;
 pub use loops::*;
 pub use errors::*;
 pub use ws::*;
+pub use integrations::integration_routes;
 
 use axum::{
     http::StatusCode,
@@ -93,6 +95,14 @@ impl ApiError {
                 details: Some(details),
             },
         }
+    }
+
+    pub fn not_found(message: &str) -> Self {
+        Self::new("NOT_FOUND", message)
+    }
+
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        Self::new("INTERNAL_ERROR", &message.into())
     }
 }
 

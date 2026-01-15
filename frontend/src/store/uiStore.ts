@@ -19,6 +19,7 @@ interface UIStore {
   setKanbanView: (view: KanbanView) => void;
   setTheme: (theme: Theme) => void;
   setSelectedProject: (projectId: string | null) => void;
+  setSelectedProjectId: (projectId: string | null) => void; // alias
   setShowNewCardDialog: (show: boolean) => void;
   setShowNewProjectDialog: (show: boolean) => void;
 }
@@ -40,6 +41,7 @@ export const useUIStore = create<UIStore>()(
         setKanbanView: (kanbanView) => set({ kanbanView }),
         setTheme: (theme) => set({ theme }),
         setSelectedProject: (selectedProjectId) => set({ selectedProjectId }),
+        setSelectedProjectId: (selectedProjectId) => set({ selectedProjectId }),
         setShowNewCardDialog: (showNewCardDialog) => set({ showNewCardDialog }),
         setShowNewProjectDialog: (showNewProjectDialog) =>
           set({ showNewProjectDialog }),

@@ -122,14 +122,22 @@ class ApiClient {
 
   async createProject(project: {
     name: string;
+    repositoryUrl: string;
+    repositoryPath?: string;
     description?: string;
-    repoUrl: string;
-    repoPath: string;
+    techStack?: string[];
+    codingConventions?: string;
     defaultBranch?: string;
   }): Promise<Project> {
     return this.request<Project>('/projects', {
       method: 'POST',
       body: JSON.stringify(project),
+    });
+  }
+
+  async deleteProject(id: string): Promise<void> {
+    return this.request<void>(`/projects/${id}`, {
+      method: 'DELETE',
     });
   }
 

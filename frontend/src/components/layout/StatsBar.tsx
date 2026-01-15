@@ -6,7 +6,7 @@ import { formatCost } from '../../lib/utils';
 export function StatsBar() {
   const cards = useCardStore((s) => s.cards);
   const activeLoopCount = useLoopStore((s) => s.getActiveLoopCount());
-  const { data: projects } = useProjects();
+  const { projects } = useProjects();
 
   const totalCards = cards.size;
   const completedCards = Array.from(cards.values()).filter(

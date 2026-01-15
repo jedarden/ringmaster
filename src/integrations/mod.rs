@@ -547,6 +547,304 @@ pub mod argocd {
     }
 }
 
+/// Docker Hub integration
+pub mod dockerhub {
+    use super::*;
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ImageTag {
+        pub name: String,
+        #[serde(default)]
+        pub digest: String,
+        pub last_updated: Option<String>,
+        #[serde(default)]
+        pub full_size: u64,
+        #[serde(default)]
+        pub images: Vec<ImagePlatform>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ImagePlatform {
+        pub architecture: String,
+        pub os: String,
+        #[serde(default)]
+        pub size: u64,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    struct TagsResponse {
+        count: i32,
+        next: Option<String>,
+        previous: Option<String>,
+        results: Vec<ImageTag>,
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Repository {
+        pub namespace: String,
+        pub name: String,
+        pub description: Option<String>,
+        pub star_count: i32,
+        pub pull_count: i64,
+        pub last_updated: Option<String>,
+        pub is_private: bool,
+    }
+
+    /// Docker Hub client for monitoring container images
+    pub struct DockerHubClient {
+        client: Client,
+        api_url: String,
+        auth_token: Option<String>,
+    }
+
+    impl DockerHubClient {
+        /// Create a new Docker Hub client
+        pub fn new() -> Self {
+            Self {
+                client: Client::new(),
+                api_url: "https://hub.docker.com/v2".to_string(),
+                auth_token: None,
+            }
+        }
+
+        /// Create a client with authentication
+        pub fn with_token(mut self, token: impl Into<String>) -> Self {
+            self.auth_token = Some(token.into());
+            self
+        }
+
+        /// Authenticate with Docker Hub
+        pub async fn authenticate(
+            &mut self,
+            username: &str,
+            password: &str,
+        ) -> Result<(), IntegrationError> {
+            let url = format!("{}/users/login", self.api_url);
+
+            let body = serde_json::json!({
+                "username": username,
+                "password": password
+            });
+
+            let response = self.client
+                .post(&url)
+                .json(&body)
+                .send()
+                .await?;
+
+            let status = response.status();
+            if !status.is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                return Err(IntegrationError::ApiError {
+                    status: status.as_u16(),
+                    message: error_text,
+                });
+            }
+
+            #[derive(Deserialize)]
+            struct AuthResponse {
+                token: String,
+            }
+
+            let auth: AuthResponse = response
+                .json()
+                .await
+                .map_err(|e| IntegrationError::ParseError(e.to_string()))?;
+
+            self.auth_token = Some(auth.token);
+            Ok(())
+        }
+
+        fn build_request(&self, url: &str) -> reqwest::RequestBuilder {
+            let mut req = self.client
+                .get(url)
+                .header("Accept", "application/json");
+
+            if let Some(ref token) = self.auth_token {
+                req = req.header("Authorization", format!("Bearer {}", token));
+            }
+
+            req
+        }
+
+        /// Parse image name into namespace and repository
+        fn parse_image(&self, image: &str) -> Result<(String, String), IntegrationError> {
+            let parts: Vec<&str> = image.split('/').collect();
+            match parts.len() {
+                1 => Ok(("library".to_string(), parts[0].to_string())),
+                2 => Ok((parts[0].to_string(), parts[1].to_string())),
+                _ => Err(IntegrationError::ParseError(format!(
+                    "Invalid image name: {}",
+                    image
+                ))),
+            }
+        }
+
+        /// Get repository information
+        pub async fn get_repository(&self, image: &str) -> Result<Repository, IntegrationError> {
+            let (namespace, repo) = self.parse_image(image)?;
+            let url = format!("{}/repositories/{}/{}", self.api_url, namespace, repo);
+
+            let response = self.build_request(&url).send().await?;
+            self.handle_response(response).await
+        }
+
+        /// Get all tags for an image
+        pub async fn get_tags(
+            &self,
+            image: &str,
+            page_size: Option<u32>,
+        ) -> Result<Vec<ImageTag>, IntegrationError> {
+            let (namespace, repo) = self.parse_image(image)?;
+            let page_size = page_size.unwrap_or(100);
+            let url = format!(
+                "{}/repositories/{}/{}/tags?page_size={}",
+                self.api_url, namespace, repo, page_size
+            );
+
+            let response = self.build_request(&url).send().await?;
+            let tags_response: TagsResponse = self.handle_response(response).await?;
+            Ok(tags_response.results)
+        }
+
+        /// Check if a specific tag exists
+        pub async fn tag_exists(&self, image: &str, tag: &str) -> Result<bool, IntegrationError> {
+            let (namespace, repo) = self.parse_image(image)?;
+            let url = format!(
+                "{}/repositories/{}/{}/tags/{}",
+                self.api_url, namespace, repo, tag
+            );
+
+            let response = self.build_request(&url).send().await?;
+            Ok(response.status().is_success())
+        }
+
+        /// Get a specific tag
+        pub async fn get_tag(&self, image: &str, tag: &str) -> Result<ImageTag, IntegrationError> {
+            let (namespace, repo) = self.parse_image(image)?;
+            let url = format!(
+                "{}/repositories/{}/{}/tags/{}",
+                self.api_url, namespace, repo, tag
+            );
+
+            let response = self.build_request(&url).send().await?;
+            self.handle_response(response).await
+        }
+
+        /// Get the latest semver tag
+        pub async fn get_latest_semver(&self, image: &str) -> Result<Option<String>, IntegrationError> {
+            let tags = self.get_tags(image, Some(100)).await?;
+
+            let mut semver_tags: Vec<(semver::Version, String)> = tags
+                .iter()
+                .filter_map(|t| {
+                    // Try to parse as semver, stripping 'v' prefix if present
+                    let name = t.name.strip_prefix('v').unwrap_or(&t.name);
+                    semver::Version::parse(name)
+                        .ok()
+                        .map(|v| (v, t.name.clone()))
+                })
+                .collect();
+
+            semver_tags.sort_by(|a, b| b.0.cmp(&a.0));
+            Ok(semver_tags.into_iter().next().map(|(_, name)| name))
+        }
+
+        /// Get tags matching a semver range
+        pub async fn get_tags_in_range(
+            &self,
+            image: &str,
+            range: &str,
+        ) -> Result<Vec<ImageTag>, IntegrationError> {
+            let req = semver::VersionReq::parse(range)
+                .map_err(|e| IntegrationError::ParseError(format!("Invalid semver range: {}", e)))?;
+
+            let tags = self.get_tags(image, Some(100)).await?;
+
+            Ok(tags
+                .into_iter()
+                .filter(|t| {
+                    let name = t.name.strip_prefix('v').unwrap_or(&t.name);
+                    semver::Version::parse(name)
+                        .map(|v| req.matches(&v))
+                        .unwrap_or(false)
+                })
+                .collect())
+        }
+
+        /// Wait for a specific tag to be available
+        pub async fn wait_for_tag(
+            &self,
+            image: &str,
+            tag: &str,
+            timeout: std::time::Duration,
+            poll_interval: std::time::Duration,
+        ) -> Result<ImageTag, IntegrationError> {
+            let start = std::time::Instant::now();
+
+            loop {
+                if start.elapsed() > timeout {
+                    return Err(IntegrationError::ApiError {
+                        status: 408,
+                        message: format!("Timeout waiting for tag {}:{}", image, tag),
+                    });
+                }
+
+                match self.get_tag(image, tag).await {
+                    Ok(tag_info) => return Ok(tag_info),
+                    Err(IntegrationError::NotFound(_)) => {
+                        tokio::time::sleep(poll_interval).await;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+        }
+
+        async fn handle_response<T: serde::de::DeserializeOwned>(
+            &self,
+            response: reqwest::Response,
+        ) -> Result<T, IntegrationError> {
+            let status = response.status();
+
+            if status == reqwest::StatusCode::NOT_FOUND {
+                return Err(IntegrationError::NotFound("Image or tag not found".to_string()));
+            }
+
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                return Err(IntegrationError::AuthRequired);
+            }
+
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = response
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|s| s.parse().ok());
+                return Err(IntegrationError::RateLimited { retry_after });
+            }
+
+            if !status.is_success() {
+                let error_text = response.text().await.unwrap_or_default();
+                return Err(IntegrationError::ApiError {
+                    status: status.as_u16(),
+                    message: error_text,
+                });
+            }
+
+            response
+                .json()
+                .await
+                .map_err(|e| IntegrationError::ParseError(e.to_string()))
+        }
+    }
+
+    impl Default for DockerHubClient {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+}
+
 /// Git operations using git2
 pub mod git {
     use std::path::Path;
@@ -674,6 +972,187 @@ pub mod git {
 
         Ok(())
     }
+
+    /// Get diff statistics between two commits
+    #[derive(Debug, Clone)]
+    pub struct DiffStats {
+        pub files_changed: usize,
+        pub insertions: usize,
+        pub deletions: usize,
+    }
+
+    /// Get diff stats for a commit compared to its parent
+    pub fn get_commit_diff_stats(
+        repo_path: &Path,
+        commit_sha: &str,
+    ) -> Result<DiffStats, String> {
+        let repo = git2::Repository::open(repo_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let oid = git2::Oid::from_str(commit_sha)
+            .map_err(|e| format!("Invalid commit SHA: {}", e))?;
+
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| format!("Failed to find commit: {}", e))?;
+
+        let tree = commit
+            .tree()
+            .map_err(|e| format!("Failed to get commit tree: {}", e))?;
+
+        // Get parent tree (or empty tree if no parent)
+        let parent_tree = if commit.parent_count() > 0 {
+            Some(
+                commit
+                    .parent(0)
+                    .map_err(|e| format!("Failed to get parent: {}", e))?
+                    .tree()
+                    .map_err(|e| format!("Failed to get parent tree: {}", e))?,
+            )
+        } else {
+            None
+        };
+
+        let diff = repo
+            .diff_tree_to_tree(parent_tree.as_ref(), Some(&tree), None)
+            .map_err(|e| format!("Failed to create diff: {}", e))?;
+
+        let stats = diff
+            .stats()
+            .map_err(|e| format!("Failed to get diff stats: {}", e))?;
+
+        Ok(DiffStats {
+            files_changed: stats.files_changed(),
+            insertions: stats.insertions(),
+            deletions: stats.deletions(),
+        })
+    }
+
+    /// Get the latest commit SHA on a branch
+    pub fn get_branch_head(
+        repo_path: &Path,
+        branch_name: &str,
+    ) -> Result<String, String> {
+        let repo = git2::Repository::open(repo_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let refname = format!("refs/heads/{}", branch_name);
+        let reference = repo
+            .find_reference(&refname)
+            .map_err(|e| format!("Failed to find branch: {}", e))?;
+
+        let commit = reference
+            .peel_to_commit()
+            .map_err(|e| format!("Failed to peel to commit: {}", e))?;
+
+        Ok(commit.id().to_string())
+    }
+
+    /// List worktrees for a repository
+    pub fn list_worktrees(repo_path: &Path) -> Result<Vec<String>, String> {
+        let repo = git2::Repository::open(repo_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let worktrees = repo
+            .worktrees()
+            .map_err(|e| format!("Failed to list worktrees: {}", e))?;
+
+        Ok(worktrees
+            .iter()
+            .filter_map(|w| w.map(|s| s.to_string()))
+            .collect())
+    }
+
+    /// Check if a branch exists
+    pub fn branch_exists(repo_path: &Path, branch_name: &str) -> Result<bool, String> {
+        let repo = git2::Repository::open(repo_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let refname = format!("refs/heads/{}", branch_name);
+        let exists = repo.find_reference(&refname).is_ok();
+        Ok(exists)
+    }
+
+    /// Get current branch name in a worktree
+    pub fn get_current_branch(worktree_path: &Path) -> Result<String, String> {
+        let repo = git2::Repository::open(worktree_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let head = repo.head().map_err(|e| format!("Failed to get HEAD: {}", e))?;
+
+        let branch_name = head
+            .shorthand()
+            .ok_or_else(|| "Failed to get branch name".to_string())?;
+
+        Ok(branch_name.to_string())
+    }
+
+    /// Get uncommitted changes status
+    #[derive(Debug, Clone)]
+    pub struct WorktreeStatus {
+        pub modified: Vec<String>,
+        pub added: Vec<String>,
+        pub deleted: Vec<String>,
+        pub untracked: Vec<String>,
+    }
+
+    pub fn get_worktree_status(worktree_path: &Path) -> Result<WorktreeStatus, String> {
+        let repo = git2::Repository::open(worktree_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let statuses = repo
+            .statuses(None)
+            .map_err(|e| format!("Failed to get status: {}", e))?;
+
+        let mut status = WorktreeStatus {
+            modified: Vec::new(),
+            added: Vec::new(),
+            deleted: Vec::new(),
+            untracked: Vec::new(),
+        };
+
+        for entry in statuses.iter() {
+            let path = entry.path().unwrap_or("").to_string();
+            let s = entry.status();
+
+            if s.is_wt_modified() || s.is_index_modified() {
+                status.modified.push(path.clone());
+            }
+            if s.is_wt_new() {
+                status.untracked.push(path.clone());
+            }
+            if s.is_index_new() {
+                status.added.push(path.clone());
+            }
+            if s.is_wt_deleted() || s.is_index_deleted() {
+                status.deleted.push(path);
+            }
+        }
+
+        Ok(status)
+    }
+
+    /// Create a branch from a specific commit
+    pub fn create_branch_from_commit(
+        repo_path: &Path,
+        branch_name: &str,
+        commit_sha: &str,
+    ) -> Result<(), String> {
+        let repo = git2::Repository::open(repo_path)
+            .map_err(|e| format!("Failed to open repository: {}", e))?;
+
+        let oid = git2::Oid::from_str(commit_sha)
+            .map_err(|e| format!("Invalid commit SHA: {}", e))?;
+
+        let commit = repo
+            .find_commit(oid)
+            .map_err(|e| format!("Failed to find commit: {}", e))?;
+
+        repo.branch(branch_name, &commit, false)
+            .map_err(|e| format!("Failed to create branch: {}", e))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -690,6 +1169,19 @@ mod tests {
     #[test]
     fn test_argocd_client_creation() {
         let client = argocd::ArgoCDClient::new("https://argocd.example.com", None);
+        let _ = client;
+    }
+
+    #[test]
+    fn test_dockerhub_client_creation() {
+        let client = dockerhub::DockerHubClient::new();
+        let _ = client;
+    }
+
+    #[test]
+    fn test_dockerhub_default() {
+        let client = dockerhub::DockerHubClient::default();
+        // Test default creates successfully
         let _ = client;
     }
 }

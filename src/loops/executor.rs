@@ -16,12 +16,97 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::db::{complete_attempt, create_attempt, get_card, set_card_state};
-use crate::domain::{Card, CardState, Project};
+use crate::domain::{Card, CardState, DiffStats, Project};
 use crate::events::{Event, EventBus, LoopCompletionResult};
 use crate::integrations::claude::{ClaudeClient, ClaudeError, CompletionResponse, Message};
 use crate::prompt::PromptPipeline;
 
 use super::{LoopConfig, LoopManager, LoopState, LoopStatus, StopReason};
+
+/// Extracted commit information from response
+#[derive(Debug, Clone)]
+pub struct CommitInfo {
+    pub sha: String,
+    pub diff_stats: Option<DiffStats>,
+}
+
+/// Extract commit SHA from Claude's response text
+///
+/// Looks for common patterns in response where Claude reports making commits:
+/// - "git commit" output containing SHA
+/// - Commit SHA patterns (40-char hex or 7-char short SHA)
+fn extract_commit_sha(response: &str) -> Option<String> {
+    use regex::Regex;
+
+    // Pattern for full SHA (40 characters)
+    let full_sha_re = Regex::new(r"\b[a-f0-9]{40}\b").ok()?;
+    // Pattern for short SHA (7-8 characters) often preceded by commit context
+    let short_sha_re = Regex::new(r"(?i)(?:commit|committed|sha)[:\s]+([a-f0-9]{7,8})\b").ok()?;
+    // Pattern from git commit output like "[main abc1234] message"
+    let git_output_re = Regex::new(r"\[[\w\-/]+\s+([a-f0-9]{7,8})\]").ok()?;
+
+    // Try to find a full SHA first
+    if let Some(m) = full_sha_re.find(response) {
+        return Some(m.as_str().to_string());
+    }
+
+    // Try git output format
+    if let Some(caps) = git_output_re.captures(response) {
+        if let Some(m) = caps.get(1) {
+            return Some(m.as_str().to_string());
+        }
+    }
+
+    // Try short SHA with commit context
+    if let Some(caps) = short_sha_re.captures(response) {
+        if let Some(m) = caps.get(1) {
+            return Some(m.as_str().to_string());
+        }
+    }
+
+    None
+}
+
+/// Extract diff statistics from Claude's response
+///
+/// Looks for patterns like:
+/// - "X file(s) changed, Y insertion(s), Z deletion(s)"
+/// - Git diff stat output
+fn extract_diff_stats(response: &str) -> Option<DiffStats> {
+    use regex::Regex;
+
+    // Pattern for git diff --stat summary
+    let stat_re = Regex::new(
+        r"(\d+)\s*files?\s*changed(?:,\s*(\d+)\s*insertions?\(\+\))?(?:,\s*(\d+)\s*deletions?\(-\))?"
+    ).ok()?;
+
+    if let Some(caps) = stat_re.captures(response) {
+        let files_changed = caps.get(1)?.as_str().parse::<i32>().ok()?;
+        let insertions = caps
+            .get(2)
+            .and_then(|m| m.as_str().parse::<i32>().ok())
+            .unwrap_or(0);
+        let deletions = caps
+            .get(3)
+            .and_then(|m| m.as_str().parse::<i32>().ok())
+            .unwrap_or(0);
+
+        return Some(DiffStats {
+            files_changed,
+            insertions,
+            deletions,
+        });
+    }
+
+    None
+}
+
+/// Extract all commit information from response
+fn extract_commit_info(response: &str) -> Option<CommitInfo> {
+    let sha = extract_commit_sha(response)?;
+    let diff_stats = extract_diff_stats(response);
+    Some(CommitInfo { sha, diff_stats })
+}
 
 /// Execution result for a single iteration
 #[derive(Debug)]
@@ -270,6 +355,11 @@ impl LoopExecutor {
         self.save_chat_message(&card.id, "assistant", &response.content)
             .await?;
 
+        // Extract commit info from response
+        let commit_info = extract_commit_info(&response.content);
+        let commit_sha = commit_info.as_ref().map(|c| c.sha.as_str());
+        let diff_stats = commit_info.as_ref().and_then(|c| c.diff_stats.as_ref());
+
         // Complete the attempt record
         complete_attempt(
             &self.pool,
@@ -277,8 +367,8 @@ impl LoopExecutor {
             &response.content,
             (response.input_tokens + response.output_tokens) as i32,
             response.cost_usd(self.claude_client.model()),
-            None, // TODO: Extract commit SHA from response
-            None, // TODO: Extract diff stats
+            commit_sha,
+            diff_stats,
         )
         .await?;
 

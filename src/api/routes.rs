@@ -45,6 +45,9 @@ pub fn build_router(state: AppState) -> Router {
         .route("/projects", get(handlers::list_projects).post(handlers::create_project))
         .route("/projects/:id", get(handlers::get_project).patch(handlers::update_project).delete(handlers::delete_project))
 
+        // Integrations
+        .nest("/integrations", super::integrations::integration_routes())
+
         // WebSocket
         .route("/ws", get(ws_handler))
 
