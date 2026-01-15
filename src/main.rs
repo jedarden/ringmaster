@@ -19,6 +19,7 @@ use ringmaster::{
     db::init_database,
     events::EventBus,
     loops::LoopManager,
+    static_files::static_handler,
 };
 
 #[derive(Parser)]
@@ -127,6 +128,8 @@ async fn run_server(host: &str, port: u16, db_path: &str) -> anyhow::Result<()> 
         .nest("/api/projects", project_routes())
         .nest("/api/loops", global_loop_routes())
         .route("/api/ws", get(ws_handler))
+        // Static files (embedded frontend)
+        .fallback(static_handler)
         // Middleware
         .layer(TraceLayer::new_for_http())
         .layer(cors)

@@ -9,3 +9,4 @@ pub mod integrations;
 pub mod loops;
 pub mod prompt;
 pub mod state_machine;
+pub mod static_files;
