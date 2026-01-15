@@ -95,6 +95,48 @@ pub enum Event {
         category: String,
         timestamp: DateTime<Utc>,
     },
+
+    /// Loop stopped
+    LoopStopped {
+        card_id: Uuid,
+        iteration: i32,
+        reason: Option<crate::loops::StopReason>,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Git worktree created
+    WorktreeCreated {
+        card_id: Uuid,
+        worktree_path: String,
+        branch_name: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Pull request created
+    PullRequestCreated {
+        card_id: Uuid,
+        pr_url: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Error context collected
+    ErrorContextCollected {
+        card_id: Uuid,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// User notification
+    UserNotification {
+        card_id: Uuid,
+        message: String,
+        timestamp: DateTime<Utc>,
+    },
+
+    /// Metrics recorded
+    MetricsRecorded {
+        card_id: Uuid,
+        timestamp: DateTime<Utc>,
+    },
 }
 
 impl Event {
@@ -108,9 +150,15 @@ impl Event {
             Event::LoopStarted { card_id, .. } => Some(*card_id),
             Event::LoopCompleted { card_id, .. } => Some(*card_id),
             Event::LoopPaused { card_id, .. } => Some(*card_id),
+            Event::LoopStopped { card_id, .. } => Some(*card_id),
             Event::BuildStatus { card_id, .. } => Some(*card_id),
             Event::DeployStatus { card_id, .. } => Some(*card_id),
             Event::ErrorDetected { card_id, .. } => Some(*card_id),
+            Event::WorktreeCreated { card_id, .. } => Some(*card_id),
+            Event::PullRequestCreated { card_id, .. } => Some(*card_id),
+            Event::ErrorContextCollected { card_id, .. } => Some(*card_id),
+            Event::UserNotification { card_id, .. } => Some(*card_id),
+            Event::MetricsRecorded { card_id, .. } => Some(*card_id),
         }
     }
 

@@ -26,6 +26,7 @@ export interface Card {
   state: CardState;
   previousState?: CardState;
   loopIteration: number;
+  errorCount: number;
   totalCostUsd: number;
   totalTokens: number;
   labels: string[];
@@ -33,9 +34,20 @@ export interface Card {
   pullRequestUrl?: string;
   branchName?: string;
   worktreePath?: string;
+  deploymentName?: string;
+  deploymentNamespace?: string;
+  argocdAppName?: string;
+  deadline?: string;
+  acceptanceCriteria?: AcceptanceCriterion[];
   createdAt: string;
   updatedAt: string;
   stateChangedAt?: string;
+}
+
+export interface AcceptanceCriterion {
+  id: string;
+  description: string;
+  met: boolean;
 }
 
 export interface Project {
@@ -92,14 +104,26 @@ export interface LoopState {
 export interface Attempt {
   id: string;
   cardId: string;
+  attemptNumber: number;
   iteration: number;
   promptHash: string;
   inputTokens: number;
   outputTokens: number;
+  tokensUsed?: number;
   costUsd: number;
   durationMs: number;
+  output?: string;
   outputSummary?: string;
   completionSignalFound: boolean;
+  commitSha?: string;
+  diffStats?: {
+    insertions: number;
+    deletions: number;
+    filesChanged: number;
+  };
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  errorMessage?: string;
+  startedAt: string;
   createdAt: string;
 }
 
@@ -107,7 +131,9 @@ export interface CardError {
   id: string;
   cardId: string;
   errorType: string;
+  category: 'build' | 'test' | 'deploy' | 'runtime' | 'other';
   message: string;
+  stackTrace?: string;
   context?: Record<string, unknown>;
   resolved: boolean;
   resolvedAt?: string;

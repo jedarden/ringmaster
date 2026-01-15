@@ -383,6 +383,56 @@ pub async fn set_card_state(
     Ok(())
 }
 
+/// Update card worktree and branch info
+pub async fn update_card_worktree(
+    pool: &SqlitePool,
+    card_id: &str,
+    worktree_path: &str,
+    branch_name: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE cards
+        SET worktree_path = ?, branch_name = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(worktree_path)
+    .bind(branch_name)
+    .bind(card_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Update card pull request URL
+pub async fn update_card_pr(
+    pool: &SqlitePool,
+    card_id: &str,
+    pr_url: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE cards
+        SET pull_request_url = ?, updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(pr_url)
+    .bind(card_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Increment card error count (alias for backwards compatibility)
+pub async fn increment_card_error_count(
+    pool: &SqlitePool,
+    card_id: &str,
+) -> Result<(), sqlx::Error> {
+    increment_error_count(pool, card_id).await
+}
+
 /// Count cards by state for a project
 pub async fn count_cards_by_state(
     pool: &SqlitePool,

@@ -84,6 +84,22 @@ export function useTransitionCard() {
   });
 }
 
+export function useAttempts(cardId: string | undefined) {
+  return useQuery({
+    queryKey: ['attempts', cardId],
+    queryFn: () => api.getAttempts(cardId!),
+    enabled: !!cardId,
+  });
+}
+
+export function useErrors(cardId: string | undefined) {
+  return useQuery({
+    queryKey: ['errors', cardId],
+    queryFn: () => api.getErrors(cardId!),
+    enabled: !!cardId,
+  });
+}
+
 // Helper to get transition trigger for drag-and-drop
 export function getTransitionTrigger(
   fromState: CardState,

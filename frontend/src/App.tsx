@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Header } from './components/layout/Header';
 import { StatsBar } from './components/layout/StatsBar';
 import { useWebSocket } from './hooks/useWebSocket';
-import { DashboardPage, KanbanPage, ProjectsPage, SettingsPage } from './pages';
+import { DashboardPage, KanbanPage, ProjectsPage, SettingsPage, CardDetailPage } from './pages';
 import './index.css';
 
 // Create a client
@@ -39,6 +39,7 @@ function AppLayout() {
           <Route path="/kanban" element={<KanbanPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/cards/:cardId" element={<CardDetailPage />} />
         </Routes>
       </main>
 
