@@ -261,7 +261,6 @@ Remember to signal completion only when the task is fully done.
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
 
     #[test]
     fn test_prompt_assembly() {
