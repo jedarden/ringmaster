@@ -9,6 +9,10 @@ use thiserror::Error;
 pub mod claude;
 pub use claude::{ClaudeClient, ClaudeError, CompletionResponse, Message, Role, StopReason};
 
+// Kubernetes integration
+pub mod kubernetes;
+pub use kubernetes::{KubernetesService, KubeError, DeploymentErrorContext};
+
 /// Common integration error type
 #[derive(Error, Debug)]
 pub enum IntegrationError {

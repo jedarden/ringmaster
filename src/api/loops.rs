@@ -6,12 +6,14 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::db;
-use crate::domain::Attempt;
+use crate::domain::{Attempt, Project};
 use crate::events::Event;
-use crate::loops::{LoopConfig, LoopState, LoopStatus};
+use crate::loops::{LoopConfig, LoopExecutor, LoopManager, LoopState, LoopStatus};
 
 use super::{ApiResponse, AppError, AppState, Pagination, PaginatedResponse};
 
@@ -110,6 +112,11 @@ async fn start_loop(
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Card {} not found", card_id)))?;
 
+    // Get or create a default project for the card
+    let project = db::get_project(&state.pool, &card.project_id.to_string())
+        .await?
+        .unwrap_or_else(|| Project::default_for_card(&card));
+
     // Build config with overrides
     let mut config = LoopConfig::default();
     if let Some(overrides) = req.config {
@@ -133,10 +140,13 @@ async fn start_loop(
         }
     }
 
-    let mut loop_manager = state.loop_manager.write().await;
-    let loop_state = loop_manager
-        .start_loop(card_id, config)
-        .map_err(|e| AppError::LoopError(e))?;
+    // Start the loop in the manager
+    {
+        let mut loop_manager = state.loop_manager.write().await;
+        loop_manager
+            .start_loop(card_id, config.clone())
+            .map_err(|e| AppError::LoopError(e))?;
+    }
 
     // Publish event
     state.event_bus.publish(Event::LoopStarted {
@@ -144,11 +154,73 @@ async fn start_loop(
         timestamp: chrono::Utc::now(),
     });
 
+    // Spawn background task to run the actual loop executor
+    spawn_loop_executor(
+        state.pool.clone(),
+        state.event_bus.clone(),
+        state.loop_manager.clone(),
+        card_id,
+        project,
+        config.clone(),
+    );
+
+    // Get the initial state to return
+    let loop_state = {
+        let loop_manager = state.loop_manager.read().await;
+        loop_manager
+            .get_loop_state(&card_id)
+            .cloned()
+            .ok_or_else(|| AppError::LoopError("Failed to get loop state".to_string()))?
+    };
+
     Ok(Json(ApiResponse::new(LoopStartResponse {
         loop_id: format!("loop-{}", card_id),
         card_id,
         state: loop_state,
     })))
+}
+
+/// Spawn a background task to run the loop executor
+fn spawn_loop_executor(
+    pool: sqlx::SqlitePool,
+    event_bus: crate::events::EventBus,
+    loop_manager: Arc<RwLock<LoopManager>>,
+    card_id: Uuid,
+    project: Project,
+    config: LoopConfig,
+) {
+    tokio::spawn(async move {
+        // Try to create the executor
+        let executor = match LoopExecutor::new(pool.clone(), event_bus.clone(), loop_manager.clone())
+        {
+            Ok(e) => e,
+            Err(e) => {
+                tracing::error!("Failed to create loop executor: {}", e);
+                // Mark loop as failed
+                let mut manager = loop_manager.write().await;
+                let _ = manager.fail_loop(&card_id, format!("Executor creation failed: {}", e));
+                return;
+            }
+        };
+
+        // Run the loop
+        match executor.run_loop(card_id, &project, config).await {
+            Ok(final_state) => {
+                tracing::info!(
+                    "Loop completed for card {}: {:?} after {} iterations",
+                    card_id,
+                    final_state.status,
+                    final_state.iteration
+                );
+            }
+            Err(e) => {
+                tracing::error!("Loop failed for card {}: {}", card_id, e);
+                // Mark loop as failed if not already
+                let mut manager = loop_manager.write().await;
+                let _ = manager.fail_loop(&card_id, format!("Loop execution failed: {}", e));
+            }
+        }
+    });
 }
 
 async fn pause_loop(

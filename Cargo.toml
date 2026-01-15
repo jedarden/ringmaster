@@ -63,6 +63,10 @@ directories = "5.0"
 # Semver for version comparison
 semver = "1.0"
 
+# Kubernetes client
+kube = { version = "0.87", features = ["client", "runtime", "derive"] }
+k8s-openapi = { version = "0.20", features = ["v1_28"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 

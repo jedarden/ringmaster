@@ -34,6 +34,22 @@ impl Project {
             updated_at: now,
         }
     }
+
+    /// Create a default project for a card when no project is specified
+    pub fn default_for_card(card: &super::Card) -> Self {
+        let now = Utc::now();
+        Self {
+            id: card.project_id,
+            name: format!("Project for {}", card.title),
+            description: None,
+            repository_url: String::new(),
+            repository_path: card.worktree_path.clone(),
+            tech_stack: Vec::new(),
+            coding_conventions: None,
+            created_at: now,
+            updated_at: now,
+        }
+    }
 }
 
 /// Request to create a new project
