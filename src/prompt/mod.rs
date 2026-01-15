@@ -1,4 +1,12 @@
 //! Prompt Pipeline - 5-layer recursive prompt enrichment
+//!
+//! This module provides:
+//! - `PromptPipeline`: Assembles prompts with 5 context layers
+//! - `RlmSummarizer`: Compresses chat history using RLM summarization
+
+pub mod rlm;
+
+pub use rlm::{RlmConfig, RlmSummarizer, SummarizationResult};
 
 use serde::{Deserialize, Serialize};
 

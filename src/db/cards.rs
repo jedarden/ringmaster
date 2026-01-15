@@ -363,6 +363,26 @@ pub async fn add_card_cost(
     Ok(())
 }
 
+/// Simple state update (without full transition tracking)
+pub async fn set_card_state(
+    pool: &SqlitePool,
+    card_id: &str,
+    new_state: CardState,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE cards
+        SET state = ?, state_changed_at = datetime('now'), updated_at = datetime('now')
+        WHERE id = ?
+        "#,
+    )
+    .bind(new_state.to_string())
+    .bind(card_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Count cards by state for a project
 pub async fn count_cards_by_state(
     pool: &SqlitePool,

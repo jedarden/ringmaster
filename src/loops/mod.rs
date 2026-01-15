@@ -1,4 +1,13 @@
 //! Ralph Loop Manager - manages autonomous coding loops
+//!
+//! This module provides:
+//! - `LoopManager`: Manages loop state and lifecycle
+//! - `LoopExecutor`: Executes coding iterations with Claude API
+//! - `LoopConfig`: Configuration for loop behavior
+
+pub mod executor;
+
+pub use executor::{ExecutorError, IterationResult, LoopExecutor};
 
 use std::collections::HashMap;
 use std::time::Instant;
