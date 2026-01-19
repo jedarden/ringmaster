@@ -1,0 +1,25 @@
+pane	alpha	0	1	:*	0	✳ Playwright Kubernetes	:/home/coder	1	claude	:claude
+pane	bravo	0	1	:*	0	⠂ Fix Components Deployment	:/home/coder	1	claude	:claude
+pane	charlie	0	1	:*	0	⠂ Marathon Coding Setup	:/home/coder	1	claude	:claude
+pane	delta	0	1	:*	0	⠂ Pod Logs Debugging	:/home/coder	1	claude	:claude
+pane	echo	0	1	:*	0	⠐ Deploy builds	:/home/coder	1	claude	:claude
+pane	foxtrot	0	1	:*	0	✳ CPU RAM Labeling	:/home/coder	1	claude	:claude
+pane	golf	0	1	:*	0	✳ VictoriaLogs Documentation	:/home/coder	1	claude	:claude
+pane	hotel	0	1	:*	0	⠐ Home Assistant Integration	:/home/coder	1	claude	:claude
+pane	india	0	1	:*	0	✳ Deployment Monitoring	:/home/coder	1	claude	:claude
+pane	juliet	0	1	:*	0	✳ Update README Documentation	:/home/coder	1	claude	:claude
+pane	kilo	0	1	:*	0	coder-jeda-codespace-65d6f7c5cf-xrmts	:/home/coder/ringmaster/prompts	1	bash	:claude
+tee -a /home/coder/ringmaster/prompts/.marathon/logs/session_20260119_030110.jsonl
+/bin/bash /home/coder/.claude/skills/marathon-coding/stream-parser.sh
+window	alpha	0	:claude	1	:*	5cff,221x34,0,0,10	:
+window	bravo	0	:claude	1	:*	5d00,221x34,0,0,11	:
+window	charlie	0	:claude	1	:*	b91f,201x34,0,0,2	:
+window	delta	0	:claude	1	:*	b9a0,221x34,0,0,3	:
+window	echo	0	:claude	1	:*	b9a1,221x34,0,0,4	:
+window	foxtrot	0	:claude	1	:*	b9a2,221x34,0,0,5	:
+window	golf	0	:claude	1	:*	b9a3,221x34,0,0,6	:
+window	hotel	0	:claude	1	:*	b9a4,221x34,0,0,7	:
+window	india	0	:claude	1	:*	b9a6,221x34,0,0,9	:
+window	juliet	0	:claude	1	:*	5d01,221x34,0,0,12	:
+window	kilo	0	:bash	1	:*	5d03,221x34,0,0,14	:
+state	charlie	
