@@ -8,8 +8,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::config::load_config;
 use crate::integrations::{
     argocd::ArgoCDClient,
+    config_sync::{ConfigSyncService, ConfigSyncError},
     dockerhub::DockerHubClient,
     github::GitHubClient,
     kubernetes::KubernetesService,
@@ -47,6 +49,10 @@ pub fn integration_routes() -> Router<AppState> {
         .route("/k8s/:namespace/pods", get(list_pods))
         .route("/k8s/:namespace/pods/:pod_name/logs", get(get_pod_logs))
         .route("/k8s/:namespace/deployments/:name/errors", get(collect_deployment_errors))
+        // Config Sync
+        .route("/config-sync/status", get(get_config_sync_status))
+        .route("/config-sync/update", post(update_config_cache))
+        .route("/config-sync/sync/:card_id", post(sync_config_to_card))
 }
 
 // =============================================================================
@@ -841,9 +847,164 @@ pub struct K8sEvent {
     pub count: i32,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSyncStatusResponse {
+    pub configured: bool,
+    pub repository_url: Option<String>,
+    pub branch: String,
+    pub cached: bool,
+    pub last_commit: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSyncUpdateResponse {
+    pub cache_path: String,
+    pub success: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigSyncResult {
+    pub claude_md_synced: bool,
+    pub skills_synced: usize,
+    pub patterns_synced: bool,
+    pub worktree_path: String,
+}
+
+// =============================================================================
+// CONFIG SYNC HANDLERS
+// =============================================================================
+
+/// Get config sync status
+async fn get_config_sync_status(
+    State(_state): State<AppState>,
+) -> Result<Json<ApiResponse<ConfigSyncStatusResponse>>, (StatusCode, Json<ApiError>)> {
+    let config = load_config();
+    let service = ConfigSyncService::new(config.integrations.config_sync);
+
+    let status = service
+        .get_status()
+        .map_err(config_sync_error_to_api)?;
+
+    Ok(Json(ApiResponse::new(ConfigSyncStatusResponse {
+        configured: status.configured,
+        repository_url: status.repository_url,
+        branch: status.branch,
+        cached: status.cached,
+        last_commit: status.last_commit,
+    })))
+}
+
+/// Update the config cache (clone/pull)
+async fn update_config_cache(
+    State(_state): State<AppState>,
+) -> Result<Json<ApiResponse<ConfigSyncUpdateResponse>>, (StatusCode, Json<ApiError>)> {
+    let config = load_config();
+    let service = ConfigSyncService::new(config.integrations.config_sync);
+
+    // Run in blocking task since git operations are blocking
+    let result = tokio::task::spawn_blocking(move || service.update_cache())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError::internal_error(format!("Task failed: {}", e))),
+            )
+        })?
+        .map_err(config_sync_error_to_api)?;
+
+    Ok(Json(ApiResponse::new(ConfigSyncUpdateResponse {
+        cache_path: result.to_string_lossy().to_string(),
+        success: true,
+    })))
+}
+
+/// Sync config to a specific card's worktree
+async fn sync_config_to_card(
+    State(state): State<AppState>,
+    Path(card_id): Path<String>,
+) -> Result<Json<ApiResponse<ConfigSyncResult>>, (StatusCode, Json<ApiError>)> {
+    // Get the card to find its worktree path
+    let card = crate::db::get_card(&state.pool, &card_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError::internal_error(format!("Database error: {}", e))),
+            )
+        })?
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ApiError::not_found(&format!("Card {} not found", card_id))),
+            )
+        })?;
+
+    let worktree_path = card.worktree_path.ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ApiError::new(
+                "NO_WORKTREE",
+                "Card does not have a worktree path",
+            )),
+        )
+    })?;
+
+    let config = load_config();
+    let service = ConfigSyncService::new(config.integrations.config_sync);
+    let worktree = std::path::PathBuf::from(&worktree_path);
+
+    // Run in blocking task
+    let sync_result = tokio::task::spawn_blocking(move || service.sync_to_worktree(&worktree))
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ApiError::internal_error(format!("Task failed: {}", e))),
+            )
+        })?
+        .map_err(config_sync_error_to_api)?;
+
+    Ok(Json(ApiResponse::new(ConfigSyncResult {
+        claude_md_synced: sync_result.claude_md_synced,
+        skills_synced: sync_result.skills_synced,
+        patterns_synced: sync_result.patterns_synced,
+        worktree_path,
+    })))
+}
+
 // =============================================================================
 // HELPER FUNCTIONS
 // =============================================================================
+
+fn config_sync_error_to_api(e: ConfigSyncError) -> (StatusCode, Json<ApiError>) {
+    match e {
+        ConfigSyncError::NotConfigured => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiError::new(
+                "NOT_CONFIGURED",
+                "Config sync repository not configured",
+            )),
+        ),
+        ConfigSyncError::GitError(msg) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiError::internal_error(format!("Git error: {}", msg))),
+        ),
+        ConfigSyncError::IoError(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiError::internal_error(format!("IO error: {}", e))),
+        ),
+        ConfigSyncError::InvalidUrl(url) => (
+            StatusCode::BAD_REQUEST,
+            Json(ApiError::new(
+                "INVALID_URL",
+                &format!("Invalid repository URL: {}", url),
+            )),
+        ),
+    }
+}
 
 fn integration_error_to_api(e: IntegrationError) -> (StatusCode, Json<ApiError>) {
     match e {

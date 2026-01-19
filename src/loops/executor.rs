@@ -15,10 +15,12 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 use uuid::Uuid;
 
+use crate::config::load_config;
 use crate::db::{complete_attempt, create_attempt, get_card, set_card_state};
 use crate::domain::{Card, CardState, DiffStats, Project};
 use crate::events::{Event, EventBus, LoopCompletionResult};
 use crate::integrations::claude::{ClaudeClient, ClaudeError, CompletionResponse, Message};
+use crate::integrations::config_sync::ConfigSyncService;
 use crate::prompt::PromptPipeline;
 
 use super::{LoopConfig, LoopManager, LoopState, LoopStatus, StopReason};
@@ -177,6 +179,9 @@ impl LoopExecutor {
 
         // Emit loop started event
         self.emit_loop_event(&card_id, "loop_started", None).await;
+
+        // Sync configuration from config repo if configured
+        self.sync_config_to_worktree(&card_id).await;
 
         // Load chat history from database
         let mut chat_history = self.load_chat_history(&card_id).await?;
@@ -415,6 +420,76 @@ impl LoopExecutor {
         }
 
         Ok(state)
+    }
+
+    /// Sync configuration from config repo to worktree
+    async fn sync_config_to_worktree(&self, card_id: &Uuid) {
+        // Load app config
+        let app_config = load_config();
+        let config_sync_config = app_config.integrations.config_sync;
+
+        // Skip if not configured or auto_sync disabled
+        if config_sync_config.repository_url.is_none() || !config_sync_config.auto_sync {
+            tracing::debug!("Config sync skipped - not configured or auto_sync disabled");
+            return;
+        }
+
+        // Get card to find worktree path
+        let card = match get_card(&self.pool, &card_id.to_string()).await {
+            Ok(Some(c)) => c,
+            Ok(None) => {
+                tracing::warn!("Card {} not found for config sync", card_id);
+                return;
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load card {} for config sync: {}", card_id, e);
+                return;
+            }
+        };
+
+        // Skip if no worktree path
+        let worktree_path = match &card.worktree_path {
+            Some(p) => std::path::Path::new(p),
+            None => {
+                tracing::debug!("No worktree path for card {} - skipping config sync", card_id);
+                return;
+            }
+        };
+
+        // Run config sync in blocking task (git operations are blocking)
+        let sync_service = ConfigSyncService::new(config_sync_config);
+        let worktree_path = worktree_path.to_path_buf();
+
+        let result = tokio::task::spawn_blocking(move || {
+            sync_service.sync_to_worktree(&worktree_path)
+        }).await;
+
+        match result {
+            Ok(Ok(sync_result)) => {
+                tracing::info!(
+                    "Config synced for card {}: CLAUDE.md={}, skills={}, patterns={}",
+                    card_id,
+                    sync_result.claude_md_synced,
+                    sync_result.skills_synced,
+                    sync_result.patterns_synced
+                );
+
+                // Emit event for config sync
+                self.event_bus.publish(Event::ConfigSynced {
+                    card_id: *card_id,
+                    claude_md_synced: sync_result.claude_md_synced,
+                    skills_synced: sync_result.skills_synced,
+                    patterns_synced: sync_result.patterns_synced,
+                    timestamp: chrono::Utc::now(),
+                });
+            }
+            Ok(Err(e)) => {
+                tracing::warn!("Config sync failed for card {}: {}", card_id, e);
+            }
+            Err(e) => {
+                tracing::warn!("Config sync task failed for card {}: {}", card_id, e);
+            }
+        }
     }
 
     /// Create a checkpoint (git commit + snapshot)

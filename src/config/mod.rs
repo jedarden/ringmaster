@@ -264,6 +264,10 @@ pub struct IntegrationsConfig {
     /// Claude API configuration
     #[serde(default)]
     pub claude: Option<ClaudeConfig>,
+
+    /// Configuration sync settings
+    #[serde(default)]
+    pub config_sync: ConfigSyncConfig,
 }
 
 
@@ -283,6 +287,30 @@ pub struct ArgoCDConfig {
 pub struct ClaudeConfig {
     pub api_key: Option<String>,
     pub model: Option<String>,
+}
+
+/// Configuration sync settings
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ConfigSyncConfig {
+    /// Git repository URL containing configuration files
+    /// e.g., https://github.com/org/claude-config.git
+    pub repository_url: Option<String>,
+
+    /// Branch to sync from (default: main)
+    #[serde(default = "default_config_branch")]
+    pub branch: String,
+
+    /// Local cache path for cloned config repo
+    /// Default: ~/.local/share/ringmaster/config-repos/<repo-name>
+    pub cache_path: Option<String>,
+
+    /// Whether to auto-sync on loop start
+    #[serde(default = "default_true")]
+    pub auto_sync: bool,
+}
+
+fn default_config_branch() -> String {
+    "main".to_string()
 }
 
 /// Get the data directory for Ringmaster

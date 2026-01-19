@@ -13,6 +13,10 @@ pub use claude::{ClaudeClient, ClaudeError, CompletionResponse, Message, Role, S
 pub mod kubernetes;
 pub use kubernetes::{KubernetesService, KubeError, DeploymentErrorContext};
 
+// Config sync integration
+pub mod config_sync;
+pub use config_sync::{ConfigSyncService, ConfigSyncError, ConfigSyncStatus, SyncResult};
+
 /// Common integration error type
 #[derive(Error, Debug)]
 pub enum IntegrationError {

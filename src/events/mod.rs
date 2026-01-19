@@ -137,6 +137,15 @@ pub enum Event {
         card_id: Uuid,
         timestamp: DateTime<Utc>,
     },
+
+    /// Configuration synced from config repo
+    ConfigSynced {
+        card_id: Uuid,
+        claude_md_synced: bool,
+        skills_synced: usize,
+        patterns_synced: bool,
+        timestamp: DateTime<Utc>,
+    },
 }
 
 impl Event {
@@ -159,6 +168,7 @@ impl Event {
             Event::ErrorContextCollected { card_id, .. } => Some(*card_id),
             Event::UserNotification { card_id, .. } => Some(*card_id),
             Event::MetricsRecorded { card_id, .. } => Some(*card_id),
+            Event::ConfigSynced { card_id, .. } => Some(*card_id),
         }
     }
 
