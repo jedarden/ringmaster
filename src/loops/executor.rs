@@ -779,4 +779,85 @@ mod tests {
         assert_eq!(result.iteration, 1);
         assert!(!result.had_completion_signal);
     }
+
+    #[test]
+    fn test_extract_commit_sha_full() {
+        let response = "I've committed the changes with SHA a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0";
+        let sha = extract_commit_sha(response);
+        assert_eq!(sha, Some("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0".to_string()));
+    }
+
+    #[test]
+    fn test_extract_commit_sha_git_output() {
+        let response = "[main abc1234] feat: add new feature\n 2 files changed";
+        let sha = extract_commit_sha(response);
+        assert_eq!(sha, Some("abc1234".to_string()));
+    }
+
+    #[test]
+    fn test_extract_commit_sha_with_context() {
+        let response = "Committed successfully. Commit: abc1234";
+        let sha = extract_commit_sha(response);
+        assert_eq!(sha, Some("abc1234".to_string()));
+    }
+
+    #[test]
+    fn test_extract_commit_sha_none() {
+        let response = "I made some changes but didn't commit yet.";
+        let sha = extract_commit_sha(response);
+        assert_eq!(sha, None);
+    }
+
+    #[test]
+    fn test_extract_diff_stats_full() {
+        let response = "3 files changed, 45 insertions(+), 12 deletions(-)";
+        let stats = extract_diff_stats(response);
+        assert!(stats.is_some());
+        let stats = stats.unwrap();
+        assert_eq!(stats.files_changed, 3);
+        assert_eq!(stats.insertions, 45);
+        assert_eq!(stats.deletions, 12);
+    }
+
+    #[test]
+    fn test_extract_diff_stats_insertions_only() {
+        let response = "1 file changed, 10 insertions(+)";
+        let stats = extract_diff_stats(response);
+        assert!(stats.is_some());
+        let stats = stats.unwrap();
+        assert_eq!(stats.files_changed, 1);
+        assert_eq!(stats.insertions, 10);
+        assert_eq!(stats.deletions, 0);
+    }
+
+    #[test]
+    fn test_extract_diff_stats_none() {
+        let response = "I updated the file.";
+        let stats = extract_diff_stats(response);
+        assert!(stats.is_none());
+    }
+
+    #[test]
+    fn test_extract_commit_info_complete() {
+        let response = "[feature/test abc1234] fix: resolve bug\n 2 files changed, 15 insertions(+), 3 deletions(-)";
+        let info = extract_commit_info(response);
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert_eq!(info.sha, "abc1234");
+        assert!(info.diff_stats.is_some());
+        let stats = info.diff_stats.unwrap();
+        assert_eq!(stats.files_changed, 2);
+        assert_eq!(stats.insertions, 15);
+        assert_eq!(stats.deletions, 3);
+    }
+
+    #[test]
+    fn test_extract_commit_info_sha_only() {
+        let response = "Committed as commit: def5678";
+        let info = extract_commit_info(response);
+        assert!(info.is_some());
+        let info = info.unwrap();
+        assert_eq!(info.sha, "def5678");
+        assert!(info.diff_stats.is_none());
+    }
 }
