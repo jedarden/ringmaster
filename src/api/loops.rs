@@ -1,4 +1,9 @@
 //! Loop API routes
+//!
+//! This module provides REST API endpoints for managing autonomous coding loops.
+//! Loops are executed using CLI platforms (Claude Code, Aider, etc.) via the
+//! `PlatformExecutor`, leveraging subscription-based billing instead of
+//! pay-per-token API calls.
 
 use axum::{
     extract::{Path, State},
@@ -13,7 +18,7 @@ use uuid::Uuid;
 use crate::db;
 use crate::domain::{Attempt, Project};
 use crate::events::Event;
-use crate::loops::{LoopConfig, LoopExecutor, LoopManager, LoopState, LoopStatus};
+use crate::loops::{LoopConfig, LoopManager, LoopState, LoopStatus, PlatformExecutor};
 
 use super::{ApiResponse, AppError, AppState, Pagination, PaginatedResponse};
 
@@ -35,8 +40,12 @@ pub fn global_loop_routes() -> Router<AppState> {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StartLoopRequest {
+    /// Optional configuration overrides
     pub config: Option<LoopConfigOverride>,
+    /// Optional subscription name to use (uses default/priority-based selection if not specified)
+    pub subscription: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -154,7 +163,7 @@ async fn start_loop(
         timestamp: chrono::Utc::now(),
     });
 
-    // Spawn background task to run the actual loop executor
+    // Spawn background task to run the actual loop executor using PlatformExecutor
     spawn_loop_executor(
         state.pool.clone(),
         state.event_bus.clone(),
@@ -162,6 +171,7 @@ async fn start_loop(
         card_id,
         project,
         config.clone(),
+        req.subscription,
     );
 
     // Get the initial state to return
@@ -181,6 +191,9 @@ async fn start_loop(
 }
 
 /// Spawn a background task to run the loop executor
+///
+/// Uses `PlatformExecutor` which leverages CLI-based execution (Claude Code, Aider, etc.)
+/// for subscription-based billing instead of pay-per-token API calls.
 fn spawn_loop_executor(
     pool: sqlx::SqlitePool,
     event_bus: crate::events::EventBus,
@@ -188,23 +201,17 @@ fn spawn_loop_executor(
     card_id: Uuid,
     project: Project,
     config: LoopConfig,
+    subscription: Option<String>,
 ) {
     tokio::spawn(async move {
-        // Try to create the executor
-        let executor = match LoopExecutor::new(pool.clone(), event_bus.clone(), loop_manager.clone())
-        {
-            Ok(e) => e,
-            Err(e) => {
-                tracing::error!("Failed to create loop executor: {}", e);
-                // Mark loop as failed
-                let mut manager = loop_manager.write().await;
-                let _ = manager.fail_loop(&card_id, format!("Executor creation failed: {}", e));
-                return;
-            }
-        };
+        // Create the platform executor (no Result - infallible creation)
+        let executor = PlatformExecutor::new(pool.clone(), event_bus.clone(), loop_manager.clone());
 
-        // Run the loop
-        match executor.run_loop(card_id, &project, config).await {
+        // Run the loop using the platform executor
+        match executor
+            .run_loop(card_id, &project, config, subscription.as_deref())
+            .await
+        {
             Ok(final_state) => {
                 tracing::info!(
                     "Loop completed for card {}: {:?} after {} iterations",
