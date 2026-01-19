@@ -89,7 +89,7 @@ pub async fn list_projects_with_stats(
             p.*,
             COUNT(DISTINCT c.id) as card_count,
             SUM(CASE WHEN c.state IN ('coding', 'error_fixing') THEN 1 ELSE 0 END) as active_loops,
-            COALESCE(SUM(c.total_cost_usd), 0) as total_cost_usd
+            COALESCE(SUM(c.total_cost_usd), 0.0) as total_cost_usd
         FROM projects p
         LEFT JOIN cards c ON c.project_id = p.id
         GROUP BY p.id
@@ -219,4 +219,326 @@ pub async fn delete_project(pool: &SqlitePool, project_id: &str) -> Result<bool,
         .await?;
 
     Ok(result.rows_affected() > 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::init_database;
+
+    async fn setup_test_db() -> SqlitePool {
+        init_database("sqlite::memory:").await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_create_project() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "Test Project".to_string(),
+            description: Some("A test project".to_string()),
+            repository_url: "https://github.com/test/repo".to_string(),
+            repository_path: Some("/path/to/repo".to_string()),
+            tech_stack: Some(vec!["Rust".to_string(), "TypeScript".to_string()]),
+            coding_conventions: Some("Use 4-space indentation".to_string()),
+        };
+
+        let project = create_project(&pool, &req).await.unwrap();
+
+        assert_eq!(project.name, "Test Project");
+        assert_eq!(project.description, Some("A test project".to_string()));
+        assert_eq!(project.repository_url, "https://github.com/test/repo");
+        assert_eq!(project.repository_path, Some("/path/to/repo".to_string()));
+        assert_eq!(project.tech_stack, vec!["Rust", "TypeScript"]);
+        assert_eq!(
+            project.coding_conventions,
+            Some("Use 4-space indentation".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_create_project_minimal() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "Minimal Project".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/minimal".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+
+        let project = create_project(&pool, &req).await.unwrap();
+
+        assert_eq!(project.name, "Minimal Project");
+        assert!(project.description.is_none());
+        assert!(project.tech_stack.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_get_project() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "Get Test".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/get".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+
+        let created = create_project(&pool, &req).await.unwrap();
+        let fetched = get_project(&pool, &created.id.to_string()).await.unwrap();
+
+        assert!(fetched.is_some());
+        let fetched = fetched.unwrap();
+        assert_eq!(fetched.id, created.id);
+        assert_eq!(fetched.name, "Get Test");
+    }
+
+    #[tokio::test]
+    async fn test_get_project_not_found() {
+        let pool = setup_test_db().await;
+
+        let result = get_project(&pool, "non-existent-id").await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_projects() {
+        let pool = setup_test_db().await;
+
+        // Create multiple projects
+        for i in 1..=3 {
+            let req = CreateProjectRequest {
+                name: format!("Project {}", i),
+                description: None,
+                repository_url: format!("https://github.com/test/project{}", i),
+                repository_path: None,
+                tech_stack: None,
+                coding_conventions: None,
+            };
+            create_project(&pool, &req).await.unwrap();
+        }
+
+        let projects = list_projects(&pool).await.unwrap();
+        assert_eq!(projects.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_list_projects_empty() {
+        let pool = setup_test_db().await;
+
+        let projects = list_projects(&pool).await.unwrap();
+        assert!(projects.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_projects_with_stats() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "Stats Project".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/stats".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+        create_project(&pool, &req).await.unwrap();
+
+        let projects = list_projects_with_stats(&pool).await.unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].card_count, 0);
+        assert_eq!(projects[0].active_loops, 0);
+        assert_eq!(projects[0].total_cost_usd, 0.0);
+    }
+
+    #[tokio::test]
+    async fn test_update_project_name() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "Original Name".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/update".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+        let project = create_project(&pool, &req).await.unwrap();
+
+        let update_req = UpdateProjectRequest {
+            name: Some("Updated Name".to_string()),
+            description: None,
+            repository_url: None,
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+
+        let updated = update_project(&pool, &project.id.to_string(), &update_req)
+            .await
+            .unwrap();
+
+        assert!(updated.is_some());
+        let updated = updated.unwrap();
+        assert_eq!(updated.name, "Updated Name");
+    }
+
+    #[tokio::test]
+    async fn test_update_project_multiple_fields() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "Multi Update".to_string(),
+            description: Some("Old description".to_string()),
+            repository_url: "https://github.com/test/multi".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+        let project = create_project(&pool, &req).await.unwrap();
+
+        let update_req = UpdateProjectRequest {
+            name: Some("New Name".to_string()),
+            description: Some("New description".to_string()),
+            repository_url: None,
+            repository_path: Some("/new/path".to_string()),
+            tech_stack: Some(vec!["Go".to_string()]),
+            coding_conventions: Some("Use gofmt".to_string()),
+        };
+
+        let updated = update_project(&pool, &project.id.to_string(), &update_req)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(updated.name, "New Name");
+        assert_eq!(updated.description, Some("New description".to_string()));
+        assert_eq!(updated.repository_path, Some("/new/path".to_string()));
+        assert_eq!(updated.tech_stack, vec!["Go"]);
+        assert_eq!(updated.coding_conventions, Some("Use gofmt".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_project_empty_request() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "No Change".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/empty".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+        let project = create_project(&pool, &req).await.unwrap();
+
+        let update_req = UpdateProjectRequest {
+            name: None,
+            description: None,
+            repository_url: None,
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+
+        let updated = update_project(&pool, &project.id.to_string(), &update_req)
+            .await
+            .unwrap();
+
+        assert!(updated.is_some());
+        let updated = updated.unwrap();
+        assert_eq!(updated.name, "No Change");
+    }
+
+    #[tokio::test]
+    async fn test_update_project_not_found() {
+        let pool = setup_test_db().await;
+
+        let update_req = UpdateProjectRequest {
+            name: Some("Ghost".to_string()),
+            description: None,
+            repository_url: None,
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+
+        let result = update_project(&pool, "non-existent", &update_req)
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project() {
+        let pool = setup_test_db().await;
+
+        let req = CreateProjectRequest {
+            name: "To Delete".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/delete".to_string(),
+            repository_path: None,
+            tech_stack: None,
+            coding_conventions: None,
+        };
+        let project = create_project(&pool, &req).await.unwrap();
+
+        let deleted = delete_project(&pool, &project.id.to_string()).await.unwrap();
+        assert!(deleted);
+
+        // Verify it's gone
+        let fetched = get_project(&pool, &project.id.to_string()).await.unwrap();
+        assert!(fetched.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_not_found() {
+        let pool = setup_test_db().await;
+
+        let deleted = delete_project(&pool, "non-existent").await.unwrap();
+        assert!(!deleted);
+    }
+
+    #[tokio::test]
+    async fn test_project_row_to_project() {
+        let row = ProjectRow {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            name: "Test".to_string(),
+            description: Some("Desc".to_string()),
+            repository_url: "https://github.com/test/test".to_string(),
+            repository_path: None,
+            tech_stack: r#"["Rust"]"#.to_string(),
+            coding_conventions: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let project = row.to_project();
+        assert_eq!(project.name, "Test");
+        assert_eq!(project.tech_stack, vec!["Rust"]);
+    }
+
+    #[tokio::test]
+    async fn test_project_row_invalid_json() {
+        let row = ProjectRow {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            name: "Test".to_string(),
+            description: None,
+            repository_url: "https://github.com/test/test".to_string(),
+            repository_path: None,
+            tech_stack: "invalid json".to_string(),
+            coding_conventions: None,
+            created_at: "2024-01-01T00:00:00Z".to_string(),
+            updated_at: "2024-01-01T00:00:00Z".to_string(),
+        };
+
+        let project = row.to_project();
+        // Should default to empty vec on invalid JSON
+        assert!(project.tech_stack.is_empty());
+    }
 }
