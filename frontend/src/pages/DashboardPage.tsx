@@ -73,7 +73,7 @@ function StateDistribution({ distribution }: StateDistributionProps) {
       <h3 className="text-lg font-semibold mb-4">Card Distribution by State</h3>
       <div className="space-y-3">
         {Object.entries(distribution)
-          .filter(([_, count]) => count > 0)
+          .filter(([, count]) => count > 0)
           .sort(([, a], [, b]) => b - a)
           .map(([state, count]) => (
             <div key={state} className="flex items-center gap-3">

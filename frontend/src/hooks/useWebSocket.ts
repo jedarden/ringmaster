@@ -18,6 +18,7 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const connectRef = useRef<() => void>(() => {});
   const [isConnected, setIsConnected] = useState(false);
 
   const updateCard = useCardStore((s) => s.updateCard);
@@ -102,60 +103,68 @@ export function useWebSocket() {
     [addCard, updateCard, setLoopState, updateLoopIteration, updateLoopStatus]
   );
 
-  const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    try {
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        setIsConnected(true);
-
-        // Start heartbeat
-        heartbeatIntervalRef.current = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, HEARTBEAT_INTERVAL);
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected');
-        setIsConnected(false);
-
-        // Clear heartbeat
-        if (heartbeatIntervalRef.current) {
-          clearInterval(heartbeatIntervalRef.current);
-        }
-
-        // Reconnect after delay
-        reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_INTERVAL);
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as WebSocketMessage;
-          handleMessage(message);
-        } catch (e) {
-          console.error('Failed to parse WebSocket message:', e);
-        }
-      };
-    } catch (e) {
-      console.error('Failed to create WebSocket:', e);
-      reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_INTERVAL);
-    }
-  }, [handleMessage]);
-
+  // Use ref to break circular dependency in useCallback
   useEffect(() => {
-    connect();
+    const scheduleReconnect = () => {
+      reconnectTimeoutRef.current = setTimeout(() => {
+        connectRef.current();
+      }, RECONNECT_INTERVAL);
+    };
+
+    connectRef.current = () => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        return;
+      }
+
+      try {
+        const ws = new WebSocket(WS_URL);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+          setIsConnected(true);
+
+          // Start heartbeat
+          heartbeatIntervalRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ping' }));
+            }
+          }, HEARTBEAT_INTERVAL);
+        };
+
+        ws.onclose = () => {
+          console.log('WebSocket disconnected');
+          setIsConnected(false);
+
+          // Clear heartbeat
+          if (heartbeatIntervalRef.current) {
+            clearInterval(heartbeatIntervalRef.current);
+          }
+
+          // Reconnect after delay
+          scheduleReconnect();
+        };
+
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data) as WebSocketMessage;
+            handleMessage(message);
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+          }
+        };
+      } catch (e) {
+        console.error('Failed to create WebSocket:', e);
+        scheduleReconnect();
+      }
+    };
+
+    // Initial connection
+    connectRef.current();
 
     return () => {
       if (reconnectTimeoutRef.current) {
@@ -166,7 +175,7 @@ export function useWebSocket() {
       }
       wsRef.current?.close();
     };
-  }, [connect]);
+  }, [handleMessage]);
 
   const subscribe = useCallback((cardIds: string[], projectIds: string[] = []) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

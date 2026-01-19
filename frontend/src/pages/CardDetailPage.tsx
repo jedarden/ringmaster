@@ -223,7 +223,7 @@ function OverviewTab({ card }: { card: Card }) {
           <section className="bg-gray-800 rounded-lg p-4">
             <h3 className="text-sm font-medium text-gray-400 mb-3">Acceptance Criteria</h3>
             <ul className="space-y-2">
-              {card.acceptanceCriteria.map((criterion: any, idx: number) => (
+              {card.acceptanceCriteria.map((criterion: { met: boolean; description: string }, idx: number) => (
                 <li key={idx} className="flex items-start gap-3">
                   <span className={cn(
                     'flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs',
@@ -529,7 +529,8 @@ function DeployTab({ card }: { card: Card }) {
   );
 }
 
-function LogsTab({ cardId: _cardId }: { cardId: string }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LogsTab(_props: { cardId: string }) {
   return (
     <div className="bg-gray-800 rounded-lg p-4">
       <h3 className="text-lg font-medium mb-4">Logs</h3>

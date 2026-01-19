@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useCallback, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from './Button';
@@ -12,11 +12,12 @@ export interface DialogProps {
 }
 
 export function Dialog({ open, onClose, onOpenChange, children, className }: DialogProps) {
-  const handleClose = () => {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+
+  const handleClose = useCallback(() => {
     if (onClose) onClose();
     if (onOpenChange) onOpenChange(false);
-  };
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  }, [onClose, onOpenChange]);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -40,7 +41,7 @@ export function Dialog({ open, onClose, onOpenChange, children, className }: Dia
 
     dialog.addEventListener('cancel', onCancel);
     return () => dialog.removeEventListener('cancel', onCancel);
-  }, [onClose, onOpenChange]);
+  }, [handleClose]);
 
   return (
     <dialog

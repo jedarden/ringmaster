@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { KanbanBoard } from '../components/kanban/KanbanBoard';
 import { CardDetailPanel } from '../components/cards/CardDetailPanel';
 import { NewCardDialog } from '../components/cards/NewCardDialog';
@@ -10,28 +10,23 @@ import { Spinner } from '../components/ui/Spinner';
 import type { Card } from '../types';
 
 export function KanbanPage() {
-  const [selectedCard, setSelectedCard] = useState<Card | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const { selectedProjectId } = useUIStore();
   const { isLoading: cardsLoading, error: cardsError } = useCards(selectedProjectId);
   const { isLoading: loopsLoading } = useAllLoops();
   const cards = useCardStore((s) => s.cards);
 
-  // Update selected card when it changes in the store
-  useEffect(() => {
-    if (selectedCard) {
-      const updatedCard = cards.get(selectedCard.id);
-      if (updatedCard) {
-        setSelectedCard(updatedCard);
-      }
-    }
-  }, [cards, selectedCard]);
+  // Derive selected card from ID - automatically updates when card changes in store
+  const selectedCard = useMemo(() => {
+    return selectedCardId ? cards.get(selectedCardId) ?? null : null;
+  }, [cards, selectedCardId]);
 
   const handleCardClick = (card: Card) => {
-    setSelectedCard(card);
+    setSelectedCardId(card.id);
   };
 
   const handleCloseDetail = () => {
-    setSelectedCard(null);
+    setSelectedCardId(null);
   };
 
   if (cardsLoading || loopsLoading) {
