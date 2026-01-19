@@ -163,7 +163,7 @@ async fn transition_card(
     let machine = CardStateMachine::new();
     let previous_state = card.state;
 
-    let (new_state, _actions) = machine
+    let (new_state, actions) = machine
         .transition(&mut card, trigger)
         .map_err(|e| match e {
             crate::state_machine::TransitionError::InvalidTransition { from, trigger } => {
@@ -199,10 +199,34 @@ async fn transition_card(
         timestamp: chrono::Utc::now(),
     });
 
-    // Refresh card from DB
+    // Refresh card from DB to get updated state
     let card = db::get_card(&state.pool, &card_id.to_string())
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Card {} not found", card_id)))?;
+
+    // Execute actions for the transition
+    if !actions.is_empty() {
+        // Get project for the card
+        let project = db::get_project(&state.pool, &card.project_id.to_string())
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Project {} not found", card.project_id)))?;
+
+        // Execute actions (fire-and-forget for non-blocking actions, or await for critical ones)
+        let action_executor = state.action_executor.clone();
+        let card_for_actions = card.clone();
+        tokio::spawn(async move {
+            if let Err(e) = action_executor
+                .execute_all(&card_for_actions, &project, &actions)
+                .await
+            {
+                tracing::error!(
+                    "Failed to execute actions for card {}: {}",
+                    card_for_actions.id,
+                    e
+                );
+            }
+        });
+    }
 
     Ok(Json(ApiResponse::new(TransitionResult {
         previous_state,

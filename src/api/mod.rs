@@ -170,4 +170,5 @@ pub struct AppState {
     pub pool: sqlx::SqlitePool,
     pub event_bus: crate::events::EventBus,
     pub loop_manager: std::sync::Arc<tokio::sync::RwLock<crate::loops::LoopManager>>,
+    pub action_executor: std::sync::Arc<crate::state_machine::ActionExecutor>,
 }

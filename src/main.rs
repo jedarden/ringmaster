@@ -20,6 +20,7 @@ use ringmaster::{
     events::EventBus,
     loops::LoopManager,
     monitor::{IntegrationMonitor, MonitorConfig},
+    state_machine::ActionExecutor,
     static_files::static_handler,
 };
 
@@ -105,11 +106,17 @@ async fn run_server(host: &str, port: u16, db_path: &str) -> anyhow::Result<()> 
     // Create shared state
     let event_bus = EventBus::new();
     let loop_manager = Arc::new(RwLock::new(LoopManager::new()));
+    let action_executor = Arc::new(ActionExecutor::new(
+        pool.clone(),
+        event_bus.clone(),
+        loop_manager.clone(),
+    ));
 
     let app_state = AppState {
         pool: pool.clone(),
         event_bus: event_bus.clone(),
         loop_manager,
+        action_executor,
     };
 
     // Start integration monitor (background task)
