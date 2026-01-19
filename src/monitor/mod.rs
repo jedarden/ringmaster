@@ -280,3 +280,163 @@ impl IntegrationMonitor {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_monitor_config_default() {
+        let config = MonitorConfig::default();
+
+        assert_eq!(config.github_poll_interval, Duration::from_secs(10));
+        assert_eq!(config.argocd_poll_interval, Duration::from_secs(5));
+        assert_eq!(config.state_check_interval, Duration::from_secs(15));
+    }
+
+    #[test]
+    fn test_monitor_config_custom() {
+        let config = MonitorConfig {
+            github_poll_interval: Duration::from_secs(30),
+            argocd_poll_interval: Duration::from_secs(15),
+            state_check_interval: Duration::from_secs(60),
+        };
+
+        assert_eq!(config.github_poll_interval, Duration::from_secs(30));
+        assert_eq!(config.argocd_poll_interval, Duration::from_secs(15));
+        assert_eq!(config.state_check_interval, Duration::from_secs(60));
+    }
+
+    #[tokio::test]
+    async fn test_integration_monitor_builder() {
+        // Create in-memory database for testing
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        let event_bus = EventBus::new();
+        let config = MonitorConfig::default();
+
+        // Test builder pattern
+        let monitor = IntegrationMonitor::new(pool, event_bus, config)
+            .with_github(
+                "test-token".to_string(),
+                "test-owner".to_string(),
+                "test-repo".to_string(),
+            )
+            .with_argocd(
+                "https://argocd.example.com".to_string(),
+                "argocd-token".to_string(),
+            );
+
+        assert!(monitor.github_token.is_some());
+        assert!(monitor.github_owner.is_some());
+        assert!(monitor.github_repo.is_some());
+        assert!(monitor.argocd_url.is_some());
+        assert!(monitor.argocd_token.is_some());
+
+        assert_eq!(monitor.github_token.unwrap(), "test-token");
+        assert_eq!(monitor.github_owner.unwrap(), "test-owner");
+        assert_eq!(monitor.github_repo.unwrap(), "test-repo");
+        assert_eq!(monitor.argocd_url.unwrap(), "https://argocd.example.com");
+        assert_eq!(monitor.argocd_token.unwrap(), "argocd-token");
+    }
+
+    #[tokio::test]
+    async fn test_integration_monitor_without_integrations() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        let event_bus = EventBus::new();
+        let config = MonitorConfig::default();
+
+        let monitor = IntegrationMonitor::new(pool, event_bus, config);
+
+        // Without integration configuration, should have None values
+        assert!(monitor.github_token.is_none());
+        assert!(monitor.github_owner.is_none());
+        assert!(monitor.github_repo.is_none());
+        assert!(monitor.argocd_url.is_none());
+        assert!(monitor.argocd_token.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_check_card_states_with_empty_cards() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        let event_bus = EventBus::new();
+        let config = MonitorConfig::default();
+
+        let monitor = IntegrationMonitor::new(pool, event_bus, config);
+
+        // Should succeed with empty cards
+        let result = monitor.check_card_states().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_check_github_builds_without_config() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        let event_bus = EventBus::new();
+        let config = MonitorConfig::default();
+
+        let monitor = IntegrationMonitor::new(pool, event_bus, config);
+
+        // Should succeed (returns early without GitHub config)
+        let result = monitor.check_github_builds().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_check_argocd_apps_without_config() {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        let event_bus = EventBus::new();
+        let config = MonitorConfig::default();
+
+        let monitor = IntegrationMonitor::new(pool, event_bus, config);
+
+        // Should succeed (returns early without ArgoCD config)
+        let result = monitor.check_argocd_apps().await;
+        assert!(result.is_ok());
+    }
+}
