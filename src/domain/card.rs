@@ -195,3 +195,181 @@ pub struct TransitionResult {
     pub new_state: CardState,
     pub card: Card,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_card_new() {
+        let project_id = Uuid::new_v4();
+        let card = Card::new(
+            project_id,
+            "Test Card".to_string(),
+            "Implement test feature".to_string(),
+        );
+
+        assert_eq!(card.project_id, project_id);
+        assert_eq!(card.title, "Test Card");
+        assert_eq!(card.task_prompt, "Implement test feature");
+        assert_eq!(card.state, CardState::Draft);
+        assert!(card.previous_state.is_none());
+        assert_eq!(card.loop_iteration, 0);
+        assert_eq!(card.error_count, 0);
+        assert_eq!(card.max_retries, 5);
+        assert!(card.worktree_path.is_none());
+        assert!(card.labels.is_empty());
+    }
+
+    #[test]
+    fn test_card_has_code_changes() {
+        let project_id = Uuid::new_v4();
+        let mut card = Card::new(project_id, "Test".to_string(), "Test".to_string());
+
+        // Initially no code changes
+        assert!(!card.has_code_changes());
+
+        // Only worktree set - still no changes
+        card.worktree_path = Some("/tmp/worktree".to_string());
+        assert!(!card.has_code_changes());
+
+        // Only iteration > 0 but no worktree - still no changes
+        card.worktree_path = None;
+        card.loop_iteration = 1;
+        assert!(!card.has_code_changes());
+
+        // Both worktree and iteration > 0 - has changes
+        card.worktree_path = Some("/tmp/worktree".to_string());
+        assert!(card.has_code_changes());
+    }
+
+    #[test]
+    fn test_card_under_retry_limit() {
+        let project_id = Uuid::new_v4();
+        let mut card = Card::new(project_id, "Test".to_string(), "Test".to_string());
+
+        // Initially under limit
+        assert!(card.under_retry_limit());
+
+        // At max_retries - 1, still under limit
+        card.error_count = 4;
+        assert!(card.under_retry_limit());
+
+        // At max_retries, not under limit
+        card.error_count = 5;
+        assert!(!card.under_retry_limit());
+
+        // Over max_retries, definitely not under limit
+        card.error_count = 10;
+        assert!(!card.under_retry_limit());
+    }
+
+    #[test]
+    fn test_card_serialization() {
+        let project_id = Uuid::new_v4();
+        let card = Card::new(project_id, "Test".to_string(), "Test prompt".to_string());
+
+        let json = serde_json::to_value(&card).unwrap();
+
+        // Verify camelCase serialization
+        assert!(json.get("projectId").is_some());
+        assert!(json.get("taskPrompt").is_some());
+        assert!(json.get("loopIteration").is_some());
+        assert!(json.get("errorCount").is_some());
+        assert!(json.get("maxRetries").is_some());
+        assert!(json.get("createdAt").is_some());
+        assert!(json.get("updatedAt").is_some());
+
+        // snake_case fields should not exist
+        assert!(json.get("project_id").is_none());
+        assert!(json.get("task_prompt").is_none());
+    }
+
+    #[test]
+    fn test_acceptance_criteria_new() {
+        let card_id = Uuid::new_v4();
+        let criteria = AcceptanceCriteria::new(
+            card_id,
+            "User can log in".to_string(),
+            0,
+        );
+
+        assert_eq!(criteria.card_id, card_id);
+        assert_eq!(criteria.description, "User can log in");
+        assert!(!criteria.met);
+        assert!(criteria.met_at.is_none());
+        assert_eq!(criteria.order_index, 0);
+    }
+
+    #[test]
+    fn test_dependency_type_serialization() {
+        // Test all dependency types serialize correctly
+        assert_eq!(
+            serde_json::to_value(DependencyType::Blocks).unwrap(),
+            "blocks"
+        );
+        assert_eq!(
+            serde_json::to_value(DependencyType::RelatesTo).unwrap(),
+            "relates_to"
+        );
+        assert_eq!(
+            serde_json::to_value(DependencyType::Duplicates).unwrap(),
+            "duplicates"
+        );
+    }
+
+    #[test]
+    fn test_dependency_type_deserialization() {
+        let blocks: DependencyType = serde_json::from_str("\"blocks\"").unwrap();
+        assert_eq!(blocks, DependencyType::Blocks);
+
+        let relates_to: DependencyType = serde_json::from_str("\"relates_to\"").unwrap();
+        assert_eq!(relates_to, DependencyType::RelatesTo);
+
+        let duplicates: DependencyType = serde_json::from_str("\"duplicates\"").unwrap();
+        assert_eq!(duplicates, DependencyType::Duplicates);
+    }
+
+    #[test]
+    fn test_create_card_request_deserialization() {
+        let json = serde_json::json!({
+            "projectId": "00000000-0000-0000-0000-000000000001",
+            "title": "Test Card",
+            "taskPrompt": "Implement feature X",
+            "labels": ["urgent", "feature"],
+            "priority": 1
+        });
+
+        let request: CreateCardRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(request.title, "Test Card");
+        assert_eq!(request.task_prompt, "Implement feature X");
+        assert!(request.description.is_none());
+        assert_eq!(request.labels.unwrap().len(), 2);
+        assert_eq!(request.priority, Some(1));
+    }
+
+    #[test]
+    fn test_update_card_request_deserialization() {
+        let json = serde_json::json!({
+            "title": "Updated Title",
+            "priority": 2
+        });
+
+        let request: UpdateCardRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(request.title, Some("Updated Title".to_string()));
+        assert!(request.description.is_none());
+        assert!(request.task_prompt.is_none());
+        assert_eq!(request.priority, Some(2));
+    }
+
+    #[test]
+    fn test_transition_request_deserialization() {
+        let json = serde_json::json!({
+            "trigger": "StartPlanning"
+        });
+
+        let request: TransitionRequest = serde_json::from_value(json).unwrap();
+        assert_eq!(request.trigger, "StartPlanning");
+        assert!(request.data.is_none());
+    }
+}
