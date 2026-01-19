@@ -4,6 +4,57 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// Subscription configuration for coding platforms
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Subscription {
+    /// Unique name for this subscription
+    pub name: String,
+
+    /// Platform type (e.g., "claude-code", "aider")
+    pub platform: String,
+
+    /// Custom config directory for this subscription (multi-account support)
+    /// For Claude Code, this maps to CLAUDE_CONFIG_DIR
+    pub config_dir: Option<PathBuf>,
+
+    /// Model to use for this subscription
+    pub model: Option<String>,
+
+    /// Maximum concurrent sessions for this subscription
+    #[serde(default = "default_max_concurrent")]
+    pub max_concurrent: u32,
+
+    /// Whether this subscription is enabled
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Priority (lower = higher priority for selection)
+    #[serde(default = "default_priority")]
+    pub priority: u32,
+}
+
+fn default_max_concurrent() -> u32 {
+    1
+}
+
+fn default_priority() -> u32 {
+    100
+}
+
+impl Default for Subscription {
+    fn default() -> Self {
+        Self {
+            name: "default".to_string(),
+            platform: "claude-code".to_string(),
+            config_dir: None,
+            model: None,
+            max_concurrent: 1,
+            enabled: true,
+            priority: 100,
+        }
+    }
+}
+
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(Default)]
@@ -27,6 +78,10 @@ pub struct Config {
     /// Integration configuration
     #[serde(default)]
     pub integrations: IntegrationsConfig,
+
+    /// Subscriptions for coding platforms (replaces direct API usage)
+    #[serde(default)]
+    pub subscriptions: Vec<Subscription>,
 }
 
 
@@ -680,5 +735,96 @@ port = 3000
         assert_eq!(config.server.host, "127.0.0.1");
         assert!(config.server.cors_enabled);
         assert_eq!(config.loop_manager.max_iterations, 100);
+    }
+
+    // Subscription tests
+    #[test]
+    fn test_subscription_default() {
+        let sub = Subscription::default();
+
+        assert_eq!(sub.name, "default");
+        assert_eq!(sub.platform, "claude-code");
+        assert!(sub.config_dir.is_none());
+        assert!(sub.model.is_none());
+        assert_eq!(sub.max_concurrent, 1);
+        assert!(sub.enabled);
+        assert_eq!(sub.priority, 100);
+    }
+
+    #[test]
+    fn test_subscription_serialization() {
+        let sub = Subscription {
+            name: "pro-account".to_string(),
+            platform: "claude-code".to_string(),
+            config_dir: Some(PathBuf::from("/home/user/.claude-pro")),
+            model: Some("claude-opus-4-5-20251101".to_string()),
+            max_concurrent: 3,
+            enabled: true,
+            priority: 10,
+        };
+
+        let json = serde_json::to_string(&sub).unwrap();
+        assert!(json.contains("\"name\":\"pro-account\""));
+        assert!(json.contains("\"platform\":\"claude-code\""));
+        assert!(json.contains("\"max_concurrent\":3"));
+    }
+
+    #[test]
+    fn test_subscription_deserialization() {
+        let json = r#"{
+            "name": "max-subscription",
+            "platform": "claude-code",
+            "model": "claude-sonnet-4-20250514",
+            "max_concurrent": 2
+        }"#;
+
+        let sub: Subscription = serde_json::from_str(json).unwrap();
+
+        assert_eq!(sub.name, "max-subscription");
+        assert_eq!(sub.platform, "claude-code");
+        assert_eq!(sub.model, Some("claude-sonnet-4-20250514".to_string()));
+        assert_eq!(sub.max_concurrent, 2);
+        // Defaults applied for missing fields
+        assert!(sub.enabled);
+        assert_eq!(sub.priority, 100);
+    }
+
+    #[test]
+    fn test_config_with_subscriptions_toml() {
+        let toml_str = r#"
+[server]
+port = 8080
+
+[[subscriptions]]
+name = "personal"
+platform = "claude-code"
+model = "claude-sonnet-4-20250514"
+max_concurrent = 1
+
+[[subscriptions]]
+name = "team"
+platform = "claude-code"
+config_dir = "/home/user/.claude-team"
+model = "claude-opus-4-5-20251101"
+max_concurrent = 3
+priority = 50
+"#;
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.subscriptions.len(), 2);
+
+        assert_eq!(config.subscriptions[0].name, "personal");
+        assert_eq!(config.subscriptions[0].max_concurrent, 1);
+
+        assert_eq!(config.subscriptions[1].name, "team");
+        assert_eq!(config.subscriptions[1].config_dir, Some(PathBuf::from("/home/user/.claude-team")));
+        assert_eq!(config.subscriptions[1].priority, 50);
+    }
+
+    #[test]
+    fn test_config_default_has_empty_subscriptions() {
+        let config = Config::default();
+        assert!(config.subscriptions.is_empty());
     }
 }

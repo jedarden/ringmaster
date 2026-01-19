@@ -1,7 +1,31 @@
 //! Claude API integration for code generation
 //!
-//! This module provides a client for interacting with the Anthropic Claude API
-//! to generate code and handle autonomous coding loops.
+//! **DEPRECATED**: This module provides direct API access which incurs pay-per-token billing.
+//! Consider using `crate::platforms::ClaudeCodePlatform` instead, which uses the Claude Code CLI
+//! to leverage subscription-based billing (Claude Max/Pro plans).
+//!
+//! ## Migration
+//!
+//! Instead of using `ClaudeClient` directly:
+//!
+//! ```rust,ignore
+//! // Old way (deprecated):
+//! let client = ClaudeClient::new()?;
+//! let response = client.complete(system, &messages).await?;
+//!
+//! // New way (recommended):
+//! use crate::platforms::{ClaudeCodePlatform, CodingPlatform, SessionConfig};
+//! let platform = ClaudeCodePlatform::new();
+//! let handle = platform.start_session(worktree, prompt, &config).await?;
+//! ```
+//!
+//! The new platform-based approach:
+//! - Uses Claude Code CLI instead of direct API calls
+//! - Leverages your Claude Max/Pro subscription (flat monthly rate)
+//! - Provides better autonomous coding capabilities (tool use, file editing, etc.)
+//! - Handles session lifecycle and streaming automatically
+
+#![allow(deprecated)]
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -162,6 +186,14 @@ impl CompletionResponse {
 }
 
 /// Claude API client
+///
+/// **Deprecated**: Use `crate::platforms::ClaudeCodePlatform` instead for CLI-based
+/// execution with subscription billing. This client makes direct API calls that incur
+/// pay-per-token costs.
+#[deprecated(
+    since = "0.2.0",
+    note = "Use crate::platforms::ClaudeCodePlatform for CLI-based execution with subscription billing"
+)]
 pub struct ClaudeClient {
     client: Client,
     api_key: String,

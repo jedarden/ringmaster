@@ -3,6 +3,11 @@
 //! This module implements chat history compression using Claude to summarize
 //! older messages while preserving important context. This allows for long
 //! coding sessions without exceeding token limits.
+//!
+//! Note: This module uses the deprecated `ClaudeClient` for API calls.
+//! Future versions may migrate to use the platforms module.
+
+#![allow(deprecated)]
 
 use sqlx::SqlitePool;
 use uuid::Uuid;

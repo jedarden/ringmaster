@@ -1,10 +1,16 @@
 //! Loop Executor - runs autonomous coding iterations with Claude API
 //!
+//! **DEPRECATED**: This executor uses direct Claude API calls (pay-per-token).
+//! Use `crate::loops::PlatformExecutor` instead for CLI-based execution
+//! with subscription billing (Claude Max/Pro plans).
+//!
 //! This module implements the core execution engine that:
 //! 1. Runs coding iterations using the Claude API
 //! 2. Persists chat history to the database
 //! 3. Handles completion signals and error recovery
 //! 4. Creates checkpoints for recovery
+
+#![allow(deprecated)]
 
 use std::sync::Arc;
 use std::time::Duration;

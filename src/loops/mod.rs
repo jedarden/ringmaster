@@ -2,12 +2,37 @@
 //!
 //! This module provides:
 //! - `LoopManager`: Manages loop state and lifecycle
-//! - `LoopExecutor`: Executes coding iterations with Claude API
+//! - `LoopExecutor`: Executes coding iterations with Claude API (deprecated, use PlatformExecutor)
+//! - `PlatformExecutor`: Executes coding sessions using CLI platforms (Claude Code, Aider, etc.)
 //! - `LoopConfig`: Configuration for loop behavior
+//!
+//! ## Migration to PlatformExecutor
+//!
+//! The new `PlatformExecutor` uses CLI-based execution (Claude Code CLI, Aider, etc.)
+//! instead of direct API calls. This allows users to leverage their subscription plans
+//! (Claude Max/Pro) instead of pay-per-token API billing.
+//!
+//! ```rust,ignore
+//! // Old way (deprecated):
+//! let executor = LoopExecutor::new(pool, event_bus, loop_manager)?;
+//!
+//! // New way (recommended):
+//! let executor = PlatformExecutor::new(pool, event_bus, loop_manager);
+//! executor.run_loop(card_id, project, config, Some("my-subscription")).await?;
+//! ```
 
 pub mod executor;
+pub mod platform_executor;
 
+// Re-export the old executor for backwards compatibility (deprecated)
+#[deprecated(
+    since = "0.2.0",
+    note = "Use PlatformExecutor instead for CLI-based execution with subscription billing"
+)]
 pub use executor::{ExecutorError, IterationResult, LoopExecutor};
+
+// Re-export the new platform-based executor
+pub use platform_executor::{PlatformExecutor, PlatformExecutorError};
 
 use std::collections::HashMap;
 use std::time::Instant;

@@ -1,12 +1,32 @@
 //! Integration services for external systems
+//!
+//! This module provides integrations with various external services:
+//! - GitHub Actions (CI/CD monitoring)
+//! - ArgoCD (GitOps deployments)
+//! - Docker Hub (container registry)
+//! - Git operations (worktrees, commits, etc.)
+//!
+//! ## Claude Integration (Deprecated)
+//!
+//! The `claude` submodule provides direct API access but is **deprecated**.
+//! Use `crate::platforms::ClaudeCodePlatform` instead for CLI-based execution
+//! with subscription billing.
+//!
+//! See [`crate::platforms`] for the recommended approach.
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::env;
 use thiserror::Error;
 
-// Re-export Claude integration from dedicated module
+// Re-export Claude integration from dedicated module (deprecated - use platforms instead)
+#[deprecated(
+    since = "0.2.0",
+    note = "Use crate::platforms module instead for CLI-based execution"
+)]
 pub mod claude;
+
+#[allow(deprecated)]
 pub use claude::{ClaudeClient, ClaudeError, CompletionResponse, Message, Role, StopReason};
 
 // Kubernetes integration
