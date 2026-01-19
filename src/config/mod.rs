@@ -371,3 +371,314 @@ mod dirs {
             .map(PathBuf::from)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Default configuration tests
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+
+        assert_eq!(config.server.host, "127.0.0.1");
+        assert_eq!(config.server.port, 8080);
+        assert!(config.server.cors_enabled);
+        assert!(config.database.path.is_none());
+        assert_eq!(config.state_machine.max_retries, 5);
+        assert_eq!(config.loop_manager.max_iterations, 100);
+    }
+
+    // Server config tests
+    #[test]
+    fn test_server_config_default() {
+        let config = ServerConfig::default();
+
+        assert_eq!(config.host, "127.0.0.1");
+        assert_eq!(config.port, 8080);
+        assert!(config.cors_enabled);
+    }
+
+    #[test]
+    fn test_server_config_serialization() {
+        let config = ServerConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains("\"host\""));
+        assert!(json.contains("\"port\""));
+        assert!(json.contains("\"cors_enabled\""));
+    }
+
+    #[test]
+    fn test_server_config_deserialization() {
+        let json = r#"{"host": "0.0.0.0", "port": 3000, "cors_enabled": false}"#;
+        let config: ServerConfig = serde_json::from_str(json).unwrap();
+
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.port, 3000);
+        assert!(!config.cors_enabled);
+    }
+
+    // Database config tests
+    #[test]
+    fn test_database_config_default() {
+        let config = DatabaseConfig::default();
+        assert!(config.path.is_none());
+    }
+
+    #[test]
+    fn test_database_config_get_path_custom() {
+        let config = DatabaseConfig {
+            path: Some("/custom/path/db.sqlite".to_string()),
+        };
+        assert_eq!(config.get_path(), PathBuf::from("/custom/path/db.sqlite"));
+    }
+
+    #[test]
+    fn test_database_config_get_path_default() {
+        let config = DatabaseConfig::default();
+        let path = config.get_path();
+        assert!(path.to_string_lossy().contains("data.db"));
+    }
+
+    // State machine config tests
+    #[test]
+    fn test_state_machine_config_default() {
+        let config = StateMachineConfig::default();
+
+        assert_eq!(config.max_retries, 5);
+        assert_eq!(config.timeouts.planning, 3600);
+        assert_eq!(config.timeouts.coding, 14400);
+        assert_eq!(config.timeouts.building, 1800);
+        assert_eq!(config.timeouts.deploying, 600);
+        assert_eq!(config.timeouts.verifying, 300);
+    }
+
+    #[test]
+    fn test_phase_timeouts_default() {
+        let timeouts = PhaseTimeouts::default();
+
+        assert_eq!(timeouts.planning, 3600);    // 1 hour
+        assert_eq!(timeouts.coding, 14400);     // 4 hours
+        assert_eq!(timeouts.building, 1800);    // 30 minutes
+        assert_eq!(timeouts.deploying, 600);    // 10 minutes
+        assert_eq!(timeouts.verifying, 300);    // 5 minutes
+    }
+
+    #[test]
+    fn test_auto_transitions_default() {
+        let auto = AutoTransitions::default();
+
+        assert!(auto.build_success_to_deploy);
+        assert_eq!(auto.archive_completed_after_days, 30);
+    }
+
+    // Loop manager config tests
+    #[test]
+    fn test_loop_manager_config_default() {
+        let config = LoopManagerConfig::default();
+
+        assert_eq!(config.max_iterations, 100);
+        assert_eq!(config.max_runtime_seconds, 14400);
+        assert!((config.max_cost_usd - 300.0).abs() < 0.01);
+        assert_eq!(config.checkpoint_interval, 10);
+        assert_eq!(config.cooldown_seconds, 3);
+        assert_eq!(config.max_consecutive_errors, 3);
+        assert_eq!(config.completion_signal, "<promise>COMPLETE</promise>");
+    }
+
+    #[test]
+    fn test_loop_manager_config_serialization() {
+        let config = LoopManagerConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains("\"max_iterations\""));
+        assert!(json.contains("\"max_runtime_seconds\""));
+        assert!(json.contains("\"max_cost_usd\""));
+        assert!(json.contains("\"checkpoint_interval\""));
+        assert!(json.contains("\"cooldown_seconds\""));
+        assert!(json.contains("\"max_consecutive_errors\""));
+        assert!(json.contains("\"completion_signal\""));
+    }
+
+    #[test]
+    fn test_loop_manager_config_deserialization() {
+        let json = r#"{
+            "max_iterations": 50,
+            "max_runtime_seconds": 7200,
+            "max_cost_usd": 150.0,
+            "checkpoint_interval": 5,
+            "cooldown_seconds": 10,
+            "max_consecutive_errors": 2,
+            "completion_signal": "<done>DONE</done>"
+        }"#;
+        let config: LoopManagerConfig = serde_json::from_str(json).unwrap();
+
+        assert_eq!(config.max_iterations, 50);
+        assert_eq!(config.max_runtime_seconds, 7200);
+        assert!((config.max_cost_usd - 150.0).abs() < 0.01);
+        assert_eq!(config.checkpoint_interval, 5);
+        assert_eq!(config.cooldown_seconds, 10);
+        assert_eq!(config.max_consecutive_errors, 2);
+        assert_eq!(config.completion_signal, "<done>DONE</done>");
+    }
+
+    // Integrations config tests
+    #[test]
+    fn test_integrations_config_default() {
+        let config = IntegrationsConfig::default();
+
+        assert!(config.github.is_none());
+        assert!(config.argocd.is_none());
+        assert!(config.claude.is_none());
+        assert!(config.config_sync.repository_url.is_none());
+    }
+
+    #[test]
+    fn test_github_config_serialization() {
+        let config = GitHubConfig {
+            token: Some("ghp_test123".to_string()),
+            api_url: Some("https://api.github.com".to_string()),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains("\"token\""));
+        assert!(json.contains("\"api_url\""));
+    }
+
+    #[test]
+    fn test_argocd_config_serialization() {
+        let config = ArgoCDConfig {
+            server_url: "https://argocd.example.com".to_string(),
+            token: Some("argocd-token".to_string()),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains("\"server_url\""));
+        assert!(json.contains("\"token\""));
+    }
+
+    #[test]
+    fn test_claude_config_serialization() {
+        let config = ClaudeConfig {
+            api_key: Some("sk-ant-test".to_string()),
+            model: Some("claude-3-sonnet".to_string()),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+
+        assert!(json.contains("\"api_key\""));
+        assert!(json.contains("\"model\""));
+    }
+
+    // Config sync tests
+    #[test]
+    fn test_config_sync_config_default() {
+        let config = ConfigSyncConfig::default();
+
+        assert!(config.repository_url.is_none());
+        // Note: Default derive creates empty string; serde default only applies during deserialization
+        assert_eq!(config.branch, "");
+        assert!(config.cache_path.is_none());
+        // Default derive creates false for bool
+        assert!(!config.auto_sync);
+    }
+
+    #[test]
+    fn test_config_sync_config_serde_defaults() {
+        // When deserializing with empty JSON, serde defaults are applied
+        let json = r#"{}"#;
+        let config: ConfigSyncConfig = serde_json::from_str(json).unwrap();
+
+        assert!(config.repository_url.is_none());
+        assert_eq!(config.branch, "main");  // serde default applies
+        assert!(config.cache_path.is_none());
+        assert!(config.auto_sync);  // serde default applies
+    }
+
+    #[test]
+    fn test_config_sync_config_deserialization() {
+        let json = r#"{
+            "repository_url": "https://github.com/org/claude-config.git",
+            "branch": "develop",
+            "auto_sync": false
+        }"#;
+        let config: ConfigSyncConfig = serde_json::from_str(json).unwrap();
+
+        assert_eq!(config.repository_url, Some("https://github.com/org/claude-config.git".to_string()));
+        assert_eq!(config.branch, "develop");
+        assert!(!config.auto_sync);
+    }
+
+    // Directory functions tests
+    #[test]
+    fn test_get_data_dir() {
+        let data_dir = get_data_dir();
+        // Should return some path (either project dirs or fallback)
+        assert!(!data_dir.as_os_str().is_empty());
+    }
+
+    #[test]
+    fn test_get_config_dir() {
+        let config_dir = get_config_dir();
+        // Should return some path
+        assert!(!config_dir.as_os_str().is_empty());
+    }
+
+    // Full config serialization tests
+    #[test]
+    fn test_full_config_toml_serialization() {
+        let config = Config::default();
+        let toml_str = toml::to_string_pretty(&config).unwrap();
+
+        assert!(toml_str.contains("[server]"));
+        assert!(toml_str.contains("[database]"));
+        assert!(toml_str.contains("[state_machine]"));
+        assert!(toml_str.contains("[loop_manager]"));
+    }
+
+    #[test]
+    fn test_full_config_toml_deserialization() {
+        let toml_str = r#"
+[server]
+host = "0.0.0.0"
+port = 9090
+cors_enabled = true
+
+[database]
+path = "/custom/db.sqlite"
+
+[state_machine]
+max_retries = 10
+
+[loop_manager]
+max_iterations = 200
+max_cost_usd = 500.0
+
+[integrations]
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.port, 9090);
+        assert_eq!(config.database.path, Some("/custom/db.sqlite".to_string()));
+        assert_eq!(config.state_machine.max_retries, 10);
+        assert_eq!(config.loop_manager.max_iterations, 200);
+        assert!((config.loop_manager.max_cost_usd - 500.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_config_partial_toml_deserialization() {
+        // Only specify some fields, rest should default
+        let toml_str = r#"
+[server]
+port = 3000
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.server.port, 3000);
+        // Defaults should be applied
+        assert_eq!(config.server.host, "127.0.0.1");
+        assert!(config.server.cors_enabled);
+        assert_eq!(config.loop_manager.max_iterations, 100);
+    }
+}
