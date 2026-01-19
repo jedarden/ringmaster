@@ -286,15 +286,24 @@ impl LoopExecutor {
                 }
             }
 
-            // Cooldown between iterations
-            let cooldown = {
+            // Cooldown between iterations (with exponential backoff on errors)
+            let backoff = {
                 let manager = self.loop_manager.read().await;
                 manager
                     .get_loop_state(&card_id)
-                    .map(|s| s.config.cooldown_seconds)
+                    .map(|s| s.calculate_backoff_seconds())
                     .unwrap_or(3)
             };
-            sleep(Duration::from_secs(cooldown)).await;
+
+            if backoff > 3 {
+                tracing::info!(
+                    "Applying exponential backoff for card {}: {} seconds",
+                    card_id,
+                    backoff
+                );
+            }
+
+            sleep(Duration::from_secs(backoff)).await;
         }
     }
 

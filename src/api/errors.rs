@@ -107,16 +107,13 @@ async fn list_errors(
     let rows = q.fetch_all(&state.pool).await?;
     let errors: Vec<CardError> = rows.into_iter().map(|r| r.to_card_error()).collect();
 
-    // Count total
-    let count_sql = format!(
-        "SELECT COUNT(*) as count FROM errors WHERE card_id = '{}'",
-        card_id
-    );
+    // Count total (using parameterized query to avoid SQL injection)
     #[derive(sqlx::FromRow)]
     struct CountRow {
         count: i64,
     }
-    let count: CountRow = sqlx::query_as(&count_sql)
+    let count: CountRow = sqlx::query_as("SELECT COUNT(*) as count FROM errors WHERE card_id = ?")
+        .bind(card_id.to_string())
         .fetch_one(&state.pool)
         .await
         .unwrap_or(CountRow { count: 0 });

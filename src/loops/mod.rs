@@ -108,6 +108,29 @@ impl LoopState {
         }
     }
 
+    /// Calculate the backoff duration for the next iteration
+    ///
+    /// Uses exponential backoff when there are consecutive errors:
+    /// - 0 errors: base cooldown (e.g., 3 seconds)
+    /// - 1 error: 2x cooldown (6 seconds)
+    /// - 2 errors: 4x cooldown (12 seconds)
+    /// - etc., capped at 5 minutes max
+    pub fn calculate_backoff_seconds(&self) -> u64 {
+        let base_cooldown = self.config.cooldown_seconds;
+
+        if self.consecutive_errors == 0 {
+            return base_cooldown;
+        }
+
+        // Exponential backoff: base * 2^(errors), with jitter
+        let multiplier = 2u64.saturating_pow(self.consecutive_errors);
+        let backoff = base_cooldown.saturating_mul(multiplier);
+
+        // Cap at 5 minutes (300 seconds)
+        let max_backoff = 300u64;
+        backoff.min(max_backoff)
+    }
+
     /// Check if the loop should stop based on current state
     pub fn should_stop(&self) -> Option<StopReason> {
         if self.iteration >= self.config.max_iterations as i32 {
@@ -402,5 +425,45 @@ mod tests {
 
         state.iteration = 10;
         assert!(state.should_checkpoint());
+    }
+
+    #[test]
+    fn test_exponential_backoff() {
+        let config = LoopConfig {
+            cooldown_seconds: 3, // 3 second base cooldown
+            ..Default::default()
+        };
+        let mut state = LoopState::new(Uuid::new_v4(), config);
+
+        // No errors = base cooldown
+        assert_eq!(state.calculate_backoff_seconds(), 3);
+
+        // 1 error = 2x base = 6 seconds
+        state.consecutive_errors = 1;
+        assert_eq!(state.calculate_backoff_seconds(), 6);
+
+        // 2 errors = 4x base = 12 seconds
+        state.consecutive_errors = 2;
+        assert_eq!(state.calculate_backoff_seconds(), 12);
+
+        // 3 errors = 8x base = 24 seconds
+        state.consecutive_errors = 3;
+        assert_eq!(state.calculate_backoff_seconds(), 24);
+    }
+
+    #[test]
+    fn test_backoff_capped_at_max() {
+        let config = LoopConfig {
+            cooldown_seconds: 3,
+            ..Default::default()
+        };
+        let mut state = LoopState::new(Uuid::new_v4(), config);
+
+        // Many errors should cap at 300 seconds (5 minutes)
+        state.consecutive_errors = 10; // 2^10 * 3 = 3072, but capped at 300
+        assert_eq!(state.calculate_backoff_seconds(), 300);
+
+        state.consecutive_errors = 20; // Should also be capped
+        assert_eq!(state.calculate_backoff_seconds(), 300);
     }
 }
