@@ -436,7 +436,7 @@ impl LoopExecutor {
             "#,
         )
         .bind(&snapshot_id)
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .bind(iteration)
         .execute(&self.pool)
         .await?;
@@ -456,7 +456,7 @@ impl LoopExecutor {
         let rows = sqlx::query_as::<_, ChatMessageRow>(
             "SELECT role, content FROM chat_messages WHERE card_id = ? ORDER BY created_at ASC",
         )
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .fetch_all(&self.pool)
         .await;
 
@@ -496,7 +496,7 @@ impl LoopExecutor {
             "#,
         )
         .bind(&id)
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .bind(role)
         .bind(content)
         .execute(&self.pool)
@@ -524,7 +524,7 @@ impl LoopExecutor {
             "#,
         )
         .bind(iteration)
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .execute(&self.pool)
         .await?;
 
@@ -542,7 +542,7 @@ impl LoopExecutor {
             "#,
         )
         .bind(&id)
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .bind(message)
         .execute(&self.pool)
         .await?;
@@ -593,7 +593,7 @@ impl LoopExecutor {
                     iteration: state.iteration,
                     timestamp: Utc::now(),
                 },
-                "iteration_completed" | _ => {
+                _ => {
                     if let Some(r) = result {
                         Event::LoopIteration {
                             card_id: *card_id,

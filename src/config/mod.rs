@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 /// Main configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Config {
     /// Server configuration
     #[serde(default)]
@@ -28,17 +29,6 @@ pub struct Config {
     pub integrations: IntegrationsConfig,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            database: DatabaseConfig::default(),
-            state_machine: StateMachineConfig::default(),
-            loop_manager: LoopManagerConfig::default(),
-            integrations: IntegrationsConfig::default(),
-        }
-    }
-}
 
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,16 +70,12 @@ impl Default for ServerConfig {
 
 /// Database configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct DatabaseConfig {
     /// Path to SQLite database
     pub path: Option<String>,
 }
 
-impl Default for DatabaseConfig {
-    fn default() -> Self {
-        Self { path: None }
-    }
-}
 
 impl DatabaseConfig {
     pub fn get_path(&self) -> PathBuf {
@@ -265,6 +251,7 @@ impl Default for LoopManagerConfig {
 
 /// Integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct IntegrationsConfig {
     /// GitHub configuration
     #[serde(default)]
@@ -279,15 +266,6 @@ pub struct IntegrationsConfig {
     pub claude: Option<ClaudeConfig>,
 }
 
-impl Default for IntegrationsConfig {
-    fn default() -> Self {
-        Self {
-            github: None,
-            argocd: None,
-            claude: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitHubConfig {

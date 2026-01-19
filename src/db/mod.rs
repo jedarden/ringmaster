@@ -4,14 +4,13 @@ mod pool;
 mod cards;
 mod projects;
 mod attempts;
-mod models;
-mod queries;
+mod errors;
 
 pub use pool::*;
 pub use cards::*;
 pub use projects::*;
 pub use attempts::*;
-pub use queries::create_error;
+pub use errors::*;
 
 use crate::domain::CardError;
 use sqlx::SqlitePool;

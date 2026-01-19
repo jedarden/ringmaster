@@ -284,7 +284,7 @@ impl ActionExecutor {
         // Parse owner/repo from repository URL
         let (owner, repo) = self
             .parse_github_repo(&project.repository_url)
-            .map_err(|e| ActionError::IntegrationError(e))?;
+            .map_err(ActionError::IntegrationError)?;
 
         // Get the branch name for this card
         let branch = card
@@ -410,7 +410,7 @@ impl ActionExecutor {
 
         let (owner, repo) = self
             .parse_github_repo(&project.repository_url)
-            .map_err(|e| ActionError::IntegrationError(e))?;
+            .map_err(ActionError::IntegrationError)?;
 
         let branch = card
             .branch_name
@@ -447,7 +447,7 @@ impl ActionExecutor {
                             r.status == "in_progress"
                                 || r.status == "queued"
                                 || (r.status == "completed"
-                                    && last_run_id.map_or(true, |id| r.id >= id))
+                                    && last_run_id.is_none_or(|id| r.id >= id))
                         });
 
                         if let Some(run) = relevant_run {
@@ -619,7 +619,7 @@ impl ActionExecutor {
                         let is_healthy = health_status == "Healthy";
                         let is_degraded = health_status == "Degraded";
                         let sync_failed = sync_status == "OutOfSync"
-                            && app.status.sync.revision != ""
+                            && !app.status.sync.revision.is_empty()
                             && polls > 5; // Give it a few polls before declaring failure
 
                         if is_synced && is_healthy {

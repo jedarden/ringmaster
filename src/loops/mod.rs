@@ -130,7 +130,7 @@ impl LoopState {
         if self.config.checkpoint_interval == 0 {
             return false;
         }
-        self.iteration > 0 && self.iteration as u32 % self.config.checkpoint_interval == 0
+        self.iteration > 0 && (self.iteration as u32).is_multiple_of(self.config.checkpoint_interval)
     }
 }
 

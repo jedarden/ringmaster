@@ -145,7 +145,7 @@ async fn start_loop(
         let mut loop_manager = state.loop_manager.write().await;
         loop_manager
             .start_loop(card_id, config.clone())
-            .map_err(|e| AppError::LoopError(e))?;
+            .map_err(AppError::LoopError)?;
     }
 
     // Publish event
@@ -230,7 +230,7 @@ async fn pause_loop(
     let mut loop_manager = state.loop_manager.write().await;
     let loop_state = loop_manager
         .pause_loop(&card_id)
-        .map_err(|e| AppError::LoopError(e))?;
+        .map_err(AppError::LoopError)?;
 
     state.event_bus.publish(Event::LoopPaused {
         card_id,
@@ -248,7 +248,7 @@ async fn resume_loop(
     let mut loop_manager = state.loop_manager.write().await;
     let loop_state = loop_manager
         .resume_loop(&card_id)
-        .map_err(|e| AppError::LoopError(e))?;
+        .map_err(AppError::LoopError)?;
 
     Ok(Json(ApiResponse::new(loop_state)))
 }
@@ -260,7 +260,7 @@ async fn stop_loop(
     let mut loop_manager = state.loop_manager.write().await;
     let loop_state = loop_manager
         .stop_loop(&card_id)
-        .map_err(|e| AppError::LoopError(e))?;
+        .map_err(AppError::LoopError)?;
 
     Ok(Json(ApiResponse::new(LoopStopResponse {
         status: "stopped".to_string(),

@@ -188,7 +188,7 @@ impl RlmSummarizer {
             "#,
         )
         .bind(&id)
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .bind(&result.summary)
         .bind(result.messages_summarized as i32)
         .bind(result.tokens_before as i32)
@@ -208,7 +208,7 @@ impl RlmSummarizer {
             "#,
         )
         .bind(&id)
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .bind(first_message_id)
         .bind(last_message_id)
         .execute(pool)
@@ -231,7 +231,7 @@ impl RlmSummarizer {
         let row = sqlx::query_as::<_, SummaryRow>(
             "SELECT summary FROM rlm_summaries WHERE card_id = ? ORDER BY created_at DESC LIMIT 1",
         )
-        .bind(&card_id.to_string())
+        .bind(card_id.to_string())
         .fetch_optional(pool)
         .await?;
 
