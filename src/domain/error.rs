@@ -181,3 +181,197 @@ impl Default for ErrorContext {
 pub struct ResolveErrorRequest {
     pub resolution_attempt_id: Option<Uuid>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_category_display() {
+        assert_eq!(ErrorCategory::Build.to_string(), "build");
+        assert_eq!(ErrorCategory::Test.to_string(), "test");
+        assert_eq!(ErrorCategory::Deploy.to_string(), "deploy");
+        assert_eq!(ErrorCategory::Runtime.to_string(), "runtime");
+        assert_eq!(ErrorCategory::Other.to_string(), "other");
+    }
+
+    #[test]
+    fn test_error_category_from_str() {
+        assert_eq!("build".parse::<ErrorCategory>().unwrap(), ErrorCategory::Build);
+        assert_eq!("test".parse::<ErrorCategory>().unwrap(), ErrorCategory::Test);
+        assert_eq!("deploy".parse::<ErrorCategory>().unwrap(), ErrorCategory::Deploy);
+        assert_eq!("runtime".parse::<ErrorCategory>().unwrap(), ErrorCategory::Runtime);
+        assert_eq!("other".parse::<ErrorCategory>().unwrap(), ErrorCategory::Other);
+    }
+
+    #[test]
+    fn test_error_category_from_str_invalid() {
+        let result = "invalid".parse::<ErrorCategory>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown error category"));
+    }
+
+    #[test]
+    fn test_error_severity_display() {
+        assert_eq!(ErrorSeverity::Error.to_string(), "error");
+        assert_eq!(ErrorSeverity::Warning.to_string(), "warning");
+        assert_eq!(ErrorSeverity::Info.to_string(), "info");
+    }
+
+    #[test]
+    fn test_error_severity_from_str() {
+        assert_eq!("error".parse::<ErrorSeverity>().unwrap(), ErrorSeverity::Error);
+        assert_eq!("warning".parse::<ErrorSeverity>().unwrap(), ErrorSeverity::Warning);
+        assert_eq!("info".parse::<ErrorSeverity>().unwrap(), ErrorSeverity::Info);
+    }
+
+    #[test]
+    fn test_error_severity_from_str_invalid() {
+        let result = "invalid".parse::<ErrorSeverity>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown error severity"));
+    }
+
+    #[test]
+    fn test_card_error_new() {
+        let card_id = Uuid::new_v4();
+        let error = CardError::new(card_id, "compile_error".to_string(), "Failed to compile".to_string());
+
+        assert_eq!(error.card_id, card_id);
+        assert_eq!(error.error_type, "compile_error");
+        assert_eq!(error.message, "Failed to compile");
+        assert!(error.attempt_id.is_none());
+        assert!(error.stack_trace.is_none());
+        assert!(error.context.is_none());
+        assert!(error.category.is_none());
+        assert_eq!(error.severity, ErrorSeverity::Error);
+        assert!(!error.resolved);
+        assert!(error.resolved_at.is_none());
+        assert!(error.resolution_attempt_id.is_none());
+    }
+
+    #[test]
+    fn test_card_error_with_category() {
+        let error = CardError::new(Uuid::new_v4(), "test".to_string(), "msg".to_string())
+            .with_category(ErrorCategory::Build);
+
+        assert_eq!(error.category, Some(ErrorCategory::Build));
+    }
+
+    #[test]
+    fn test_card_error_with_stack_trace() {
+        let error = CardError::new(Uuid::new_v4(), "test".to_string(), "msg".to_string())
+            .with_stack_trace("stack trace here".to_string());
+
+        assert_eq!(error.stack_trace, Some("stack trace here".to_string()));
+    }
+
+    #[test]
+    fn test_card_error_with_attempt() {
+        let attempt_id = Uuid::new_v4();
+        let error = CardError::new(Uuid::new_v4(), "test".to_string(), "msg".to_string())
+            .with_attempt(attempt_id);
+
+        assert_eq!(error.attempt_id, Some(attempt_id));
+    }
+
+    #[test]
+    fn test_card_error_with_context() {
+        let context = ErrorContext::new()
+            .with_logs("error logs".to_string())
+            .with_source_state("building".to_string());
+
+        let error = CardError::new(Uuid::new_v4(), "test".to_string(), "msg".to_string())
+            .with_context(context);
+
+        assert!(error.context.is_some());
+        let ctx = error.context.unwrap();
+        assert_eq!(ctx.logs, Some("error logs".to_string()));
+        assert_eq!(ctx.source_state, Some("building".to_string()));
+    }
+
+    #[test]
+    fn test_error_context_new() {
+        let context = ErrorContext::new();
+
+        assert!(context.file.is_none());
+        assert!(context.line.is_none());
+        assert!(context.source_state.is_none());
+        assert!(context.build_run_id.is_none());
+        assert!(context.logs.is_none());
+        assert!(context.extra.is_none());
+    }
+
+    #[test]
+    fn test_error_context_default() {
+        let context = ErrorContext::default();
+
+        assert!(context.file.is_none());
+        assert!(context.line.is_none());
+    }
+
+    #[test]
+    fn test_error_context_builders() {
+        let context = ErrorContext::new()
+            .with_logs("my logs".to_string())
+            .with_source_state("testing".to_string());
+
+        assert_eq!(context.logs, Some("my logs".to_string()));
+        assert_eq!(context.source_state, Some("testing".to_string()));
+    }
+
+    #[test]
+    fn test_error_category_serialization() {
+        let json = serde_json::to_string(&ErrorCategory::Build).unwrap();
+        assert_eq!(json, "\"build\"");
+
+        let deserialized: ErrorCategory = serde_json::from_str("\"deploy\"").unwrap();
+        assert_eq!(deserialized, ErrorCategory::Deploy);
+    }
+
+    #[test]
+    fn test_error_severity_serialization() {
+        let json = serde_json::to_string(&ErrorSeverity::Warning).unwrap();
+        assert_eq!(json, "\"warning\"");
+
+        let deserialized: ErrorSeverity = serde_json::from_str("\"info\"").unwrap();
+        assert_eq!(deserialized, ErrorSeverity::Info);
+    }
+
+    #[test]
+    fn test_card_error_serialization() {
+        let error = CardError::new(
+            Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            "test_error".to_string(),
+            "Test message".to_string(),
+        )
+        .with_category(ErrorCategory::Test);
+
+        let json = serde_json::to_string(&error).unwrap();
+
+        // Verify camelCase serialization
+        assert!(json.contains("\"cardId\""));
+        assert!(json.contains("\"errorType\""));
+        assert!(!json.contains("\"card_id\""));
+        assert!(!json.contains("\"error_type\""));
+    }
+
+    #[test]
+    fn test_resolve_error_request_deserialization() {
+        let json = r#"{"resolutionAttemptId": "00000000-0000-0000-0000-000000000001"}"#;
+        let request: ResolveErrorRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(
+            request.resolution_attempt_id,
+            Some(Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap())
+        );
+    }
+
+    #[test]
+    fn test_resolve_error_request_without_attempt_id() {
+        let json = r#"{}"#;
+        let request: ResolveErrorRequest = serde_json::from_str(json).unwrap();
+
+        assert!(request.resolution_attempt_id.is_none());
+    }
+}
