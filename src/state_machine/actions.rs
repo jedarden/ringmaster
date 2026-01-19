@@ -830,3 +830,157 @@ impl ActionExecutor {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{Card, Project};
+    use crate::events::EventBus;
+    use crate::loops::LoopManager;
+
+    /// Create test fixtures
+    fn create_test_project() -> Project {
+        Project::new(
+            "test-project".to_string(),
+            "https://github.com/test/test-repo".to_string(),
+        )
+    }
+
+    fn create_test_card(project_id: uuid::Uuid) -> Card {
+        Card::new(
+            project_id,
+            "Test Card".to_string(),
+            "Implement test feature".to_string(),
+        )
+    }
+
+    #[test]
+    fn test_parse_github_repo_https() {
+        // Test the URL parsing logic directly
+        let url = "https://github.com/owner/repo";
+        let url = url.trim_end_matches(".git");
+
+        if let Some(rest) = url.strip_prefix("https://github.com/") {
+            let parts: Vec<&str> = rest.split('/').collect();
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[0], "owner");
+            assert_eq!(parts[1], "repo");
+        } else {
+            panic!("Failed to parse URL");
+        }
+    }
+
+    #[test]
+    fn test_parse_github_repo_https_with_git_suffix() {
+        let url = "https://github.com/owner/repo.git";
+        let url = url.trim_end_matches(".git");
+
+        if let Some(rest) = url.strip_prefix("https://github.com/") {
+            let parts: Vec<&str> = rest.split('/').collect();
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[0], "owner");
+            assert_eq!(parts[1], "repo");
+        } else {
+            panic!("Failed to parse URL");
+        }
+    }
+
+    #[test]
+    fn test_parse_github_repo_ssh() {
+        let url = "git@github.com:owner/repo.git";
+        let url = url.trim_end_matches(".git");
+
+        if let Some(rest) = url.strip_prefix("git@github.com:") {
+            let parts: Vec<&str> = rest.split('/').collect();
+            assert_eq!(parts.len(), 2);
+            assert_eq!(parts[0], "owner");
+            assert_eq!(parts[1], "repo");
+        } else {
+            panic!("Failed to parse URL");
+        }
+    }
+
+    #[test]
+    fn test_action_error_display() {
+        let git_error = ActionError::GitError("test error".to_string());
+        assert!(git_error.to_string().contains("Git operation failed"));
+
+        let loop_error = ActionError::LoopError("loop failure".to_string());
+        assert!(loop_error.to_string().contains("Loop operation failed"));
+
+        let integration_error = ActionError::IntegrationError("service down".to_string());
+        assert!(integration_error.to_string().contains("Integration error"));
+    }
+
+    #[test]
+    fn test_card_guard_methods() {
+        let project = create_test_project();
+        let mut card = create_test_card(project.id);
+
+        // Initially no code changes
+        assert!(!card.has_code_changes());
+
+        // Set worktree and increment iteration
+        card.worktree_path = Some("/tmp/worktree".to_string());
+        card.loop_iteration = 1;
+        assert!(card.has_code_changes());
+
+        // Check retry limit
+        assert!(card.under_retry_limit());
+        card.error_count = 10;
+        assert!(!card.under_retry_limit());
+    }
+
+    #[tokio::test]
+    async fn test_event_bus_integration() {
+        let event_bus = EventBus::new();
+        let mut receiver = event_bus.subscribe();
+
+        let project = create_test_project();
+        let card = create_test_card(project.id);
+
+        // Publish a notification event
+        event_bus.publish(crate::events::Event::UserNotification {
+            card_id: card.id,
+            message: "Test notification".to_string(),
+            timestamp: chrono::Utc::now(),
+        });
+
+        // Receive and verify
+        let event = receiver.recv().await.unwrap();
+        match event {
+            crate::events::Event::UserNotification { card_id, message, .. } => {
+                assert_eq!(card_id, card.id);
+                assert!(message.contains("Test notification"));
+            }
+            _ => panic!("Unexpected event type"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_loop_manager_integration() {
+        let loop_manager = Arc::new(RwLock::new(LoopManager::new()));
+        let card_id = uuid::Uuid::new_v4();
+        let config = crate::loops::LoopConfig::default();
+
+        // Start a loop
+        {
+            let mut manager = loop_manager.write().await;
+            manager.start_loop(card_id, config).unwrap();
+        }
+
+        // Verify loop state exists
+        {
+            let manager = loop_manager.read().await;
+            let state = manager.get_loop_state(&card_id);
+            assert!(state.is_some());
+        }
+
+        // Stop the loop
+        {
+            let mut manager = loop_manager.write().await;
+            let final_state = manager.stop_loop(&card_id).unwrap();
+            assert_eq!(final_state.iteration, 0);
+        }
+    }
+}

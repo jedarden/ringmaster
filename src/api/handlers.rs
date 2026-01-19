@@ -203,7 +203,7 @@ pub async fn update_card(
     // Emit event
     state.event_bus.publish(Event::CardUpdated {
         card_id: card.id,
-        card: card.clone(),
+        card: Box::new(card.clone()),
         timestamp: chrono::Utc::now(),
     });
 

@@ -23,7 +23,7 @@ pub enum Event {
     /// Card was updated
     CardUpdated {
         card_id: Uuid,
-        card: Card,
+        card: Box<Card>,
         timestamp: DateTime<Utc>,
     },
 

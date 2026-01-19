@@ -126,7 +126,7 @@ async fn update_card(
     // Publish event
     state.event_bus.publish(Event::CardUpdated {
         card_id: card.id,
-        card: card.clone(),
+        card: Box::new(card.clone()),
         timestamp: chrono::Utc::now(),
     });
 
