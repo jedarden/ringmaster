@@ -234,3 +234,297 @@ async fn transition_card(
         card,
     })))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+    };
+    use tower::ServiceExt;
+
+    /// Create an in-memory test database
+    async fn setup_test_db() -> sqlx::SqlitePool {
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .connect("sqlite::memory:")
+            .await
+            .expect("Failed to create test database");
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .expect("Failed to run migrations");
+
+        pool
+    }
+
+    /// Create test AppState
+    async fn create_test_state() -> AppState {
+        let pool = setup_test_db().await;
+        let event_bus = crate::events::EventBus::new();
+        let loop_manager = std::sync::Arc::new(tokio::sync::RwLock::new(
+            crate::loops::LoopManager::new(),
+        ));
+        let action_executor = std::sync::Arc::new(crate::state_machine::ActionExecutor::new(
+            pool.clone(),
+            event_bus.clone(),
+            loop_manager.clone(),
+        ));
+
+        AppState {
+            pool,
+            event_bus,
+            loop_manager,
+            action_executor,
+        }
+    }
+
+    /// Create a test project in the database
+    async fn create_test_project(pool: &sqlx::SqlitePool) -> Uuid {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO projects (id, name, repository_url) VALUES (?, 'Test Project', 'https://github.com/test/repo')",
+        )
+        .bind(id.to_string())
+        .execute(pool)
+        .await
+        .expect("Failed to create test project");
+        id
+    }
+
+    #[tokio::test]
+    async fn test_list_cards_empty() {
+        let state = create_test_state().await;
+        let app = Router::new()
+            .route("/cards", get(list_cards))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/cards")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_and_get_card() {
+        let state = create_test_state().await;
+        let project_id = create_test_project(&state.pool).await;
+
+        let app = Router::new()
+            .route("/cards", post(create_card))
+            .route("/cards/:card_id", get(get_card))
+            .with_state(state);
+
+        // Create a card (using camelCase per API conventions)
+        let create_body = serde_json::json!({
+            "projectId": project_id.to_string(),
+            "title": "Test Card",
+            "taskPrompt": "Implement a test feature"
+        });
+
+        let response = app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/cards")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&create_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let status = response.status();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        // Debug: print response body if not successful
+        if status != StatusCode::CREATED {
+            let body = String::from_utf8_lossy(&body_bytes);
+            panic!("Expected CREATED, got {}: {}", status, body);
+        }
+        let resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        let card_id = resp["data"]["id"].as_str().unwrap();
+
+        // Get the card
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/cards/{}", card_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_card_not_found() {
+        let state = create_test_state().await;
+        let app = Router::new()
+            .route("/cards/:card_id", get(get_card))
+            .with_state(state);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/cards/{}", Uuid::new_v4()))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_transition_card() {
+        let state = create_test_state().await;
+        let project_id = create_test_project(&state.pool).await;
+
+        // Create a card directly in the database
+        let card_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO cards (id, project_id, title, task_prompt, state) VALUES (?, ?, 'Test Card', 'Test prompt', 'draft')",
+        )
+        .bind(card_id.to_string())
+        .bind(project_id.to_string())
+        .execute(&state.pool)
+        .await
+        .expect("Failed to create test card");
+
+        let app = Router::new()
+            .route("/cards/:card_id/transition", post(transition_card))
+            .with_state(state);
+
+        // Transition from Draft to Planning (triggers use PascalCase)
+        let transition_body = serde_json::json!({
+            "trigger": "StartPlanning"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/cards/{}/transition", card_id))
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&transition_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let status = response.status();
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        if status != StatusCode::OK {
+            let body = String::from_utf8_lossy(&body_bytes);
+            panic!("Expected OK, got {}: {}", status, body);
+        }
+
+        // Parse response to verify new state
+        let resp: serde_json::Value = serde_json::from_slice(&body_bytes).unwrap();
+        assert_eq!(resp["data"]["newState"], "planning");
+        assert_eq!(resp["data"]["previousState"], "draft");
+    }
+
+    #[tokio::test]
+    async fn test_invalid_transition() {
+        let state = create_test_state().await;
+        let project_id = create_test_project(&state.pool).await;
+
+        // Create a card in Draft state
+        let card_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO cards (id, project_id, title, task_prompt, state) VALUES (?, ?, 'Test Card', 'Test prompt', 'draft')",
+        )
+        .bind(card_id.to_string())
+        .bind(project_id.to_string())
+        .execute(&state.pool)
+        .await
+        .expect("Failed to create test card");
+
+        let app = Router::new()
+            .route("/cards/:card_id/transition", post(transition_card))
+            .with_state(state);
+
+        // Try an invalid transition (Draft -> Build)
+        let transition_body = serde_json::json!({
+            "trigger": "BuildStarted"
+        });
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/cards/{}/transition", card_id))
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_string(&transition_body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_delete_card() {
+        let state = create_test_state().await;
+        let project_id = create_test_project(&state.pool).await;
+
+        // Create a card
+        let card_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO cards (id, project_id, title, task_prompt, state) VALUES (?, ?, 'Test Card', 'Test prompt', 'draft')",
+        )
+        .bind(card_id.to_string())
+        .bind(project_id.to_string())
+        .execute(&state.pool)
+        .await
+        .expect("Failed to create test card");
+
+        let app = Router::new()
+            .route("/cards/:card_id", delete(delete_card))
+            .with_state(state);
+
+        // Delete the card
+        let response = app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/cards/{}", card_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // Try to delete again - should be not found
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/cards/{}", card_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+}
