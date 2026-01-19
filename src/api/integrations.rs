@@ -1038,3 +1038,233 @@ fn integration_error_to_api(e: IntegrationError) -> (StatusCode, Json<ApiError>)
         ),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+
+    #[test]
+    fn test_integration_error_to_api_not_found() {
+        let error = IntegrationError::NotFound("Resource not found".to_string());
+        let (status, json) = integration_error_to_api(error);
+
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(json.0.error.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_integration_error_to_api_auth_required() {
+        let error = IntegrationError::AuthRequired;
+        let (status, json) = integration_error_to_api(error);
+
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(json.0.error.code, "UNAUTHORIZED");
+    }
+
+    #[test]
+    fn test_integration_error_to_api_rate_limited() {
+        let error = IntegrationError::RateLimited { retry_after: Some(60) };
+        let (status, json) = integration_error_to_api(error);
+
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(json.0.error.code, "RATE_LIMITED");
+        assert!(json.0.error.details.is_some());
+    }
+
+    #[test]
+    fn test_integration_error_to_api_api_error() {
+        let error = IntegrationError::ApiError {
+            status: 500,
+            message: "Internal Server Error".to_string(),
+        };
+        let (status, json) = integration_error_to_api(error);
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(json.0.error.code, "INTEGRATION_ERROR");
+    }
+
+    #[test]
+    fn test_integration_error_to_api_custom_status() {
+        // Test with a custom (but valid) HTTP status code
+        let error = IntegrationError::ApiError {
+            status: 418, // I'm a teapot
+            message: "I'm a teapot".to_string(),
+        };
+        let (status, json) = integration_error_to_api(error);
+
+        assert_eq!(status, StatusCode::IM_A_TEAPOT);
+        assert_eq!(json.0.error.code, "INTEGRATION_ERROR");
+    }
+
+    #[test]
+    fn test_integration_error_to_api_parse_error() {
+        let error = IntegrationError::ParseError("Invalid JSON".to_string());
+        let (status, json) = integration_error_to_api(error);
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(json.0.error.message.contains("Parse error"));
+    }
+
+    #[test]
+    fn test_config_sync_error_to_api_not_configured() {
+        let error = ConfigSyncError::NotConfigured;
+        let (status, json) = config_sync_error_to_api(error);
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json.0.error.code, "NOT_CONFIGURED");
+    }
+
+    #[test]
+    fn test_config_sync_error_to_api_git_error() {
+        let error = ConfigSyncError::GitError("Clone failed".to_string());
+        let (status, json) = config_sync_error_to_api(error);
+
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(json.0.error.message.contains("Git error"));
+    }
+
+    #[test]
+    fn test_config_sync_error_to_api_invalid_url() {
+        let error = ConfigSyncError::InvalidUrl("not-a-url".to_string());
+        let (status, json) = config_sync_error_to_api(error);
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(json.0.error.code, "INVALID_URL");
+    }
+
+    #[test]
+    fn test_github_workflow_run_serialization() {
+        let run = GitHubWorkflowRun {
+            id: 12345,
+            name: "CI".to_string(),
+            status: "completed".to_string(),
+            conclusion: Some("success".to_string()),
+            head_branch: "main".to_string(),
+            html_url: "https://github.com/test/test/actions/runs/12345".to_string(),
+            created_at: "2025-01-15T10:00:00Z".to_string(),
+            updated_at: "2025-01-15T10:05:00Z".to_string(),
+        };
+
+        let json = serde_json::to_value(&run).unwrap();
+
+        // Verify camelCase serialization
+        assert_eq!(json["id"], 12345);
+        assert_eq!(json["headBranch"], "main");
+        assert_eq!(json["htmlUrl"], "https://github.com/test/test/actions/runs/12345");
+    }
+
+    #[test]
+    fn test_argocd_app_summary_serialization() {
+        let summary = ArgoCDAppSummary {
+            name: "my-app".to_string(),
+            namespace: "argocd".to_string(),
+            project: "default".to_string(),
+            sync_status: "Synced".to_string(),
+            health_status: "Healthy".to_string(),
+            repo_url: "https://github.com/test/repo".to_string(),
+            path: "k8s/".to_string(),
+            target_revision: "HEAD".to_string(),
+        };
+
+        let json = serde_json::to_value(&summary).unwrap();
+
+        // Verify camelCase serialization
+        assert_eq!(json["syncStatus"], "Synced");
+        assert_eq!(json["healthStatus"], "Healthy");
+        assert_eq!(json["repoUrl"], "https://github.com/test/repo");
+        assert_eq!(json["targetRevision"], "HEAD");
+    }
+
+    #[test]
+    fn test_k8s_deployment_status_serialization() {
+        let status = K8sDeploymentStatus {
+            name: "my-deployment".to_string(),
+            namespace: "default".to_string(),
+            replicas: 3,
+            ready_replicas: 3,
+            updated_replicas: 3,
+            available: true,
+        };
+
+        let json = serde_json::to_value(&status).unwrap();
+
+        // Verify camelCase serialization
+        assert_eq!(json["readyReplicas"], 3);
+        assert_eq!(json["updatedReplicas"], 3);
+    }
+
+    #[test]
+    fn test_docker_tag_serialization() {
+        let tag = DockerTag {
+            name: "v1.2.3".to_string(),
+            digest: "sha256:abc123".to_string(),
+            last_updated: Some("2025-01-15T10:00:00Z".to_string()),
+            full_size: 1024000,
+            platforms: vec![
+                DockerPlatform {
+                    architecture: "amd64".to_string(),
+                    os: "linux".to_string(),
+                    size: 512000,
+                },
+            ],
+        };
+
+        let json = serde_json::to_value(&tag).unwrap();
+
+        // Verify camelCase serialization
+        assert_eq!(json["lastUpdated"], "2025-01-15T10:00:00Z");
+        assert_eq!(json["fullSize"], 1024000);
+        assert_eq!(json["platforms"][0]["architecture"], "amd64");
+    }
+
+    #[test]
+    fn test_k8s_deployment_errors_serialization() {
+        let errors = K8sDeploymentErrors {
+            deployment_name: "my-app".to_string(),
+            namespace: "default".to_string(),
+            container_issues: vec![
+                K8sContainerIssue {
+                    pod_name: "my-app-abc123".to_string(),
+                    container_name: "main".to_string(),
+                    reason: "CrashLoopBackOff".to_string(),
+                    message: Some("Container crashed".to_string()),
+                    logs: Some("Error: connection refused".to_string()),
+                },
+            ],
+            warning_events: vec![
+                K8sEvent {
+                    reason: "FailedScheduling".to_string(),
+                    message: "Insufficient memory".to_string(),
+                    event_type: "Warning".to_string(),
+                    count: 3,
+                },
+            ],
+        };
+
+        let json = serde_json::to_value(&errors).unwrap();
+
+        // Verify camelCase serialization
+        assert_eq!(json["deploymentName"], "my-app");
+        assert_eq!(json["containerIssues"][0]["podName"], "my-app-abc123");
+        assert_eq!(json["containerIssues"][0]["containerName"], "main");
+        assert_eq!(json["warningEvents"][0]["eventType"], "Warning");
+    }
+
+    #[test]
+    fn test_config_sync_status_response_serialization() {
+        let status = ConfigSyncStatusResponse {
+            configured: true,
+            repository_url: Some("https://github.com/test/config".to_string()),
+            branch: "main".to_string(),
+            cached: true,
+            last_commit: Some("abc123".to_string()),
+        };
+
+        let json = serde_json::to_value(&status).unwrap();
+
+        // Verify camelCase serialization
+        assert_eq!(json["repositoryUrl"], "https://github.com/test/config");
+        assert_eq!(json["lastCommit"], "abc123");
+    }
+}
