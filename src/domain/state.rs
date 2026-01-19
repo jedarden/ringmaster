@@ -290,11 +290,90 @@ mod tests {
     }
 
     #[test]
+    fn test_state_from_str_all_states() {
+        assert_eq!(CardState::from_str("draft").unwrap(), CardState::Draft);
+        assert_eq!(CardState::from_str("planning").unwrap(), CardState::Planning);
+        assert_eq!(CardState::from_str("coding").unwrap(), CardState::Coding);
+        assert_eq!(CardState::from_str("code_review").unwrap(), CardState::CodeReview);
+        assert_eq!(CardState::from_str("testing").unwrap(), CardState::Testing);
+        assert_eq!(CardState::from_str("build_queue").unwrap(), CardState::BuildQueue);
+        assert_eq!(CardState::from_str("building").unwrap(), CardState::Building);
+        assert_eq!(CardState::from_str("build_success").unwrap(), CardState::BuildSuccess);
+        assert_eq!(CardState::from_str("build_failed").unwrap(), CardState::BuildFailed);
+        assert_eq!(CardState::from_str("deploy_queue").unwrap(), CardState::DeployQueue);
+        assert_eq!(CardState::from_str("deploying").unwrap(), CardState::Deploying);
+        assert_eq!(CardState::from_str("verifying").unwrap(), CardState::Verifying);
+        assert_eq!(CardState::from_str("completed").unwrap(), CardState::Completed);
+        assert_eq!(CardState::from_str("error_fixing").unwrap(), CardState::ErrorFixing);
+        assert_eq!(CardState::from_str("archived").unwrap(), CardState::Archived);
+        assert_eq!(CardState::from_str("failed").unwrap(), CardState::Failed);
+    }
+
+    #[test]
+    fn test_state_as_str() {
+        assert_eq!(CardState::Draft.as_str(), "draft");
+        assert_eq!(CardState::Planning.as_str(), "planning");
+        assert_eq!(CardState::Coding.as_str(), "coding");
+        assert_eq!(CardState::CodeReview.as_str(), "code_review");
+        assert_eq!(CardState::Testing.as_str(), "testing");
+        assert_eq!(CardState::BuildQueue.as_str(), "build_queue");
+        assert_eq!(CardState::Building.as_str(), "building");
+        assert_eq!(CardState::BuildSuccess.as_str(), "build_success");
+        assert_eq!(CardState::BuildFailed.as_str(), "build_failed");
+        assert_eq!(CardState::DeployQueue.as_str(), "deploy_queue");
+        assert_eq!(CardState::Deploying.as_str(), "deploying");
+        assert_eq!(CardState::Verifying.as_str(), "verifying");
+        assert_eq!(CardState::Completed.as_str(), "completed");
+        assert_eq!(CardState::ErrorFixing.as_str(), "error_fixing");
+        assert_eq!(CardState::Archived.as_str(), "archived");
+        assert_eq!(CardState::Failed.as_str(), "failed");
+    }
+
+    #[test]
+    fn test_state_display() {
+        assert_eq!(CardState::Draft.to_string(), "draft");
+        assert_eq!(CardState::CodeReview.to_string(), "code_review");
+        assert_eq!(CardState::BuildSuccess.to_string(), "build_success");
+    }
+
+    #[test]
     fn test_state_phases() {
         assert_eq!(CardState::Draft.phase(), Phase::Development);
         assert_eq!(CardState::Building.phase(), Phase::Build);
         assert_eq!(CardState::Deploying.phase(), Phase::Deploy);
         assert_eq!(CardState::Completed.phase(), Phase::Terminal);
+    }
+
+    #[test]
+    fn test_state_phases_all_development() {
+        assert_eq!(CardState::Draft.phase(), Phase::Development);
+        assert_eq!(CardState::Planning.phase(), Phase::Development);
+        assert_eq!(CardState::Coding.phase(), Phase::Development);
+        assert_eq!(CardState::CodeReview.phase(), Phase::Development);
+        assert_eq!(CardState::Testing.phase(), Phase::Development);
+    }
+
+    #[test]
+    fn test_state_phases_all_build() {
+        assert_eq!(CardState::BuildQueue.phase(), Phase::Build);
+        assert_eq!(CardState::Building.phase(), Phase::Build);
+        assert_eq!(CardState::BuildSuccess.phase(), Phase::Build);
+        assert_eq!(CardState::BuildFailed.phase(), Phase::Build);
+    }
+
+    #[test]
+    fn test_state_phases_all_deploy() {
+        assert_eq!(CardState::DeployQueue.phase(), Phase::Deploy);
+        assert_eq!(CardState::Deploying.phase(), Phase::Deploy);
+        assert_eq!(CardState::Verifying.phase(), Phase::Deploy);
+    }
+
+    #[test]
+    fn test_state_phases_all_terminal() {
+        assert_eq!(CardState::Completed.phase(), Phase::Terminal);
+        assert_eq!(CardState::ErrorFixing.phase(), Phase::Terminal);
+        assert_eq!(CardState::Archived.phase(), Phase::Terminal);
+        assert_eq!(CardState::Failed.phase(), Phase::Terminal);
     }
 
     #[test]
@@ -311,5 +390,104 @@ mod tests {
         assert!(CardState::Failed.is_terminal());
         assert!(CardState::Archived.is_terminal());
         assert!(!CardState::Coding.is_terminal());
+    }
+
+    #[test]
+    fn test_states_in_phase() {
+        let dev_states = CardState::states_in_phase(Phase::Development);
+        assert_eq!(dev_states.len(), 5);
+        assert!(dev_states.contains(&CardState::Draft));
+        assert!(dev_states.contains(&CardState::Planning));
+        assert!(dev_states.contains(&CardState::Coding));
+        assert!(dev_states.contains(&CardState::CodeReview));
+        assert!(dev_states.contains(&CardState::Testing));
+
+        let build_states = CardState::states_in_phase(Phase::Build);
+        assert_eq!(build_states.len(), 4);
+        assert!(build_states.contains(&CardState::BuildQueue));
+        assert!(build_states.contains(&CardState::Building));
+        assert!(build_states.contains(&CardState::BuildSuccess));
+        assert!(build_states.contains(&CardState::BuildFailed));
+
+        let deploy_states = CardState::states_in_phase(Phase::Deploy);
+        assert_eq!(deploy_states.len(), 3);
+        assert!(deploy_states.contains(&CardState::DeployQueue));
+        assert!(deploy_states.contains(&CardState::Deploying));
+        assert!(deploy_states.contains(&CardState::Verifying));
+
+        let terminal_states = CardState::states_in_phase(Phase::Terminal);
+        assert_eq!(terminal_states.len(), 4);
+        assert!(terminal_states.contains(&CardState::Completed));
+        assert!(terminal_states.contains(&CardState::ErrorFixing));
+        assert!(terminal_states.contains(&CardState::Archived));
+        assert!(terminal_states.contains(&CardState::Failed));
+    }
+
+    #[test]
+    fn test_phase_display() {
+        assert_eq!(Phase::Development.to_string(), "development");
+        assert_eq!(Phase::Build.to_string(), "build");
+        assert_eq!(Phase::Deploy.to_string(), "deploy");
+        assert_eq!(Phase::Terminal.to_string(), "terminal");
+    }
+
+    #[test]
+    fn test_trigger_display() {
+        assert_eq!(Trigger::StartPlanning.to_string(), "StartPlanning");
+        assert_eq!(Trigger::ApprovePlan.to_string(), "ApprovePlan");
+        assert_eq!(Trigger::LoopComplete.to_string(), "LoopComplete");
+        assert_eq!(Trigger::BuildSucceeded.to_string(), "BuildSucceeded");
+        assert_eq!(Trigger::DeploySynced.to_string(), "DeploySynced");
+        assert_eq!(Trigger::MaxRetriesExceeded.to_string(), "MaxRetriesExceeded");
+    }
+
+    #[test]
+    fn test_trigger_from_str() {
+        assert_eq!(Trigger::from_str("StartPlanning").unwrap(), Trigger::StartPlanning);
+        assert_eq!(Trigger::from_str("ApprovePlan").unwrap(), Trigger::ApprovePlan);
+        assert_eq!(Trigger::from_str("RejectPlan").unwrap(), Trigger::RejectPlan);
+        assert_eq!(Trigger::from_str("ApproveReview").unwrap(), Trigger::ApproveReview);
+        assert_eq!(Trigger::from_str("RejectReview").unwrap(), Trigger::RejectReview);
+        assert_eq!(Trigger::from_str("Archive").unwrap(), Trigger::Archive);
+        assert_eq!(Trigger::from_str("LoopComplete").unwrap(), Trigger::LoopComplete);
+        assert_eq!(Trigger::from_str("LoopFailed").unwrap(), Trigger::LoopFailed);
+        assert_eq!(Trigger::from_str("TestsPassed").unwrap(), Trigger::TestsPassed);
+        assert_eq!(Trigger::from_str("TestsFailed").unwrap(), Trigger::TestsFailed);
+        assert_eq!(Trigger::from_str("BuildStarted").unwrap(), Trigger::BuildStarted);
+        assert_eq!(Trigger::from_str("BuildSucceeded").unwrap(), Trigger::BuildSucceeded);
+        assert_eq!(Trigger::from_str("BuildFailed").unwrap(), Trigger::BuildFailed);
+        assert_eq!(Trigger::from_str("DeployStarted").unwrap(), Trigger::DeployStarted);
+        assert_eq!(Trigger::from_str("DeploySynced").unwrap(), Trigger::DeploySynced);
+        assert_eq!(Trigger::from_str("DeployFailed").unwrap(), Trigger::DeployFailed);
+        assert_eq!(Trigger::from_str("VerifyPassed").unwrap(), Trigger::VerifyPassed);
+        assert_eq!(Trigger::from_str("VerifyFailed").unwrap(), Trigger::VerifyFailed);
+        assert_eq!(Trigger::from_str("ErrorDetected").unwrap(), Trigger::ErrorDetected);
+        assert_eq!(Trigger::from_str("FixApplied").unwrap(), Trigger::FixApplied);
+        assert_eq!(Trigger::from_str("MaxRetriesExceeded").unwrap(), Trigger::MaxRetriesExceeded);
+    }
+
+    #[test]
+    fn test_trigger_from_str_invalid() {
+        let result = Trigger::from_str("InvalidTrigger");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown trigger"));
+    }
+
+    #[test]
+    fn test_card_state_serialization() {
+        let json = serde_json::to_string(&CardState::CodeReview).unwrap();
+        assert_eq!(json, "\"code_review\"");
+
+        let deserialized: CardState = serde_json::from_str("\"build_queue\"").unwrap();
+        assert_eq!(deserialized, CardState::BuildQueue);
+    }
+
+    #[test]
+    fn test_trigger_serialization() {
+        let json = serde_json::to_string(&Trigger::StartPlanning).unwrap();
+        assert_eq!(json, "\"StartPlanning\"");
+
+        let deserialized: Trigger = serde_json::from_str("\"BuildSucceeded\"").unwrap();
+        assert_eq!(deserialized, Trigger::BuildSucceeded);
     }
 }
