@@ -5,6 +5,7 @@
 //! - `LoopExecutor`: Executes coding iterations with Claude API (deprecated, use PlatformExecutor)
 //! - `PlatformExecutor`: Executes coding sessions using CLI platforms (Claude Code, Aider, etc.)
 //! - `LoopConfig`: Configuration for loop behavior
+//! - `LoopCheckpoint`: Checkpoint persistence for session resumption
 //!
 //! ## Migration to PlatformExecutor
 //!
@@ -21,6 +22,7 @@
 //! executor.run_loop(card_id, project, config, Some("my-subscription")).await?;
 //! ```
 
+pub mod checkpoint;
 pub mod executor;
 pub mod platform_executor;
 
@@ -30,6 +32,9 @@ pub mod platform_executor;
     note = "Use PlatformExecutor instead for CLI-based execution with subscription billing"
 )]
 pub use executor::{ExecutorError, IterationResult, LoopExecutor};
+
+// Re-export checkpoint types
+pub use checkpoint::LoopCheckpoint;
 
 // Re-export the new platform-based executor
 pub use platform_executor::{PlatformExecutor, PlatformExecutorError};

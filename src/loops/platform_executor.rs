@@ -26,6 +26,10 @@ use crate::platforms::{
 };
 use crate::prompt::PromptPipeline;
 
+use super::checkpoint::{
+    delete_checkpoints, get_latest_checkpoint, has_resumable_checkpoint,
+    save_checkpoint, LoopCheckpoint,
+};
 use super::{LoopConfig, LoopManager, LoopState, LoopStatus, StopReason};
 
 /// Platform-based loop executor that uses CLI tools instead of direct API calls
@@ -408,6 +412,296 @@ impl PlatformExecutor {
             false
         }
     }
+
+    /// Check if a card has a resumable checkpoint
+    pub async fn has_checkpoint(&self, card_id: &Uuid) -> Result<bool, PlatformExecutorError> {
+        has_resumable_checkpoint(&self.pool, card_id)
+            .await
+            .map_err(PlatformExecutorError::from)
+    }
+
+    /// Get the latest checkpoint for a card
+    pub async fn get_checkpoint(
+        &self,
+        card_id: &Uuid,
+    ) -> Result<Option<LoopCheckpoint>, PlatformExecutorError> {
+        get_latest_checkpoint(&self.pool, card_id)
+            .await
+            .map_err(PlatformExecutorError::from)
+    }
+
+    /// Clear all checkpoints for a card (call after successful completion)
+    pub async fn clear_checkpoints(&self, card_id: &Uuid) -> Result<(), PlatformExecutorError> {
+        delete_checkpoints(&self.pool, card_id)
+            .await
+            .map_err(PlatformExecutorError::from)
+    }
+
+    /// Resume a loop from a checkpoint
+    pub async fn resume_from_checkpoint(
+        &self,
+        card_id: Uuid,
+        project: &Project,
+    ) -> Result<LoopState, PlatformExecutorError> {
+        // Get the checkpoint
+        let checkpoint = get_latest_checkpoint(&self.pool, &card_id)
+            .await?
+            .ok_or_else(|| PlatformExecutorError::CheckpointNotFound(card_id))?;
+
+        // Restore the loop state
+        let restored_state = checkpoint
+            .restore_state()
+            .ok_or_else(|| PlatformExecutorError::CheckpointCorrupted(card_id))?;
+
+        tracing::info!(
+            "Resuming card {} from checkpoint at iteration {}",
+            card_id,
+            checkpoint.iteration
+        );
+
+        // Select subscription (use the one from checkpoint or default)
+        let subscription = self
+            .select_subscription(checkpoint.subscription.as_deref())
+            .ok_or_else(|| PlatformExecutorError::NoSubscriptionAvailable)?;
+
+        // Get the platform
+        let registry = self.platform_registry.read().await;
+        let platform = registry.get(&subscription.platform).ok_or_else(|| {
+            PlatformExecutorError::PlatformNotFound(subscription.platform.clone())
+        })?;
+
+        // Get card and validate worktree
+        let card = get_card(&self.pool, &card_id.to_string())
+            .await?
+            .ok_or_else(|| PlatformExecutorError::CardNotFound(card_id))?;
+
+        let worktree_path = card
+            .worktree_path
+            .as_ref()
+            .ok_or_else(|| PlatformExecutorError::NoWorktreePath(card_id))?;
+
+        // Restore the loop in manager with the checkpointed state
+        {
+            let mut manager = self.loop_manager.write().await;
+            // Start with the restored config, but set the iteration to the checkpoint
+            let config = restored_state.config.clone();
+            manager.start_loop(card_id, config)?;
+
+            // Update the state to match checkpoint
+            if let Some(state) = manager.get_loop_state_mut(&card_id) {
+                state.iteration = restored_state.iteration;
+                state.total_cost_usd = restored_state.total_cost_usd;
+                state.total_tokens = restored_state.total_tokens;
+            }
+        }
+
+        // Emit loop resumed event
+        self.emit_loop_event(&card_id, "loop_resumed", None).await;
+
+        // Build resume prompt with context from checkpoint
+        let assembled = self.prompt_pipeline.assemble(&card, project);
+        let resume_context = if let Some(summary) = &checkpoint.last_response_summary {
+            format!(
+                "You were previously working on this task. Here's a summary of your progress:\n{}\n\n\
+                 Please continue from where you left off.\n\n---\n\n",
+                summary
+            )
+        } else {
+            "Please continue from where you left off.\n\n---\n\n".to_string()
+        };
+
+        let full_prompt = format!(
+            "{}\n\n---\n\n{}{}",
+            assembled.system_prompt, resume_context, assembled.user_prompt
+        );
+
+        // Create session config
+        let mut session_config = SessionConfig::default();
+        session_config.model = subscription.model.clone();
+        session_config.max_turns = Some(
+            restored_state
+                .config
+                .max_iterations
+                .saturating_sub(restored_state.iteration as u32),
+        );
+        session_config.timeout_seconds = Some(restored_state.config.max_runtime_seconds);
+        session_config.completion_signal = restored_state.config.completion_signal.clone();
+
+        if let Some(config_dir) = &subscription.config_dir {
+            session_config.env_vars.insert(
+                "CLAUDE_CONFIG_DIR".to_string(),
+                config_dir.to_string_lossy().to_string(),
+            );
+        }
+
+        // Start the session
+        let handle = platform
+            .start_session(Path::new(worktree_path), &full_prompt, &session_config)
+            .await?;
+
+        // Monitor session until completion
+        let result = self
+            .monitor_session_with_checkpoints(
+                &card_id,
+                &handle,
+                platform,
+                &restored_state.config,
+                &subscription.name,
+            )
+            .await;
+
+        // Get final state
+        let _final_state = {
+            let manager = self.loop_manager.read().await;
+            manager.get_loop_state(&card_id).cloned()
+        };
+
+        // Clean up
+        {
+            let mut manager = self.loop_manager.write().await;
+            manager.remove_loop(&card_id);
+        }
+
+        match result {
+            Ok(session_result) => {
+                let stop_reason = match session_result.end_reason {
+                    SessionEndReason::Completed => StopReason::CompletionSignal,
+                    SessionEndReason::MaxTurns => StopReason::MaxIterations,
+                    SessionEndReason::Timeout => StopReason::TimeLimit,
+                    SessionEndReason::UserStopped => StopReason::UserStopped,
+                    SessionEndReason::Error => StopReason::Error("Session error".to_string()),
+                    SessionEndReason::ProcessExited => {
+                        StopReason::Error("Process exited unexpectedly".to_string())
+                    }
+                };
+
+                // Clear checkpoints on successful completion
+                if matches!(stop_reason, StopReason::CompletionSignal) {
+                    let _ = self.clear_checkpoints(&card_id).await;
+                }
+
+                self.complete_loop(&card_id, stop_reason).await
+            }
+            Err(e) => self
+                .complete_loop(&card_id, StopReason::Error(e.to_string()))
+                .await,
+        }
+    }
+
+    /// Monitor a running session with checkpoint support
+    async fn monitor_session_with_checkpoints(
+        &self,
+        card_id: &Uuid,
+        handle: &SessionHandle,
+        platform: &dyn CodingPlatform,
+        config: &LoopConfig,
+        subscription_name: &str,
+    ) -> Result<SessionResult, PlatformExecutorError> {
+        let start_time = std::time::Instant::now();
+        let timeout = Duration::from_secs(config.max_runtime_seconds);
+        let mut last_checkpoint_iteration = 0i32;
+
+        loop {
+            // Check timeout
+            if start_time.elapsed() > timeout {
+                tracing::warn!("Session timeout for card {}", card_id);
+                // Save checkpoint before stopping
+                self.save_checkpoint_if_needed(card_id, subscription_name, config)
+                    .await;
+                return platform
+                    .stop_session(handle)
+                    .await
+                    .map_err(PlatformExecutorError::from);
+            }
+
+            // Check if loop was stopped externally
+            let (should_stop, should_checkpoint, current_iteration) = {
+                let manager = self.loop_manager.read().await;
+                let state = manager.get_loop_state(card_id);
+                let stopped = state.map(|s| s.status == LoopStatus::Stopped).unwrap_or(true);
+                let checkpoint = state.map(|s| s.should_checkpoint()).unwrap_or(false);
+                let iteration = state.map(|s| s.iteration).unwrap_or(0);
+                (stopped, checkpoint, iteration)
+            };
+
+            if should_stop {
+                tracing::info!("Loop stopped externally for card {}", card_id);
+                // Save checkpoint before stopping
+                self.save_checkpoint_if_needed(card_id, subscription_name, config)
+                    .await;
+                return platform
+                    .stop_session(handle)
+                    .await
+                    .map_err(PlatformExecutorError::from);
+            }
+
+            // Check if session is still running
+            if !platform.is_session_running(handle).await {
+                // Session ended, get result
+                return platform
+                    .stop_session(handle)
+                    .await
+                    .map_err(PlatformExecutorError::from);
+            }
+
+            // Get session status and update loop state
+            if let Ok(status) = platform.get_session_status(handle).await {
+                let mut manager = self.loop_manager.write().await;
+                if let Some(state) = manager.get_loop_state_mut(card_id) {
+                    state.iteration = status.iteration;
+                    state.total_tokens = status.tokens_used.unwrap_or(0);
+                    state.total_cost_usd = status.cost_usd.unwrap_or(0.0);
+                    state.elapsed_seconds = status.runtime_ms / 1000;
+                }
+            }
+
+            // Save checkpoint if needed (at checkpoint interval)
+            if should_checkpoint && current_iteration > last_checkpoint_iteration {
+                self.save_checkpoint_if_needed(card_id, subscription_name, config)
+                    .await;
+                last_checkpoint_iteration = current_iteration;
+            }
+
+            // Emit progress event
+            self.emit_progress_event(card_id).await;
+
+            // Wait before next check
+            sleep(Duration::from_secs(5)).await;
+        }
+    }
+
+    /// Save a checkpoint for the current loop state
+    async fn save_checkpoint_if_needed(
+        &self,
+        card_id: &Uuid,
+        subscription_name: &str,
+        _config: &LoopConfig,
+    ) {
+        let state = {
+            let manager = self.loop_manager.read().await;
+            manager.get_loop_state(card_id).cloned()
+        };
+
+        if let Some(state) = state {
+            let checkpoint = LoopCheckpoint::new(
+                *card_id,
+                state.iteration,
+                "claude-code", // TODO: Get actual platform name
+                Some(subscription_name),
+                &state,
+            );
+
+            if let Err(e) = save_checkpoint(&self.pool, &checkpoint).await {
+                tracing::warn!("Failed to save checkpoint for card {}: {}", card_id, e);
+            } else {
+                tracing::debug!(
+                    "Saved checkpoint for card {} at iteration {}",
+                    card_id,
+                    state.iteration
+                );
+            }
+        }
+    }
 }
 
 /// Errors for platform executor
@@ -427,6 +721,12 @@ pub enum PlatformExecutorError {
 
     #[error("Loop not found for card: {0}")]
     LoopNotFound(Uuid),
+
+    #[error("Checkpoint not found for card: {0}")]
+    CheckpointNotFound(Uuid),
+
+    #[error("Checkpoint corrupted for card: {0}")]
+    CheckpointCorrupted(Uuid),
 
     #[error("Platform error: {0}")]
     PlatformError(#[from] PlatformError),
