@@ -196,8 +196,48 @@ Add:
 - JSON stream parser
 - Process lifecycle management
 
+## Auto-Installation
+
+Ringmaster automatically installs Claude Code CLI on first run if not found:
+
+```rust
+// src/platforms/installer.rs
+pub async fn ensure_claude_available() -> Result<PathBuf, String> {
+    if let Some(path) = find_claude_binary().await {
+        return Ok(path);
+    }
+    // Run: curl -fsSL https://claude.ai/install.sh | bash
+    install_claude_code().await
+}
+```
+
+The installer:
+1. Checks common locations (`~/.claude/local/claude`, PATH, homebrew)
+2. If not found, runs the official native installer
+3. Returns the binary path for `ClaudeCodePlatform` to use
+
+### Manual Installation
+
+```bash
+# Native installer (recommended)
+curl -fsSL https://claude.ai/install.sh | bash
+
+# Verify installation
+claude --version
+```
+
+### Doctor Command
+
+Check or install dependencies:
+
+```bash
+ringmaster doctor             # Check if Claude Code CLI is installed
+ringmaster doctor --install   # Install if missing
+```
+
 ## References
 
 - Claude Code CLI: `claude --help`
+- Claude Code Setup: https://code.claude.com/docs/en/setup
 - Aider: https://aider.chat
 - Marathon coding skill: `~/.claude/skills/marathon-coding/`

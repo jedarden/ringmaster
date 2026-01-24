@@ -4,6 +4,27 @@
 
 The Loop Manager implements the "Ralph-Wiggum" autonomous coding pattern: an iterative loop that repeatedly executes LLM prompts, observes results, and continues until a completion condition is met. Named after the Simpsons character known for persistence, this pattern enables AI agents to self-correct and iterate toward task completion.
 
+### Platform Execution
+
+Coding loops run via **CLI platform execution** (not direct API calls). This allows users to leverage their Claude Max/Pro subscriptions for unlimited usage instead of pay-per-token API billing.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    PLATFORM EXECUTOR                              │
+├─────────────────────────────────────────────────────────────────┤
+│   PlatformExecutor                                               │
+│        │                                                         │
+│        └── ClaudeCodePlatform                                    │
+│              ├── Auto-installs Claude Code CLI if missing        │
+│              ├── Spawns: claude --dangerously-skip-permissions   │
+│              ├── Streams: --output-format stream-json            │
+│              ├── Auth: ~/.claude/ (Max/Pro subscription)         │
+│              └── Detects: <ringmaster>COMPLETE</ringmaster>      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+See [ADR-003](./adr/003-multi-platform-support.md) for platform abstraction details.
+
 ### Heuristic Loop Control
 
 **All loop control decisions are heuristic-based, not LLM-decided.**

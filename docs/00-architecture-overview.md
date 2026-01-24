@@ -359,6 +359,23 @@ Connects to external systems for CI/CD monitoring. See [04-integrations.md](./04
 
 ## Deployment Model
 
+Ringmaster is designed to run inside a user's codespace (GitHub Codespaces, devcontainers, etc.). The codespace provides the security boundary - no built-in authentication is required.
+
+### Prerequisites
+
+- **Claude Code CLI**: Auto-installed on startup if not found. Manual install: `curl -fsSL https://claude.ai/install.sh | bash`
+- **Git**: Required for worktree management
+
+### CLI Commands
+
+```bash
+ringmaster                    # Start server (default: localhost:8080)
+ringmaster --port 3000        # Custom port
+ringmaster config             # Show configuration
+ringmaster doctor             # Check dependencies
+ringmaster doctor --install   # Install Claude Code CLI if missing
+```
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                   CODER INSTANCE DEPLOYMENT                      │

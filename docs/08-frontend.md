@@ -89,6 +89,14 @@ App
 │   │   │                   └── QuickActions
 │   │   └── CardDrawer (Sheet)
 │   │       └── CardDetailPanel
+│   │           ├── EditMode (inline editing)
+│   │           │   ├── TitleInput
+│   │           │   ├── DescriptionInput
+│   │           │   ├── TaskPromptTextarea
+│   │           │   ├── LabelsInput
+│   │           │   └── PrioritySelect
+│   │           ├── ViewMode (read-only display)
+│   │           └── LoopControls
 │   │
 │   ├── CardDetailPage
 │   │   ├── CardHeader
