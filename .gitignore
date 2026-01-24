@@ -23,3 +23,9 @@ Cargo.lock
 .env
 .env.local
 core
+
+# Root-level node artifacts
+node_modules/
+package.json
+package-lock.json
+test-views.mjs
