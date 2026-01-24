@@ -613,7 +613,7 @@ impl PlatformExecutor {
             if start_time.elapsed() > timeout {
                 tracing::warn!("Session timeout for card {}", card_id);
                 // Save checkpoint before stopping
-                self.save_checkpoint_if_needed(card_id, subscription_name, config)
+                self.save_checkpoint_if_needed(card_id, platform.name(), subscription_name, config)
                     .await;
                 return platform
                     .stop_session(handle)
@@ -634,7 +634,7 @@ impl PlatformExecutor {
             if should_stop {
                 tracing::info!("Loop stopped externally for card {}", card_id);
                 // Save checkpoint before stopping
-                self.save_checkpoint_if_needed(card_id, subscription_name, config)
+                self.save_checkpoint_if_needed(card_id, platform.name(), subscription_name, config)
                     .await;
                 return platform
                     .stop_session(handle)
@@ -664,7 +664,7 @@ impl PlatformExecutor {
 
             // Save checkpoint if needed (at checkpoint interval)
             if should_checkpoint && current_iteration > last_checkpoint_iteration {
-                self.save_checkpoint_if_needed(card_id, subscription_name, config)
+                self.save_checkpoint_if_needed(card_id, platform.name(), subscription_name, config)
                     .await;
                 last_checkpoint_iteration = current_iteration;
             }
@@ -681,6 +681,7 @@ impl PlatformExecutor {
     async fn save_checkpoint_if_needed(
         &self,
         card_id: &Uuid,
+        platform_name: &str,
         subscription_name: &str,
         _config: &LoopConfig,
     ) {
@@ -693,7 +694,7 @@ impl PlatformExecutor {
             let checkpoint = LoopCheckpoint::new(
                 *card_id,
                 state.iteration,
-                "claude-code", // TODO: Get actual platform name
+                platform_name,
                 Some(subscription_name),
                 &state,
             );
