@@ -2,38 +2,57 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useCardStore } from './cardStore'
 import type { Card, CardState } from '../types'
 
+// Helper to create mock card data with all required fields
+function createMockCard(overrides: Partial<Card> & { id: string; title: string }): Card {
+  return {
+    projectId: 'project-1',
+    description: '',
+    taskPrompt: 'Test task prompt',
+    state: 'draft',
+    loopIteration: 0,
+    errorCount: 0,
+    totalCostUsd: 0,
+    totalTokens: 0,
+    labels: [],
+    priority: 0,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
 // Mock card data for testing
 const mockCards: Card[] = [
-  {
+  createMockCard({
     id: '1',
     title: 'Test Card 1',
     description: 'Test description 1',
-    state: 'DRAFT',
+    state: 'draft',
     labels: ['frontend'],
     projectId: 'project-1',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
-  },
-  {
+  }),
+  createMockCard({
     id: '2',
     title: 'Test Card 2',
     description: 'Test description 2',
-    state: 'IN_PROGRESS',
+    state: 'planning',
     labels: ['backend', 'api'],
     projectId: 'project-1',
     createdAt: '2024-01-02T00:00:00Z',
     updatedAt: '2024-01-02T00:00:00Z',
-  },
-  {
+  }),
+  createMockCard({
     id: '3',
     title: 'Another Card',
     description: 'Different description',
-    state: 'DRAFT',
+    state: 'draft',
     labels: ['testing'],
     projectId: 'project-2',
     createdAt: '2024-01-03T00:00:00Z',
     updatedAt: '2024-01-03T00:00:00Z',
-  },
+  }),
 ]
 
 describe('cardStore', () => {
@@ -64,16 +83,16 @@ describe('cardStore', () => {
 
     it('should add a new card', () => {
       const store = useCardStore.getState()
-      const newCard: Card = {
+      const newCard = createMockCard({
         id: '4',
         title: 'New Card',
         description: 'New description',
-        state: 'DRAFT',
+        state: 'draft',
         labels: [],
         projectId: 'project-1',
         createdAt: '2024-01-04T00:00:00Z',
         updatedAt: '2024-01-04T00:00:00Z',
-      }
+      })
 
       store.addCard(newCard)
 
@@ -138,21 +157,23 @@ describe('cardStore', () => {
     it('should get cards by state', () => {
       const store = useCardStore.getState()
 
-      const draftCards = store.getCardsByState('DRAFT')
+      const draftCards = store.getCardsByState('draft')
       expect(draftCards).toHaveLength(2)
       expect(draftCards[0].id).toBe('1')
       expect(draftCards[1].id).toBe('3')
 
-      const inProgressCards = store.getCardsByState('IN_PROGRESS')
-      expect(inProgressCards).toHaveLength(1)
-      expect(inProgressCards[0].id).toBe('2')
+      const planningCards = store.getCardsByState('planning')
+      expect(planningCards).toHaveLength(1)
+      expect(planningCards[0].id).toBe('2')
     })
 
     it('should filter cards by project when getting cards by state', () => {
       const store = useCardStore.getState()
       store.setFilters({ projectId: 'project-1' })
 
-      const draftCards = store.getCardsByState('DRAFT')
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const draftCards = currentState.getCardsByState('draft')
       expect(draftCards).toHaveLength(1)
       expect(draftCards[0].id).toBe('1')
     })
@@ -166,9 +187,11 @@ describe('cardStore', () => {
 
     it('should filter by multiple states', () => {
       const store = useCardStore.getState()
-      store.setFilters({ states: ['DRAFT', 'IN_PROGRESS'] })
+      store.setFilters({ states: ['draft', 'planning'] })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(3)
     })
 
@@ -176,7 +199,9 @@ describe('cardStore', () => {
       const store = useCardStore.getState()
       store.setFilters({ projectId: 'project-1' })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(2)
       expect(filtered.map(c => c.id).sort()).toEqual(['1', '2'])
     })
@@ -185,7 +210,9 @@ describe('cardStore', () => {
       const store = useCardStore.getState()
       store.setFilters({ labels: ['backend'] })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(1)
       expect(filtered[0].id).toBe('2')
     })
@@ -194,7 +221,9 @@ describe('cardStore', () => {
       const store = useCardStore.getState()
       store.setFilters({ search: 'Another' })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(1)
       expect(filtered[0].id).toBe('3')
     })
@@ -203,7 +232,9 @@ describe('cardStore', () => {
       const store = useCardStore.getState()
       store.setFilters({ search: 'Different' })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(1)
       expect(filtered[0].id).toBe('3')
     })
@@ -212,11 +243,13 @@ describe('cardStore', () => {
       const store = useCardStore.getState()
       store.setFilters({
         projectId: 'project-1',
-        states: ['DRAFT'],
+        states: ['draft'],
         labels: ['frontend'],
       })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(1)
       expect(filtered[0].id).toBe('1')
     })
@@ -228,7 +261,9 @@ describe('cardStore', () => {
         labels: ['nonexistent'],
       })
 
-      const filtered = store.getFilteredCards()
+      // Get fresh state after filter mutation
+      const currentState = useCardStore.getState()
+      const filtered = currentState.getFilteredCards()
       expect(filtered).toHaveLength(0)
     })
   })

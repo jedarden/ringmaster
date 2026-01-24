@@ -1,37 +1,63 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useLoopStore } from './loopStore'
-import type { LoopState, LoopStatus } from '../types'
+import type { LoopState, LoopStatus, LoopConfig } from '../types'
+
+// Default config for mock loop states
+const defaultConfig: LoopConfig = {
+  maxIterations: 100,
+  maxRuntimeSeconds: 3600,
+  maxCostUsd: 10.00,
+  checkpointInterval: 10,
+  cooldownSeconds: 5,
+  maxConsecutiveErrors: 3,
+  completionSignal: 'TASK_COMPLETE',
+}
+
+// Helper to create mock loop state with all required fields
+function createMockLoopState(overrides: Partial<LoopState> & { cardId: string }): LoopState {
+  return {
+    iteration: 0,
+    status: 'running',
+    totalCostUsd: 0,
+    totalTokens: 0,
+    consecutiveErrors: 0,
+    startTime: '2024-01-01T10:00:00Z',
+    elapsedSeconds: 0,
+    config: defaultConfig,
+    ...overrides,
+  }
+}
 
 // Mock loop data for testing
-const mockLoopState: LoopState = {
+const mockLoopState: LoopState = createMockLoopState({
   cardId: 'card-1',
   status: 'running',
   iteration: 5,
   totalCostUsd: 2.50,
   totalTokens: 15000,
-  startedAt: '2024-01-01T10:00:00Z',
-  lastActive: '2024-01-01T10:30:00Z',
-}
+  startTime: '2024-01-01T10:00:00Z',
+  elapsedSeconds: 1800,
+})
 
-const mockLoopState2: LoopState = {
+const mockLoopState2: LoopState = createMockLoopState({
   cardId: 'card-2',
   status: 'paused',
   iteration: 2,
   totalCostUsd: 1.25,
   totalTokens: 7500,
-  startedAt: '2024-01-01T09:00:00Z',
-  lastActive: '2024-01-01T09:15:00Z',
-}
+  startTime: '2024-01-01T09:00:00Z',
+  elapsedSeconds: 900,
+})
 
-const mockLoopState3: LoopState = {
+const mockLoopState3: LoopState = createMockLoopState({
   cardId: 'card-3',
   status: 'completed',
   iteration: 10,
   totalCostUsd: 5.75,
   totalTokens: 30000,
-  startedAt: '2024-01-01T08:00:00Z',
-  lastActive: '2024-01-01T08:45:00Z',
-}
+  startTime: '2024-01-01T08:00:00Z',
+  elapsedSeconds: 2700,
+})
 
 describe('loopStore', () => {
   beforeEach(() => {

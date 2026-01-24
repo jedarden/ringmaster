@@ -8,13 +8,10 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
   disconnect: vi.fn(),
 }))
 
-// Mock DND-Kit utilities for testing
-Object.defineProperty(window, 'HTMLElement', {
-  value: class HTMLElement {
-    style = {}
-    scrollIntoView = vi.fn()
-  },
-})
+// Mock scrollIntoView for DND-Kit utilities
+if (!HTMLElement.prototype.scrollIntoView) {
+  HTMLElement.prototype.scrollIntoView = vi.fn()
+}
 
 // Mock matchMedia for responsive components
 Object.defineProperty(window, 'matchMedia', {
