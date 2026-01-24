@@ -7,6 +7,7 @@ import type {
   CardError,
   ApiResponse,
   Trigger,
+  ActiveLoopsResponse,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
@@ -43,6 +44,12 @@ class ApiClient {
       throw new ApiError(errorData.error);
     }
 
+    // Handle 204 No Content (used by DELETE operations)
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    // Parse JSON response
     const result: ApiResponse<T> = await response.json();
     return result.data;
   }
@@ -181,8 +188,8 @@ class ApiClient {
     });
   }
 
-  async getAllLoops(): Promise<LoopState[]> {
-    return this.request<LoopState[]>('/loops');
+  async getAllLoops(): Promise<ActiveLoopsResponse> {
+    return this.request<ActiveLoopsResponse>('/loops');
   }
 
   // Attempts

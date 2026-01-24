@@ -16,6 +16,7 @@ interface LoopStore {
   ) => void;
   updateLoopStatus: (cardId: string, status: LoopStatus) => void;
   clearAllLoops: () => void;
+  setAllLoops: (loops: Array<{ cardId: string; state: Partial<LoopState> }>) => void;
 
   // Selectors
   getLoopState: (cardId: string) => LoopState | undefined;
@@ -68,6 +69,15 @@ export const useLoopStore = create<LoopStore>()(
         }),
 
       clearAllLoops: () => set({ activeLoops: new Map() }),
+
+      setAllLoops: (loops) =>
+        set(() => {
+          const newLoops = new Map<string, LoopState>();
+          loops.forEach(({ cardId, state }) => {
+            newLoops.set(cardId, state as LoopState);
+          });
+          return { activeLoops: newLoops };
+        }),
 
       getLoopState: (cardId) => get().activeLoops.get(cardId),
 

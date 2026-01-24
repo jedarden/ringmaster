@@ -32,7 +32,7 @@ export function useLoopState(cardId: string | undefined) {
 }
 
 export function useAllLoops() {
-  const loopStore = useLoopStore();
+  const setAllLoops = useLoopStore((s) => s.setAllLoops);
 
   const query = useQuery({
     queryKey: ['loops'],
@@ -40,18 +40,26 @@ export function useAllLoops() {
     refetchInterval: 10000, // Refresh every 10 seconds
   });
 
-  // Sync all loops to store
+  // Sync all loops to store in a single update
   useEffect(() => {
-    if (query.data) {
-      // Clear and re-set all loops
-      loopStore.clearAllLoops();
-      query.data.forEach((loop) => {
-        loopStore.setLoopState(loop.cardId, loop);
-      });
+    if (query.data?.loops) {
+      const loops = query.data.loops.map((loop) => ({
+        cardId: loop.cardId,
+        state: {
+          cardId: loop.cardId,
+          iteration: loop.iteration,
+          status: loop.status,
+          totalCostUsd: loop.totalCostUsd,
+        },
+      }));
+      setAllLoops(loops);
     }
-  }, [query.data, loopStore]);
+  }, [query.data, setAllLoops]);
 
-  return query;
+  return {
+    ...query,
+    isLoading: query.isLoading || query.isFetching,
+  };
 }
 
 export function useStartLoop() {

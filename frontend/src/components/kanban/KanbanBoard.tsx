@@ -3,6 +3,9 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
   type DragStartEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
@@ -21,6 +24,15 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   const [activeCard, setActiveCard] = useState<Card | null>(null);
   const getCardsByState = useCardStore((s) => s.getCardsByState);
   const transitionCard = useTransitionCard();
+
+  // Add activation constraint so clicks work (must drag 8px before drag starts)
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     const card = event.active.data.current?.card as Card | undefined;
@@ -46,6 +58,9 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
         cardId: card.id,
         trigger,
       });
+    } else {
+      // Show feedback that this transition isn't allowed
+      console.warn(`Cannot transition from ${card.state} to ${newState}. Invalid state transition.`);
     }
   };
 
@@ -55,6 +70,7 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
 
   return (
     <DndContext
+      sensors={sensors}
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}

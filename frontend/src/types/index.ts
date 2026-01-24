@@ -101,6 +101,28 @@ export interface LoopState {
   stopReason?: StopReason;
 }
 
+// Response type for GET /api/loops (list all active loops)
+export interface ActiveLoopInfo {
+  cardId: string;
+  cardTitle: string;
+  iteration: number;
+  status: LoopStatus;
+  totalCostUsd: number;
+}
+
+export interface ActiveLoopsStats {
+  totalActive: number;
+  running: number;
+  paused: number;
+  totalCostUsd: number;
+  totalIterations: number;
+}
+
+export interface ActiveLoopsResponse {
+  loops: ActiveLoopInfo[];
+  stats: ActiveLoopsStats;
+}
+
 export interface Attempt {
   id: string;
   cardId: string;
