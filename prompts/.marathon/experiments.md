@@ -284,3 +284,65 @@ src/
 **Commit**: `chore(api): remove unused types.rs file`
 
 ---
+
+## Marathon v3 Session: 2026-01-24
+
+**Goal**: Complete frontend test coverage, E2E tests, and API documentation
+
+### Summary
+
+**Test Results**:
+- **301 Rust tests** (backend)
+- **74 Vitest tests** (frontend unit tests)
+- **5 E2E test files** (Playwright)
+
+### Frontend Unit Tests (74 tests)
+
+#### Store Tests (30 tests)
+- `loopStore.test.ts` - 15 tests for loop state management
+- `cardStore.test.ts` - 15 tests for card state management
+
+**Key Fix**: Tests were using stale Zustand state references. Fixed by calling `getState()` after mutations.
+
+#### Component Tests (44 tests)
+- `DraggableCard.test.tsx` - 11 tests (rendering, labels, priority, click handling)
+- `KanbanColumn.test.tsx` - 6 tests (column rendering, card count, empty state)
+- `Badge.test.tsx` - 12 tests (all variants and sizes)
+- `Button.test.tsx` - 15 tests (variants, sizes, click, disabled state)
+
+### E2E Tests (Playwright)
+
+**Files Created**:
+- `playwright.config.ts` - Playwright configuration with dev server
+- `e2e/board.spec.ts` - Kanban board navigation tests
+- `e2e/card-interaction.spec.ts` - Card click and creation tests
+- `e2e/dashboard.spec.ts` - Dashboard and projects navigation tests
+
+**npm Scripts Added**:
+- `test:e2e` - Run Playwright tests
+- `test:e2e:ui` - Run Playwright UI mode
+
+### API Documentation
+
+**File Created**: `docs/api-reference.md`
+
+**Coverage**:
+- Cards API (list, create, get, update, delete, transition)
+- Projects API (CRUD operations)
+- Loops API (start, pause, resume, stop, status)
+- Attempts API (list, get)
+- Errors API (list, get, resolve)
+- Metrics API (summary, by-card, by-subscription)
+- Integrations (GitHub Actions, ArgoCD, Docker Hub, Kubernetes)
+- WebSocket API (subscribe, events)
+
+### Commits
+
+1. `4194ff6` - fix(frontend): fix Zustand store tests to use fresh state after mutations
+2. `90116f6` - test(frontend): add kanban component tests and fix store test types
+3. `130fa5a` - test(frontend): add Badge and Button UI component tests
+4. `bd580da` - feat(frontend): setup Playwright E2E testing infrastructure
+5. `328f836` - docs: add comprehensive API reference documentation
+6. `4a00945` - test(e2e): add card interaction and dashboard E2E tests
+
+---
