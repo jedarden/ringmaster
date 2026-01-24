@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { X, Pencil, Save, XCircle } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
@@ -17,25 +17,17 @@ interface CardDetailPanelProps {
   onClose: () => void;
 }
 
-export function CardDetailPanel({ card, onClose }: CardDetailPanelProps) {
+// Inner component that resets state when card.id changes via key prop
+function CardDetailPanelInner({ card, onClose }: CardDetailPanelProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedTitle, setEditedTitle] = useState(card.title);
   const [editedDescription, setEditedDescription] = useState(card.description || '');
   const [editedTaskPrompt, setEditedTaskPrompt] = useState(card.taskPrompt);
-  const [editedLabels, setEditedLabels] = useState(card.labels.join(', '));
+  const labelsString = useMemo(() => card.labels.join(', '), [card.labels]);
+  const [editedLabels, setEditedLabels] = useState(labelsString);
   const [editedPriority, setEditedPriority] = useState(card.priority);
 
   const updateCard = useUpdateCard();
-
-  // Reset form when card changes
-  useEffect(() => {
-    setEditedTitle(card.title);
-    setEditedDescription(card.description || '');
-    setEditedTaskPrompt(card.taskPrompt);
-    setEditedLabels(card.labels.join(', '));
-    setEditedPriority(card.priority);
-    setIsEditing(false);
-  }, [card.id, card.title, card.description, card.taskPrompt, card.labels, card.priority]);
 
   const handleSave = async () => {
     const labels = editedLabels
@@ -277,4 +269,9 @@ export function CardDetailPanel({ card, onClose }: CardDetailPanelProps) {
       )}
     </div>
   );
+}
+
+// Wrapper component that uses key prop to reset state when card changes
+export function CardDetailPanel({ card, onClose }: CardDetailPanelProps) {
+  return <CardDetailPanelInner key={card.id} card={card} onClose={onClose} />;
 }
