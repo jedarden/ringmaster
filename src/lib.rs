@@ -7,6 +7,7 @@ pub mod domain;
 pub mod events;
 pub mod integrations;
 pub mod loops;
+pub mod metrics;
 pub mod monitor;
 pub mod platforms;
 pub mod prompt;

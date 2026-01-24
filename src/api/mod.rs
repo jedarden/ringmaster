@@ -6,6 +6,7 @@ mod loops;
 mod errors;
 mod ws;
 mod integrations;
+mod metrics;
 
 pub use cards::*;
 pub use projects::*;
@@ -13,6 +14,7 @@ pub use loops::*;
 pub use errors::*;
 pub use ws::*;
 pub use integrations::integration_routes;
+pub use metrics::metrics_routes;
 
 use axum::{
     http::StatusCode,
