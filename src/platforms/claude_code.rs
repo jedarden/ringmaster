@@ -14,6 +14,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::RwLock;
 
+use super::installer;
 use super::stream_parser::StreamParser;
 use super::types::*;
 use super::{CodingPlatform, PlatformError, SessionConfig};
@@ -34,6 +35,9 @@ pub struct ClaudeCodePlatform {
 
     /// Active sessions
     sessions: Arc<RwLock<HashMap<uuid::Uuid, SessionInfo>>>,
+
+    /// Whether to auto-install if binary not found
+    auto_install: bool,
 }
 
 /// Internal session tracking info
@@ -53,6 +57,7 @@ impl ClaudeCodePlatform {
             default_model: "claude-sonnet-4-20250514".to_string(),
             max_concurrent: 1,
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            auto_install: true, // Auto-install by default for codespace environments
         }
     }
 
@@ -77,6 +82,12 @@ impl ClaudeCodePlatform {
     /// Set maximum concurrent sessions
     pub fn with_max_concurrent(mut self, max: u32) -> Self {
         self.max_concurrent = max;
+        self
+    }
+
+    /// Enable or disable auto-installation
+    pub fn with_auto_install(mut self, auto_install: bool) -> Self {
+        self.auto_install = auto_install;
         self
     }
 
@@ -205,27 +216,27 @@ impl CodingPlatform for ClaudeCodePlatform {
     }
 
     async fn is_available(&self) -> Result<bool, PlatformError> {
-        // Check if the claude binary exists and is executable
-        let output = Command::new("which")
-            .arg(&self.binary_path)
-            .output()
-            .await;
+        // First check if already available via configured path or PATH
+        if let Some(path) = installer::find_claude_binary().await {
+            tracing::info!("Claude Code CLI found at {:?}", path);
+            return Ok(true);
+        }
 
-        match output {
-            Ok(o) if o.status.success() => Ok(true),
-            _ => {
-                // Try running claude --version as a fallback
-                let version_output = Command::new(&self.binary_path)
-                    .arg("--version")
-                    .output()
-                    .await;
-
-                match version_output {
-                    Ok(o) if o.status.success() => Ok(true),
-                    Ok(_) => Ok(false),
-                    Err(_) => Ok(false),
+        // Not found - attempt auto-install if enabled
+        if self.auto_install {
+            tracing::info!("Claude Code CLI not found, attempting auto-installation...");
+            match installer::ensure_claude_available().await {
+                Ok(path) => {
+                    tracing::info!("Claude Code CLI installed at {:?}", path);
+                    Ok(true)
+                }
+                Err(e) => {
+                    tracing::warn!("Auto-installation failed: {}", e);
+                    Ok(false)
                 }
             }
+        } else {
+            Ok(false)
         }
     }
 
@@ -427,6 +438,13 @@ mod tests {
         assert!(platform.config_dir.is_none());
         assert_eq!(platform.default_model, "claude-sonnet-4-20250514");
         assert_eq!(platform.max_concurrent, 1);
+        assert!(platform.auto_install); // Auto-install enabled by default
+    }
+
+    #[test]
+    fn test_auto_install_builder() {
+        let platform = ClaudeCodePlatform::new().with_auto_install(false);
+        assert!(!platform.auto_install);
     }
 
     #[tokio::test]

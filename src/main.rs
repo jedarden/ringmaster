@@ -20,6 +20,7 @@ use ringmaster::{
     events::EventBus,
     loops::LoopManager,
     monitor::{IntegrationMonitor, MonitorConfig},
+    platforms::{ensure_claude_available, find_claude_binary, get_installed_version},
     state_machine::ActionExecutor,
     static_files::static_handler,
 };
@@ -48,12 +49,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the Ringmaster server
-    Serve,
-    /// Initialize the database
-    Init,
     /// Show configuration info
     Config,
+    /// Check or install Claude Code CLI
+    Doctor {
+        /// Install Claude Code CLI if not found
+        #[arg(long)]
+        install: bool,
+    },
 }
 
 #[tokio::main]
@@ -77,12 +80,6 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or_else(|| get_data_dir().join("data.db").to_string_lossy().to_string());
 
     match cli.command {
-        Some(Commands::Init) => {
-            println!("Initializing database at: {}", db_path);
-            let _pool = init_database(&db_path).await?;
-            println!("Database initialized successfully!");
-            return Ok(());
-        }
         Some(Commands::Config) => {
             println!("Ringmaster Configuration");
             println!("========================");
@@ -91,17 +88,43 @@ async fn main() -> anyhow::Result<()> {
             println!("Server: {}:{}", cli.host, cli.port);
             return Ok(());
         }
-        _ => {}
+        Some(Commands::Doctor { install }) => {
+            return run_doctor(install).await;
+        }
+        None => {}
     }
 
-    // Start server
+    // Start server (database is auto-created if it doesn't exist)
     run_server(&cli.host, cli.port, &db_path).await
 }
 
 async fn run_server(host: &str, port: u16, db_path: &str) -> anyhow::Result<()> {
-    // Initialize database
-    tracing::info!("Initializing database at: {}", db_path);
+    // Check and auto-install Claude Code CLI if needed
+    match ensure_claude_available().await {
+        Ok(path) => {
+            let version = get_installed_version().await.unwrap_or_else(|| "unknown".to_string());
+            tracing::info!("Claude Code CLI v{} available at {:?}", version, path);
+        }
+        Err(e) => {
+            tracing::warn!("Claude Code CLI not available: {}. Coding loops will not work until installed.", e);
+            tracing::warn!("Run 'ringmaster doctor --install' to install Claude Code CLI");
+        }
+    }
+
+    // Ensure data directory exists
+    if let Some(parent) = std::path::Path::new(db_path).parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // Initialize database (auto-creates if it doesn't exist)
+    let db_exists = std::path::Path::new(db_path).exists();
+    if !db_exists {
+        tracing::info!("Creating new database at: {}", db_path);
+    }
     let pool = init_database(db_path).await?;
+    if !db_exists {
+        tracing::info!("Database created and initialized");
+    }
 
     // Create shared state
     let event_bus = EventBus::new();
@@ -217,4 +240,51 @@ fn truncate_path(path: &str, max_len: usize) -> String {
     } else {
         format!("...{}", &path[path.len() - max_len + 3..])
     }
+}
+
+/// Run the doctor command to check/install Claude Code CLI
+async fn run_doctor(install: bool) -> anyhow::Result<()> {
+    println!();
+    println!("  Ringmaster Doctor");
+    println!("  =================");
+    println!();
+
+    // Check Claude Code CLI
+    print!("  Claude Code CLI: ");
+    if let Some(path) = find_claude_binary().await {
+        let version = get_installed_version().await.unwrap_or_else(|| "unknown".to_string());
+        println!("✓ Installed (v{})", version);
+        println!("    Path: {:?}", path);
+    } else {
+        println!("✗ Not found");
+
+        if install {
+            println!();
+            println!("  Installing Claude Code CLI...");
+            match ensure_claude_available().await {
+                Ok(path) => {
+                    let version = get_installed_version().await.unwrap_or_else(|| "unknown".to_string());
+                    println!("  ✓ Installed successfully (v{})", version);
+                    println!("    Path: {:?}", path);
+                }
+                Err(e) => {
+                    println!("  ✗ Installation failed: {}", e);
+                    println!();
+                    println!("  Manual installation:");
+                    println!("    curl -fsSL https://claude.ai/install.sh | bash");
+                    return Err(anyhow::anyhow!("Claude Code CLI installation failed"));
+                }
+            }
+        } else {
+            println!();
+            println!("  To install Claude Code CLI, run:");
+            println!("    ringmaster doctor --install");
+            println!();
+            println!("  Or install manually:");
+            println!("    curl -fsSL https://claude.ai/install.sh | bash");
+        }
+    }
+
+    println!();
+    Ok(())
 }

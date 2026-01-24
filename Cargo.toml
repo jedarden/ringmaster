@@ -28,6 +28,9 @@ toml = "0.8"
 uuid = { version = "1.6", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 
+# Path utilities
+dirs = "5.0"
+
 # Error handling
 anyhow = "1.0"
 thiserror = "1.0"
@@ -58,7 +61,6 @@ tokio-tungstenite = "0.21"
 
 # Configuration
 config = "0.14"
-directories = "5.0"
 
 # Semver for version comparison
 semver = "1.0"

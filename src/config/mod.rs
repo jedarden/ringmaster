@@ -1,6 +1,5 @@
 //! Configuration module for Ringmaster
 
-use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -369,24 +368,18 @@ fn default_config_branch() -> String {
 }
 
 /// Get the data directory for Ringmaster
+/// Uses .ringmaster/ in the current working directory (convention over configuration)
 pub fn get_data_dir() -> PathBuf {
-    if let Some(proj_dirs) = ProjectDirs::from("com", "ringmaster", "ringmaster") {
-        proj_dirs.data_dir().to_path_buf()
-    } else {
-        // Fallback to home directory
-        dirs::home_dir()
-            .map(|h| h.join(".ringmaster"))
-            .unwrap_or_else(|| PathBuf::from(".ringmaster"))
-    }
+    // Use .ringmaster/ in current working directory
+    std::env::current_dir()
+        .map(|cwd| cwd.join(".ringmaster"))
+        .unwrap_or_else(|_| PathBuf::from(".ringmaster"))
 }
 
 /// Get the config directory for Ringmaster
+/// Same as data directory - everything lives in .ringmaster/
 pub fn get_config_dir() -> PathBuf {
-    if let Some(proj_dirs) = ProjectDirs::from("com", "ringmaster", "ringmaster") {
-        proj_dirs.config_dir().to_path_buf()
-    } else {
-        get_data_dir()
-    }
+    get_data_dir()
 }
 
 /// Load configuration from file or defaults
@@ -414,17 +407,6 @@ pub fn save_config(config: &Config) -> std::io::Result<()> {
     std::fs::write(config_path, contents)?;
 
     Ok(())
-}
-
-// Add dirs crate for home_dir
-mod dirs {
-    use std::path::PathBuf;
-
-    pub fn home_dir() -> Option<PathBuf> {
-        std::env::var_os("HOME")
-            .or_else(|| std::env::var_os("USERPROFILE"))
-            .map(PathBuf::from)
-    }
 }
 
 #[cfg(test)]
