@@ -381,9 +381,7 @@ impl CodingPlatform for ClaudeCodePlatform {
             let mut process = session_info.handle.process.lock().await;
             match process.try_wait() {
                 Ok(Some(status)) => {
-                    if status.success() && session_info.parser.has_completion_signal() {
-                        SessionState::Completed
-                    } else if status.success() {
+                    if status.success() {
                         SessionState::Completed
                     } else {
                         SessionState::Failed

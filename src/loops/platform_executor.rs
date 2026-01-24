@@ -147,19 +147,22 @@ impl PlatformExecutor {
         let assembled = self.prompt_pipeline.assemble(&card, project);
 
         // Create session config
-        let mut session_config = SessionConfig::default();
-        session_config.model = subscription.model.clone();
-        session_config.max_turns = Some(config.max_iterations);
-        session_config.timeout_seconds = Some(config.max_runtime_seconds);
-        session_config.completion_signal = config.completion_signal.clone();
-
-        // Set config directory for multi-account support
+        let mut env_vars = std::collections::HashMap::new();
         if let Some(config_dir) = &subscription.config_dir {
-            session_config.env_vars.insert(
+            env_vars.insert(
                 "CLAUDE_CONFIG_DIR".to_string(),
                 config_dir.to_string_lossy().to_string(),
             );
         }
+
+        let session_config = SessionConfig {
+            model: subscription.model.clone(),
+            max_turns: Some(config.max_iterations),
+            timeout_seconds: Some(config.max_runtime_seconds),
+            completion_signal: config.completion_signal.clone(),
+            env_vars,
+            ..Default::default()
+        };
 
         // Combine system prompt and user prompt for CLI
         let full_prompt = format!(
@@ -516,23 +519,27 @@ impl PlatformExecutor {
         );
 
         // Create session config
-        let mut session_config = SessionConfig::default();
-        session_config.model = subscription.model.clone();
-        session_config.max_turns = Some(
-            restored_state
-                .config
-                .max_iterations
-                .saturating_sub(restored_state.iteration as u32),
-        );
-        session_config.timeout_seconds = Some(restored_state.config.max_runtime_seconds);
-        session_config.completion_signal = restored_state.config.completion_signal.clone();
-
+        let mut env_vars = std::collections::HashMap::new();
         if let Some(config_dir) = &subscription.config_dir {
-            session_config.env_vars.insert(
+            env_vars.insert(
                 "CLAUDE_CONFIG_DIR".to_string(),
                 config_dir.to_string_lossy().to_string(),
             );
         }
+
+        let session_config = SessionConfig {
+            model: subscription.model.clone(),
+            max_turns: Some(
+                restored_state
+                    .config
+                    .max_iterations
+                    .saturating_sub(restored_state.iteration as u32),
+            ),
+            timeout_seconds: Some(restored_state.config.max_runtime_seconds),
+            completion_signal: restored_state.config.completion_signal.clone(),
+            env_vars,
+            ..Default::default()
+        };
 
         // Start the session
         let handle = platform

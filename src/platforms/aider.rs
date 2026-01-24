@@ -397,9 +397,7 @@ impl CodingPlatform for AiderPlatform {
             let mut process = session_info.handle.process.lock().await;
             match process.try_wait() {
                 Ok(Some(status)) => {
-                    if status.success() && session_info.completion_detected {
-                        SessionState::Completed
-                    } else if status.success() {
+                    if status.success() {
                         SessionState::Completed
                     } else {
                         SessionState::Failed
