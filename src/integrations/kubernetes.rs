@@ -133,6 +133,31 @@ impl KubernetesService {
         Ok(Self { client })
     }
 
+    /// Try to create a new Kubernetes service synchronously
+    /// This spawns a blocking task to check if cluster access is available
+    pub fn try_new() -> Result<Self, KubeError> {
+        // Use a blocking runtime to try creating the client
+        // This is safe because we're just checking if config exists
+        let result = std::thread::spawn(|| {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| kube::Error::Service(
+                    Box::new(std::io::Error::other(e.to_string())) as Box<dyn std::error::Error + Send + Sync>
+                ))?;
+
+            rt.block_on(async {
+                Client::try_default().await
+            })
+        })
+        .join()
+        .map_err(|_| kube::Error::Service(
+            Box::new(std::io::Error::other("Thread panic during Kubernetes client creation")) as Box<dyn std::error::Error + Send + Sync>
+        ))?;
+
+        result.map(|client| Self { client }).map_err(KubeError::from)
+    }
+
     /// Create with an existing client
     pub fn with_client(client: Client) -> Self {
         Self { client }

@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 use std::env;
 use thiserror::Error;
 
+// Integration Hub - unified coordination of all services
+pub mod hub;
+pub use hub::{IntegrationHub, IntegrationStatus};
+
 // Re-export Claude integration from dedicated module (deprecated - use platforms instead)
 #[deprecated(
     since = "0.2.0",
