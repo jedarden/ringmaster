@@ -14,7 +14,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use ringmaster::{
-    api::{card_routes, error_routes, global_loop_routes, integration_routes, loop_routes, project_routes, ws_handler, AppState},
+    api::{card_routes, error_routes, global_loop_routes, integration_routes, loop_routes, metrics_routes, project_routes, ws_handler, AppState},
     config::{get_data_dir, load_config},
     db::init_database,
     events::EventBus,
@@ -190,6 +190,7 @@ async fn run_server(host: &str, port: u16, db_path: &str) -> anyhow::Result<()> 
         .nest("/api/projects", project_routes())
         .nest("/api/loops", global_loop_routes())
         .nest("/api/integrations", integration_routes())
+        .nest("/api/metrics", metrics_routes())
         .route("/api/ws", get(ws_handler))
         // Static files (embedded frontend)
         .fallback(static_handler)

@@ -79,20 +79,93 @@ All 271 tests pass:
 
 ---
 
-## Session v2 Started: 2026-01-24
+## Session v2 Completed: 2026-01-24
 
 **Goal**: Complete remaining MVP features after CLI Platform implementation.
 
-**Phases**:
-1. Integration tests with Claude Code CLI
-2. Session resumption for interrupted loops
-3. Aider platform support
-4. API metrics & monitoring
-5. Integration Hub refactor
+**Phases Completed**:
+1. ✅ Integration tests with Claude Code CLI
+2. ✅ Session resumption for interrupted loops (checkpoint persistence)
+3. ✅ Aider platform support
+4. ✅ API metrics & monitoring
+5. ✅ Integration Hub refactor
 
 **Session File**: `prompts/marathon-session-v2.md`
 
-**Status**: PENDING - Session created, awaiting execution
+**Status**: COMPLETE - All 5 phases implemented
+
+### Phase 1: Integration Tests (Claude Code CLI)
+
+**Files Created**:
+- `tests/integration/mod.rs` - Integration test module
+- `tests/integration/claude_code.rs` - Claude Code CLI tests
+
+**Tests**:
+- `test_claude_cli_detection` - Verifies CLI is found (or gracefully not)
+- `test_stream_parser_with_mock_output` - Tests JSON event parsing
+- `test_session_timeout` - Verifies timeout handling
+- `test_start_session` - Full session start (requires CLI)
+- `test_complete_coding_task` - End-to-end task (requires CLI)
+- `test_error_handling` - Error conditions (requires CLI)
+
+**Approach**: Tests skip gracefully with `#[ignore]` when Claude CLI is not available.
+
+### Phase 2: Checkpoint Persistence
+
+**Files Created**:
+- `src/loops/checkpoint.rs` - LoopCheckpoint struct and DB operations
+- `migrations/003_loop_checkpoints.sql` - Database schema
+
+**Features**:
+- `LoopCheckpoint` struct with full state serialization
+- Saves checkpoint after each iteration
+- Keeps only last 3 checkpoints per card
+- Resume from checkpoint with `resume_from_checkpoint()`
+- Clears checkpoints on successful completion
+
+**Integration**: `PlatformExecutor` uses checkpoints via `monitor_session_with_checkpoints()`.
+
+### Phase 3: Aider Platform Support
+
+**Files Created**:
+- `src/platforms/aider.rs` - Full CodingPlatform implementation
+
+**Features**:
+- Configurable model selection (GPT-4, Claude, etc.)
+- `--yes-always` for non-interactive mode
+- Output parsing for file changes and commits
+- Concurrent session limits
+- Builder pattern for configuration
+
+### Phase 4: Metrics & Monitoring
+
+**Files Created**:
+- `src/metrics/mod.rs` - SessionMetrics, MetricsSummary types
+- `src/api/metrics.rs` - REST API endpoints
+- `migrations/004_session_metrics.sql` - Database schema
+
+**API Endpoints**:
+- `GET /api/metrics/summary` - Overall metrics (with period filter)
+- `GET /api/metrics/by-card/:id` - Per-card metrics
+- `GET /api/metrics/by-subscription` - Per-subscription breakdown
+
+**Tracked**:
+- Input/output tokens
+- Estimated cost (USD)
+- Duration (seconds)
+- Iterations
+- Success/failure
+
+### Phase 5: Integration Hub
+
+**Files Created**:
+- `src/integrations/hub.rs` - IntegrationHub with lifecycle management
+
+**Features**:
+- Unified access to all integrations (GitHub, ArgoCD, K8s, Docker Hub)
+- Auto-detection of available services
+- Status reporting via `hub.status()`
+- Thread-safe with `Arc<>` wrapping
 
 ---
 
