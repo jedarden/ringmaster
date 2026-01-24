@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useCardStore } from './cardStore'
-import type { Card, CardState } from '../types'
+import type { Card } from '../types'
 
 // Helper to create mock card data with all required fields
 function createMockCard(overrides: Partial<Card> & { id: string; title: string }): Card {

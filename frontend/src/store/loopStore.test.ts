@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useLoopStore } from './loopStore'
-import type { LoopState, LoopStatus, LoopConfig } from '../types'
+import type { LoopState, LoopConfig } from '../types'
 
 // Default config for mock loop states
 const defaultConfig: LoopConfig = {

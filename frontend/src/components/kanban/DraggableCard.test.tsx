@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '../../test/test-utils'
 import { DraggableCard } from './DraggableCard'
 import { useLoopStore } from '../../store/loopStore'
-import type { Card, LoopConfig, LoopState } from '../../types'
+import type { Card } from '../../types'
 
 // Mock dnd-kit hooks
 vi.mock('@dnd-kit/sortable', () => ({
@@ -32,17 +32,6 @@ function createMockCard(overrides: Partial<Card> & { id: string; title: string }
     updatedAt: '2024-01-01T00:00:00Z',
     ...overrides,
   }
-}
-
-// Default config for mock loop states
-const defaultConfig: LoopConfig = {
-  maxIterations: 100,
-  maxRuntimeSeconds: 3600,
-  maxCostUsd: 10.00,
-  checkpointInterval: 10,
-  cooldownSeconds: 5,
-  maxConsecutiveErrors: 3,
-  completionSignal: 'TASK_COMPLETE',
 }
 
 describe('DraggableCard', () => {

@@ -1,5 +1,5 @@
-import React, { ReactElement } from 'react'
-import { render, RenderOptions } from '@testing-library/react'
+import React, { type ReactElement } from 'react'
+import { render, type RenderOptions } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter } from 'react-router-dom'
 
@@ -29,7 +29,6 @@ const customRender = (
 
 // Re-export everything
 export * from '@testing-library/react'
-export * from '@testing-library/jest-dom'
 
 // Override render method
 export { customRender as render }
