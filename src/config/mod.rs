@@ -809,4 +809,36 @@ priority = 50
         let config = Config::default();
         assert!(config.subscriptions.is_empty());
     }
+
+    #[test]
+    fn test_aider_subscription() {
+        let toml_str = r#"
+[[subscriptions]]
+name = "aider-gpt4"
+platform = "aider"
+model = "gpt-4"
+max_concurrent = 1
+priority = 50
+
+[[subscriptions]]
+name = "aider-claude"
+platform = "aider"
+model = "claude-3-opus-20240229"
+max_concurrent = 2
+priority = 100
+"#;
+
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.subscriptions.len(), 2);
+
+        assert_eq!(config.subscriptions[0].name, "aider-gpt4");
+        assert_eq!(config.subscriptions[0].platform, "aider");
+        assert_eq!(config.subscriptions[0].model, Some("gpt-4".to_string()));
+        assert_eq!(config.subscriptions[0].priority, 50);
+
+        assert_eq!(config.subscriptions[1].name, "aider-claude");
+        assert_eq!(config.subscriptions[1].platform, "aider");
+        assert_eq!(config.subscriptions[1].model, Some("claude-3-opus-20240229".to_string()));
+    }
 }

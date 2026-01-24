@@ -5,11 +5,13 @@
 //! direct API calls. This allows users to leverage their subscription plans
 //! (Claude Max/Pro) instead of pay-per-token API billing.
 
+pub mod aider;
 pub mod claude_code;
 pub mod installer;
 pub mod stream_parser;
 pub mod types;
 
+pub use aider::AiderPlatform;
 pub use claude_code::ClaudeCodePlatform;
 pub use installer::{ensure_claude_available, find_claude_binary, install_claude_code, get_installed_version};
 pub use stream_parser::StreamParser;

@@ -68,6 +68,9 @@ semver = "1.0"
 # Regex for pattern matching
 regex = "1.10"
 
+# Binary path resolution
+which = "6.0"
+
 # Kubernetes client
 kube = { version = "0.87", features = ["client", "runtime", "derive"] }
 k8s-openapi = { version = "0.20", features = ["v1_28"] }
