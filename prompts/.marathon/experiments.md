@@ -221,3 +221,66 @@ src/
 6. **Deprecation**: Old `LoopExecutor` and `ClaudeClient` marked deprecated with migration notes
 
 ---
+
+## Marathon Session: 2026-01-24
+
+### Iteration 1: Fix Clippy Warnings
+
+**Issue**: 4 clippy warnings found
+- 2x `field_reassign_with_default` in `platform_executor.rs`
+- 2x `if_same_then_else` in `aider.rs` and `claude_code.rs`
+
+**Fix**:
+- Use struct initialization syntax instead of field reassignment for `SessionConfig`
+- Simplify if/else branches where both success conditions returned the same state
+
+**Commit**: `fix(clippy): resolve all clippy warnings`
+
+### Iteration 2: Fix TODO - Hardcoded Platform Name
+
+**Issue**: `save_checkpoint_if_needed` used hardcoded "claude-code" for platform name
+
+**Fix**:
+- Add `platform_name: &str` parameter to `save_checkpoint_if_needed`
+- Pass `platform.name()` from callers
+
+**Commit**: `fix(checkpoint): use actual platform name instead of hardcoded value`
+
+### Iteration 3: Fix React Lint Error
+
+**Issue**: `CardDetailPanel.tsx` had `setState` calls inside `useEffect`, triggering `react-hooks/set-state-in-effect` lint error
+
+**Fix**:
+- Use React's key prop pattern to reset state when card changes
+- Created inner component `CardDetailPanelInner` with key={card.id}
+
+**Commit**: `fix(frontend): use key prop pattern for CardDetailPanel state reset`
+
+### Iteration 4: Remove Dead WebSocket Code
+
+**Issue**: Duplicate WebSocket handler implementations
+- `ws.rs` - Active implementation, exports `ws_handler`
+- `websocket.rs` - Dead code, never referenced in module tree
+- `types.rs` - Contained unused `WsClientMessage` and `WsServerMessage` types
+
+**Fix**:
+- Deleted `websocket.rs` file
+- Removed unused WebSocket types from `types.rs`
+- ~255 lines of dead code removed
+
+**Commit**: `chore(api): remove dead WebSocket code`
+
+### Iteration 5: Remove Unused types.rs
+
+**Issue**: `src/api/types.rs` was dead code
+- File existed but was never declared as a module in `mod.rs`
+- Contained duplicate type definitions that shadowed types in `mod.rs`
+- ~200 lines of unreferenced code
+
+**Fix**:
+- Deleted `src/api/types.rs`
+- Active API types remain in `mod.rs`
+
+**Commit**: `chore(api): remove unused types.rs file`
+
+---
