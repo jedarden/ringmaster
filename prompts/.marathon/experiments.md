@@ -79,6 +79,23 @@ All 271 tests pass:
 
 ---
 
+## Session v2 Started: 2026-01-24
+
+**Goal**: Complete remaining MVP features after CLI Platform implementation.
+
+**Phases**:
+1. Integration tests with Claude Code CLI
+2. Session resumption for interrupted loops
+3. Aider platform support
+4. API metrics & monitoring
+5. Integration Hub refactor
+
+**Session File**: `prompts/marathon-session-v2.md`
+
+**Status**: PENDING - Session created, awaiting execution
+
+---
+
 ## Final Verification: 2026-01-19
 
 All implementation complete. The CLI platform abstraction is fully functional.

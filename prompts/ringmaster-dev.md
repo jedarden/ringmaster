@@ -64,15 +64,22 @@ Ringmaster uses **heuristic-based orchestration** with **LLM execution**:
 - Code generation uses Claude API
 - RLM (Recursive Language Model) summarizes long chat histories
 
-## Known TODOs
+## Known TODOs (Session v2)
 
-Located in `src/state_machine/actions.rs`:
+**See `prompts/marathon-session-v2.md` for the full session plan.**
 
-1. **GitHub Actions Integration** - Integrate with GitHub Actions service for build triggers
-2. **Build Status Polling** - Start background task to poll build status
-3. **ArgoCD Integration** - Integrate with ArgoCD service for deployments
-4. **ArgoCD Status Polling** - Start background task to poll ArgoCD status
-5. **Kubernetes Health Checks** - Integrate with Kubernetes service for health checks
+### Completed (v0.1.0 - CLI Platform)
+- [x] GitHub Actions Integration - Build triggers and monitoring
+- [x] ArgoCD Integration - Deployment triggers and monitoring
+- [x] Kubernetes Health Checks - Pod status and error collection
+- [x] CLI Platform Abstraction - Claude Code support
+
+### Remaining (v0.2.0 - Feature Completion)
+1. **Integration Tests** - E2E tests with actual Claude Code CLI
+2. **Session Resumption** - Checkpoint-based loop recovery
+3. **Aider Platform** - Alternative coding agent support
+4. **API Metrics** - Usage tracking and cost analysis
+5. **Integration Hub** - Unified service coordination
 
 ## Per-Iteration Instructions
 
