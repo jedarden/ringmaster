@@ -74,6 +74,11 @@ k8s-openapi = { version = "0.20", features = ["v1_28"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
+tempfile = "3.10"
+
+[[test]]
+name = "integration"
+path = "tests/integration/mod.rs"
 
 [profile.release]
 lto = true
