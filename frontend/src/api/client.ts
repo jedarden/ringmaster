@@ -164,10 +164,15 @@ class ApiClient {
     cardId: string,
     config?: Partial<LoopConfig>
   ): Promise<LoopState> {
-    return this.request<LoopState>(`/cards/${cardId}/loop/start`, {
-      method: 'POST',
-      body: JSON.stringify({ config }),
-    });
+    // Backend returns { loopId, cardId, state } but we need just the state
+    const response = await this.request<{ loopId: string; cardId: string; state: LoopState }>(
+      `/cards/${cardId}/loop/start`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ config }),
+      }
+    );
+    return response.state;
   }
 
   async pauseLoop(cardId: string): Promise<LoopState> {
