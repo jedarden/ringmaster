@@ -27,22 +27,29 @@ pub async fn create_pool(database_path: &str) -> Result<SqlitePool, sqlx::Error>
 
 /// Run database migrations
 pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    // Read and execute the migration SQL
-    let migration_sql = include_str!("../../migrations/001_initial_schema.sql");
+    // All migration files in order
+    let migrations = [
+        include_str!("../../migrations/001_initial_schema.sql"),
+        include_str!("../../migrations/002_chat_history.sql"),
+        include_str!("../../migrations/003_loop_checkpoints.sql"),
+        include_str!("../../migrations/004_session_metrics.sql"),
+    ];
 
-    // Parse statements properly - handling parentheses for CREATE TABLE
-    let statements = parse_sql_statements(migration_sql);
+    for migration_sql in migrations {
+        // Parse statements properly - handling parentheses for CREATE TABLE
+        let statements = parse_sql_statements(migration_sql);
 
-    for stmt in statements {
-        let stmt = stmt.trim();
-        if stmt.is_empty() || stmt.starts_with("--") || stmt.starts_with("PRAGMA") {
-            continue;
-        }
+        for stmt in statements {
+            let stmt = stmt.trim();
+            if stmt.is_empty() || stmt.starts_with("--") || stmt.starts_with("PRAGMA") {
+                continue;
+            }
 
-        if let Err(e) = sqlx::query(stmt).execute(pool).await {
-            let err_str = e.to_string();
-            if !err_str.contains("already exists") {
-                tracing::warn!("Migration statement failed: {} - {}", &stmt[..stmt.len().min(50)], e);
+            if let Err(e) = sqlx::query(stmt).execute(pool).await {
+                let err_str = e.to_string();
+                if !err_str.contains("already exists") {
+                    tracing::warn!("Migration statement failed: {} - {}", &stmt[..stmt.len().min(50)], e);
+                }
             }
         }
     }
