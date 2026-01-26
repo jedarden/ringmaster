@@ -5,6 +5,7 @@ import type { Project, AnyTask, TaskCreate, EpicCreate } from "../types";
 import { TaskStatus, TaskType, Priority } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { ChatPanel } from "../components/ChatPanel";
+import { FileBrowser } from "../components/FileBrowser";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -122,6 +123,8 @@ export function ProjectDetailPage() {
 
       <div className="project-detail-with-chat">
         <div className="project-main-content">
+          {projectId && <FileBrowser projectId={projectId} />}
+
           <div className="project-actions">
             <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("task"); }}>
               + New Task

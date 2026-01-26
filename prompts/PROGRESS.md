@@ -166,7 +166,7 @@ src/ringmaster/
 - ✅ ChatPanel component integrated in project detail view
 - ✅ Chat API client functions (messages, summaries, context)
 - ✅ Real-time chat message updates via WebSocket
-- 🔲 File browser and preview
+- ✅ FileBrowser component with directory navigation and file preview
 - 🔲 Voice input and file attachments
 
 ### Chat API (`src/ringmaster/api/routes/chat.py`)
@@ -178,11 +178,20 @@ src/ringmaster/
 - ✅ Clear summaries endpoint for re-summarization
 - ✅ 12 integration tests covering all endpoints
 
+### File Browser API (`src/ringmaster/api/routes/files.py`)
+- ✅ Directory listing endpoint with breadcrumb navigation support
+- ✅ File content retrieval with binary detection
+- ✅ Path traversal protection (security)
+- ✅ Smart file type detection (text vs binary)
+- ✅ Ignored directories filtering (.git, node_modules, etc.)
+- ✅ Project working directory from repo_url or settings.working_dir
+- ✅ 6 integration tests covering all endpoints
+
 ## Next Steps
 
-1. **File Browser**: Add file system browsing in project detail view
-2. **Voice Input**: Add voice input to chat interface
-3. **End-to-end Test**: Create an integration test that runs the full flywheel loop
+1. **Voice Input**: Add voice input to chat interface
+2. **End-to-end Test**: Create an integration test that runs the full flywheel loop
+3. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
 
 ## Iteration Log
 
@@ -201,6 +210,7 @@ src/ringmaster/
 | 11 | 2026-01-26 | Wire ChatPanel to WebSocket: MESSAGE_CREATED event type, real-time message updates without polling, duplicate detection |
 | 12 | 2026-01-26 | Implement hot-reload system: FileChangeWatcher, ConfigWatcher, SafetyValidator, HotReloader with test validation, module reload, and git rollback, 22 new tests, total 108 tests passing |
 | 13 | 2026-01-26 | Integrate hot-reload into scheduler for self-improvement flywheel: detect source modifications after task completion, run tests, reload modules on success, rollback on failure, SCHEDULER_RELOAD event, 5 new tests, total 113 tests passing |
+| 14 | 2026-01-26 | Add file browser: REST API for directory listing and file content, FileBrowser React component with breadcrumb navigation, file preview with syntax detection, path traversal protection, 6 new tests, total 119 tests passing |
 
 ## Blockers
 

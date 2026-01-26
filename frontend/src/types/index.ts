@@ -261,3 +261,27 @@ export interface HistoryContextResponse {
   estimated_tokens: number;
   formatted_prompt: string;
 }
+
+// File browser types
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number | null;
+  modified_at: number | null;
+}
+
+export interface DirectoryListing {
+  path: string;
+  entries: FileEntry[];
+  parent_path: string | null;
+}
+
+export interface FileContent {
+  path: string;
+  content: string;
+  size: number;
+  mime_type: string | null;
+  is_binary: boolean;
+}

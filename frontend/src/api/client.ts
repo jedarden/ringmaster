@@ -25,6 +25,8 @@ import type {
   Summary,
   HistoryContextRequest,
   HistoryContextResponse,
+  DirectoryListing,
+  FileContent,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -427,6 +429,28 @@ export async function clearSummaries(
     method: "DELETE",
   });
   return handleResponse<{ deleted: number }>(response);
+}
+
+// File Browser API
+
+export async function listDirectory(
+  projectId: string,
+  path = ""
+): Promise<DirectoryListing> {
+  const params = new URLSearchParams();
+  if (path) params.set("path", path);
+
+  const response = await fetch(`${API_BASE}/projects/${projectId}/files?${params}`);
+  return handleResponse<DirectoryListing>(response);
+}
+
+export async function getFileContent(
+  projectId: string,
+  path: string
+): Promise<FileContent> {
+  const params = new URLSearchParams({ path });
+  const response = await fetch(`${API_BASE}/projects/${projectId}/files/content?${params}`);
+  return handleResponse<FileContent>(response);
 }
 
 export { ApiError };

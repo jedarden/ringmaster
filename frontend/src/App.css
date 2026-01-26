@@ -860,3 +860,198 @@ textarea {
     height: 400px;
   }
 }
+
+/* File Browser */
+.file-browser {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  height: 400px;
+  margin-bottom: 1.5rem;
+}
+
+.file-browser-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.file-browser-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.file-breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.breadcrumb-sep {
+  color: var(--color-text-muted);
+  margin: 0 0.1rem;
+}
+
+.breadcrumb-btn {
+  background: none;
+  border: none;
+  color: var(--color-info);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.breadcrumb-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.breadcrumb-btn.active {
+  color: var(--color-text);
+  cursor: default;
+}
+
+.file-browser-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.file-list {
+  width: 45%;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-primary);
+}
+
+.file-entry {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.file-entry:hover {
+  background: var(--color-surface-hover);
+}
+
+.file-entry.selected {
+  background: var(--color-primary);
+}
+
+.file-entry-parent {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.file-entry-dir .file-name {
+  color: var(--color-info);
+}
+
+.file-icon {
+  flex-shrink: 0;
+  width: 1.2rem;
+  text-align: center;
+}
+
+.file-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+}
+
+.file-size {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.file-empty {
+  padding: 1rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-style: italic;
+}
+
+.file-preview {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.file-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--color-bg);
+  background: var(--color-bg);
+}
+
+.file-preview-name {
+  font-weight: bold;
+  font-size: 0.875rem;
+}
+
+.file-preview-meta {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.file-preview-content {
+  flex: 1;
+  overflow: auto;
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--color-bg);
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.file-preview-content code {
+  display: block;
+}
+
+.file-preview-loading,
+.file-preview-error,
+.file-preview-binary {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+}
+
+.file-preview-error {
+  color: var(--color-error);
+}
+
+.file-browser-loading {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.file-browser-error {
+  height: auto;
+}
+
+.file-browser-error-message {
+  padding: 1.5rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-style: italic;
+}

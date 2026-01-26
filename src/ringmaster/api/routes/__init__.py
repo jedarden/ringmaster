@@ -1,5 +1,5 @@
 """API route modules."""
 
-from ringmaster.api.routes import chat, projects, queue, tasks, workers, ws
+from ringmaster.api.routes import chat, files, projects, queue, tasks, workers, ws
 
-__all__ = ["chat", "projects", "queue", "tasks", "workers", "ws"]
+__all__ = ["chat", "files", "projects", "queue", "tasks", "workers", "ws"]

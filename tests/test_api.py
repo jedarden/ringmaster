@@ -856,3 +856,138 @@ class TestChatAPI:
         )
         assert response.status_code == 200
         assert "deleted" in response.json()
+
+
+class TestFileBrowserAPI:
+    """Tests for file browser API."""
+
+    async def test_list_directory_no_working_dir(self, client: AsyncClient):
+        """Test listing files when project has no working directory configured."""
+        # Create project without working_dir
+        project_response = await client.post(
+            "/api/projects", json={"name": "No WorkDir Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/projects/{project_id}/files")
+        assert response.status_code == 400
+        assert "working directory" in response.json()["detail"].lower()
+
+    async def test_list_directory_with_working_dir(self, client: AsyncClient, app_with_db):
+        """Test listing files with a valid working directory."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create some test files
+            test_dir = Path(tmpdir)
+            (test_dir / "file1.py").write_text("# Python file")
+            (test_dir / "file2.txt").write_text("Text file")
+            (test_dir / "subdir").mkdir()
+            (test_dir / "subdir" / "nested.js").write_text("// JS file")
+
+            # Create project with working_dir in settings
+            project_response = await client.post(
+                "/api/projects",
+                json={
+                    "name": "File Browser Project",
+                    "repo_url": str(test_dir),  # Use local path
+                },
+            )
+            project_id = project_response.json()["id"]
+
+            # List root directory
+            response = await client.get(f"/api/projects/{project_id}/files")
+            assert response.status_code == 200
+            data = response.json()
+            assert data["path"] == ""
+            assert data["parent_path"] is None
+            entries = {e["name"]: e for e in data["entries"]}
+            assert "file1.py" in entries
+            assert "file2.txt" in entries
+            assert "subdir" in entries
+            assert entries["subdir"]["is_dir"] is True
+            assert entries["file1.py"]["is_dir"] is False
+
+    async def test_list_subdirectory(self, client: AsyncClient):
+        """Test listing files in a subdirectory."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_dir = Path(tmpdir)
+            (test_dir / "subdir").mkdir()
+            (test_dir / "subdir" / "nested.py").write_text("# Nested")
+
+            project_response = await client.post(
+                "/api/projects",
+                json={"name": "Subdir Project", "repo_url": str(test_dir)},
+            )
+            project_id = project_response.json()["id"]
+
+            response = await client.get(
+                f"/api/projects/{project_id}/files", params={"path": "subdir"}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["path"] == "subdir"
+            assert data["parent_path"] == ""
+            entries = {e["name"]: e for e in data["entries"]}
+            assert "nested.py" in entries
+
+    async def test_get_file_content(self, client: AsyncClient):
+        """Test getting file content."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            test_dir = Path(tmpdir)
+            (test_dir / "test.py").write_text("print('hello')")
+
+            project_response = await client.post(
+                "/api/projects",
+                json={"name": "Content Project", "repo_url": str(test_dir)},
+            )
+            project_id = project_response.json()["id"]
+
+            response = await client.get(
+                f"/api/projects/{project_id}/files/content", params={"path": "test.py"}
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["path"] == "test.py"
+            assert data["content"] == "print('hello')"
+            assert data["is_binary"] is False
+
+    async def test_get_file_content_not_found(self, client: AsyncClient):
+        """Test getting content of non-existent file."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_response = await client.post(
+                "/api/projects",
+                json={"name": "NotFound Project", "repo_url": tmpdir},
+            )
+            project_id = project_response.json()["id"]
+
+            response = await client.get(
+                f"/api/projects/{project_id}/files/content",
+                params={"path": "nonexistent.py"},
+            )
+            assert response.status_code == 404
+
+    async def test_path_traversal_blocked(self, client: AsyncClient):
+        """Test that path traversal attempts are blocked."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_response = await client.post(
+                "/api/projects",
+                json={"name": "Traversal Project", "repo_url": tmpdir},
+            )
+            project_id = project_response.json()["id"]
+
+            response = await client.get(
+                f"/api/projects/{project_id}/files", params={"path": "../../../etc"}
+            )
+            assert response.status_code == 403
