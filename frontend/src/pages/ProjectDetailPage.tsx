@@ -4,6 +4,7 @@ import { getProject, listTasks, createTask, createEpic, updateTask, deleteTask }
 import type { Project, AnyTask, TaskCreate, EpicCreate } from "../types";
 import { TaskStatus, TaskType, Priority } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
+import { ChatPanel } from "../components/ChatPanel";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -119,106 +120,114 @@ export function ProjectDetailPage() {
 
       {error && <div className="error">{error}</div>}
 
-      <div className="project-actions">
-        <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("task"); }}>
-          + New Task
-        </button>
-        <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("epic"); }}>
-          + New Epic
-        </button>
-      </div>
-
-      {showTaskForm && (
-        <form onSubmit={handleCreateTask} className="create-form">
-          <h3>Create {taskType === "epic" ? "Epic" : "Task"}</h3>
-          <input
-            type="text"
-            placeholder="Title"
-            value={newTask.title}
-            onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-            required
-          />
-          <textarea
-            placeholder="Description (optional)"
-            value={newTask.description || ""}
-            onChange={(e) => setNewTask({ ...newTask, description: e.target.value || null })}
-          />
-          <select
-            value={newTask.priority || Priority.P2}
-            onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as Priority })}
-          >
-            <option value={Priority.P0}>P0 - Critical</option>
-            <option value={Priority.P1}>P1 - High</option>
-            <option value={Priority.P2}>P2 - Medium</option>
-            <option value={Priority.P3}>P3 - Low</option>
-            <option value={Priority.P4}>P4 - Lowest</option>
-          </select>
-          <div className="form-actions">
-            <button type="submit">Create</button>
-            <button type="button" onClick={() => setShowTaskForm(false)}>Cancel</button>
+      <div className="project-detail-with-chat">
+        <div className="project-main-content">
+          <div className="project-actions">
+            <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("task"); }}>
+              + New Task
+            </button>
+            <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("epic"); }}>
+              + New Epic
+            </button>
           </div>
-        </form>
-      )}
 
-      {epics.length > 0 && (
-        <div className="section">
-          <h2>Epics</h2>
-          <div className="epics-list">
-            {epics.map((epic) => (
-              <div key={epic.id} className="epic-card">
-                <div className="epic-header">
-                  <span className={`priority priority-${epic.priority.toLowerCase()}`}>
-                    {epic.priority}
-                  </span>
-                  <h3>{epic.title}</h3>
-                  <span className={`status status-${epic.status}`}>{epic.status}</span>
-                </div>
-                {epic.description && <p>{epic.description}</p>}
-                <button onClick={() => handleDeleteTask(epic.id)} className="delete-btn">
-                  Delete
-                </button>
+          {showTaskForm && (
+            <form onSubmit={handleCreateTask} className="create-form">
+              <h3>Create {taskType === "epic" ? "Epic" : "Task"}</h3>
+              <input
+                type="text"
+                placeholder="Title"
+                value={newTask.title}
+                onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                required
+              />
+              <textarea
+                placeholder="Description (optional)"
+                value={newTask.description || ""}
+                onChange={(e) => setNewTask({ ...newTask, description: e.target.value || null })}
+              />
+              <select
+                value={newTask.priority || Priority.P2}
+                onChange={(e) => setNewTask({ ...newTask, priority: e.target.value as Priority })}
+              >
+                <option value={Priority.P0}>P0 - Critical</option>
+                <option value={Priority.P1}>P1 - High</option>
+                <option value={Priority.P2}>P2 - Medium</option>
+                <option value={Priority.P3}>P3 - Low</option>
+                <option value={Priority.P4}>P4 - Lowest</option>
+              </select>
+              <div className="form-actions">
+                <button type="submit">Create</button>
+                <button type="button" onClick={() => setShowTaskForm(false)}>Cancel</button>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </form>
+          )}
 
-      <div className="section">
-        <h2>Tasks</h2>
-        <div className="kanban-board">
-          {Object.entries(groupedTasks).map(([status, statusTasks]) => (
-            <div key={status} className="kanban-column">
-              <h3 className="column-header">
-                {status.replace("_", " ")} ({statusTasks.length})
-              </h3>
-              <div className="column-tasks">
-                {statusTasks.map((task) => (
-                  <div key={task.id} className="task-card">
-                    <div className="task-header">
-                      <span className={`priority priority-${task.priority.toLowerCase()}`}>
-                        {task.priority}
+          {epics.length > 0 && (
+            <div className="section">
+              <h2>Epics</h2>
+              <div className="epics-list">
+                {epics.map((epic) => (
+                  <div key={epic.id} className="epic-card">
+                    <div className="epic-header">
+                      <span className={`priority priority-${epic.priority.toLowerCase()}`}>
+                        {epic.priority}
                       </span>
-                      <span className="task-id">{task.id}</span>
+                      <h3>{epic.title}</h3>
+                      <span className={`status status-${epic.status}`}>{epic.status}</span>
                     </div>
-                    <h4>{task.title}</h4>
-                    <div className="task-actions">
-                      <select
-                        value={task.status}
-                        onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
-                      >
-                        {Object.values(TaskStatus).map((s) => (
-                          <option key={s} value={s}>{s}</option>
-                        ))}
-                      </select>
-                      <button onClick={() => handleDeleteTask(task.id)} className="delete-btn">
-                        X
-                      </button>
-                    </div>
+                    {epic.description && <p>{epic.description}</p>}
+                    <button onClick={() => handleDeleteTask(epic.id)} className="delete-btn">
+                      Delete
+                    </button>
                   </div>
                 ))}
               </div>
             </div>
-          ))}
+          )}
+
+          <div className="section">
+            <h2>Tasks</h2>
+            <div className="kanban-board">
+              {Object.entries(groupedTasks).map(([status, statusTasks]) => (
+                <div key={status} className="kanban-column">
+                  <h3 className="column-header">
+                    {status.replace("_", " ")} ({statusTasks.length})
+                  </h3>
+                  <div className="column-tasks">
+                    {statusTasks.map((task) => (
+                      <div key={task.id} className="task-card">
+                        <div className="task-header">
+                          <span className={`priority priority-${task.priority.toLowerCase()}`}>
+                            {task.priority}
+                          </span>
+                          <span className="task-id">{task.id}</span>
+                        </div>
+                        <h4>{task.title}</h4>
+                        <div className="task-actions">
+                          <select
+                            value={task.status}
+                            onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
+                          >
+                            {Object.values(TaskStatus).map((s) => (
+                              <option key={s} value={s}>{s}</option>
+                            ))}
+                          </select>
+                          <button onClick={() => handleDeleteTask(task.id)} className="delete-btn">
+                            X
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="project-chat-sidebar">
+          {projectId && <ChatPanel projectId={projectId} />}
         </div>
       </div>
     </div>

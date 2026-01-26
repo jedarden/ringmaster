@@ -20,6 +20,11 @@ import type {
   TaskStatus,
   TaskType,
   WorkerStatus,
+  ChatMessage,
+  MessageCreate,
+  Summary,
+  HistoryContextRequest,
+  HistoryContextResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -325,6 +330,103 @@ export function connectWebSocket(
   if (onClose) ws.addEventListener("close", onClose);
 
   return ws;
+}
+
+// Chat API
+
+export interface ListMessagesParams {
+  task_id?: string | null;
+  limit?: number;
+  offset?: number;
+  since_id?: number | null;
+}
+
+export async function listMessages(
+  projectId: string,
+  params: ListMessagesParams = {}
+): Promise<ChatMessage[]> {
+  const searchParams = new URLSearchParams();
+  if (params.task_id) searchParams.set("task_id", params.task_id);
+  searchParams.set("limit", (params.limit || 100).toString());
+  searchParams.set("offset", (params.offset || 0).toString());
+  if (params.since_id) searchParams.set("since_id", params.since_id.toString());
+
+  const response = await fetch(`${API_BASE}/projects/${projectId}/messages?${searchParams}`);
+  return handleResponse<ChatMessage[]>(response);
+}
+
+export async function createMessage(
+  projectId: string,
+  data: MessageCreate
+): Promise<ChatMessage> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/messages`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ChatMessage>(response);
+}
+
+export async function getRecentMessages(
+  projectId: string,
+  count = 10,
+  taskId?: string
+): Promise<ChatMessage[]> {
+  const params = new URLSearchParams({ count: count.toString() });
+  if (taskId) params.set("task_id", taskId);
+
+  const response = await fetch(`${API_BASE}/projects/${projectId}/messages/recent?${params}`);
+  return handleResponse<ChatMessage[]>(response);
+}
+
+export async function getMessageCount(
+  projectId: string,
+  taskId?: string
+): Promise<{ count: number }> {
+  const params = taskId ? `?task_id=${taskId}` : "";
+  const response = await fetch(`${API_BASE}/projects/${projectId}/messages/count${params}`);
+  return handleResponse<{ count: number }>(response);
+}
+
+export async function listSummaries(
+  projectId: string,
+  taskId?: string
+): Promise<Summary[]> {
+  const params = taskId ? `?task_id=${taskId}` : "";
+  const response = await fetch(`${API_BASE}/projects/${projectId}/summaries${params}`);
+  return handleResponse<Summary[]>(response);
+}
+
+export async function getLatestSummary(
+  projectId: string,
+  taskId?: string
+): Promise<Summary> {
+  const params = taskId ? `?task_id=${taskId}` : "";
+  const response = await fetch(`${API_BASE}/projects/${projectId}/summaries/latest${params}`);
+  return handleResponse<Summary>(response);
+}
+
+export async function getHistoryContext(
+  projectId: string,
+  request?: HistoryContextRequest
+): Promise<HistoryContextResponse> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/context`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request || {}),
+  });
+  return handleResponse<HistoryContextResponse>(response);
+}
+
+export async function clearSummaries(
+  projectId: string,
+  afterId = 0
+): Promise<{ deleted: number }> {
+  const params = new URLSearchParams({ after_id: afterId.toString() });
+  const response = await fetch(`${API_BASE}/projects/${projectId}/summaries?${params}`, {
+    method: "DELETE",
+  });
+  return handleResponse<{ deleted: number }>(response);
 }
 
 export { ApiError };

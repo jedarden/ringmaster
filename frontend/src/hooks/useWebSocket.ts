@@ -58,6 +58,7 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
   const [lastEvent, setLastEvent] = useState<WebSocketEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     // Build WebSocket URL
@@ -92,13 +93,18 @@ export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketRet
 
       if (autoReconnect) {
         reconnectTimeoutRef.current = window.setTimeout(() => {
-          connect();
+          connectRef.current();
         }, reconnectInterval);
       }
     };
 
     wsRef.current = ws;
   }, [projectId, onEvent, autoReconnect, reconnectInterval]);
+
+  // Keep ref updated with latest connect function
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     connect();

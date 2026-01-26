@@ -208,3 +208,56 @@ export interface CompleteRequest {
 export interface RecalculateRequest {
   project_id: string;
 }
+
+// Chat types
+
+export interface ChatMessage {
+  id: number | null;
+  project_id: string;
+  task_id: string | null;
+  role: "user" | "assistant" | "system";
+  content: string;
+  media_type: string | null;
+  media_path: string | null;
+  token_count: number | null;
+  created_at: string;
+}
+
+export interface MessageCreate {
+  project_id: string;
+  task_id?: string | null;
+  role: "user" | "assistant" | "system";
+  content: string;
+  media_type?: string | null;
+  media_path?: string | null;
+  token_count?: number | null;
+}
+
+export interface Summary {
+  id: number | null;
+  project_id: string;
+  task_id: string | null;
+  message_range_start: number;
+  message_range_end: number;
+  summary: string;
+  key_decisions: string[];
+  token_count: number | null;
+  created_at: string;
+}
+
+export interface HistoryContextRequest {
+  task_id?: string | null;
+  recent_verbatim?: number;
+  summary_threshold?: number;
+  chunk_size?: number;
+  max_context_tokens?: number;
+}
+
+export interface HistoryContextResponse {
+  recent_messages: ChatMessage[];
+  summaries: Summary[];
+  key_decisions: string[];
+  total_messages: number;
+  estimated_tokens: number;
+  formatted_prompt: string;
+}
