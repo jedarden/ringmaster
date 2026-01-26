@@ -140,16 +140,17 @@ src/ringmaster/
 - ✅ TypeScript types matching backend domain models
 - ✅ Layout component with navigation and API health indicator
 - ✅ Vite proxy configuration for development
-- 🔲 Real-time WebSocket updates
+- ✅ Real-time WebSocket updates via useWebSocket hook
+- ✅ WebSocket connection status in header
 - 🔲 File browser and preview
 - 🔲 Voice input and file attachments
 
 ## Next Steps
 
-1. **WebSocket Integration**: Connect frontend to real-time events
-2. **RLM Summarization**: Implement recursive chat history compression
-3. **Code Context**: Intelligent file selection based on task
-4. **Hot Reload**: Implement component hot-reload for self-improvement
+1. **RLM Summarization**: Implement recursive chat history compression
+2. **Code Context**: Intelligent file selection based on task
+3. **Hot Reload**: Implement component hot-reload for self-improvement
+4. **File Browser**: Add file system browsing in project detail view
 
 ## Iteration Log
 
@@ -160,7 +161,8 @@ src/ringmaster/
 | 3 | 2026-01-26 | Add WebSocket support: event bus system, EventType enum, /ws endpoint with project filtering, event emission from task API routes |
 | 4 | 2026-01-26 | Add comprehensive API integration tests: 29 tests covering health, projects, tasks, workers, and queue endpoints |
 | 5 | 2026-01-26 | Build React frontend: Vite scaffold, TypeScript types, API client, React Router with 4 views (Projects, ProjectDetail, Workers, Queue), Layout with nav and API health indicator |
+| 6 | 2026-01-26 | Add WebSocket integration to frontend: useWebSocket hook with auto-reconnect, all pages use real-time events for auto-refresh, WS connection status in header |
 
 ## Blockers
 
-None - ready for frontend development and feature expansion.
+None - ready for feature expansion.

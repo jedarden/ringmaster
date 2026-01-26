@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { healthCheck } from "../api/client";
+import { useWebSocket } from "../hooks/useWebSocket";
 
 export function Layout() {
   const [apiStatus, setApiStatus] = useState<"connected" | "disconnected" | "checking">("checking");
+  const { connected: wsConnected } = useWebSocket();
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -38,6 +40,9 @@ export function Layout() {
           </nav>
         </div>
         <div className="header-right">
+          <span className={`ws-status status-${wsConnected ? "connected" : "disconnected"}`}>
+            WS: {wsConnected ? "live" : "offline"}
+          </span>
           <span className={`api-status status-${apiStatus}`}>
             API: {apiStatus}
           </span>

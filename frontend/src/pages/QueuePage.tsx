@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { getQueueStats, getReadyTasks } from "../api/client";
 import type { QueueStats, Task } from "../types";
+import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 
 export function QueuePage() {
   const [stats, setStats] = useState<QueueStats | null>(null);
@@ -8,7 +9,7 @@ export function QueuePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [statsData, tasksData] = await Promise.all([
@@ -23,14 +24,21 @@ export function QueuePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Handle WebSocket events for real-time updates
+  const handleEvent = useCallback((event: WebSocketEvent) => {
+    // Refresh on task or queue events
+    if (event.type.startsWith("task.") || event.type.startsWith("queue.") || event.type.startsWith("worker.")) {
+      loadData();
+    }
+  }, [loadData]);
+
+  useWebSocket({ onEvent: handleEvent });
 
   useEffect(() => {
     loadData();
-    // Refresh every 5 seconds
-    const interval = setInterval(loadData, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  }, [loadData]);
 
   if (loading && !stats) {
     return <div className="loading">Loading queue...</div>;

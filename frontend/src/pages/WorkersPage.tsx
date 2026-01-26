@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   listWorkers,
   createWorker,
@@ -8,6 +8,7 @@ import {
 } from "../api/client";
 import type { Worker, WorkerCreate } from "../types";
 import { WorkerStatus } from "../types";
+import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 
 export function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -20,7 +21,7 @@ export function WorkersPage() {
     command: "claude",
   });
 
-  const loadWorkers = async () => {
+  const loadWorkers = useCallback(async () => {
     try {
       setLoading(true);
       const data = await listWorkers();
@@ -31,11 +32,20 @@ export function WorkersPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  // Handle WebSocket events for real-time updates
+  const handleEvent = useCallback((event: WebSocketEvent) => {
+    if (event.type.startsWith("worker.")) {
+      loadWorkers();
+    }
+  }, [loadWorkers]);
+
+  useWebSocket({ onEvent: handleEvent });
 
   useEffect(() => {
     loadWorkers();
-  }, []);
+  }, [loadWorkers]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();

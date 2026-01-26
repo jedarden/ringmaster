@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getProject, listTasks, createTask, createEpic, updateTask, deleteTask } from "../api/client";
 import type { Project, AnyTask, TaskCreate, EpicCreate } from "../types";
 import { TaskStatus, TaskType, Priority } from "../types";
+import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -14,7 +15,7 @@ export function ProjectDetailPage() {
   const [taskType, setTaskType] = useState<"task" | "epic">("task");
   const [newTask, setNewTask] = useState<TaskCreate | EpicCreate>({ project_id: "", title: "" });
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!projectId) return;
 
     try {
@@ -31,11 +32,21 @@ export function ProjectDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
+
+  // Handle WebSocket events for real-time updates (filtered by project)
+  const handleEvent = useCallback((event: WebSocketEvent) => {
+    // Only refresh if event is for this project or project-related
+    if (event.project_id === projectId || event.type.startsWith("project.")) {
+      loadData();
+    }
+  }, [loadData, projectId]);
+
+  useWebSocket({ projectId, onEvent: handleEvent });
 
   useEffect(() => {
     loadData();
-  }, [projectId]);
+  }, [loadData]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();

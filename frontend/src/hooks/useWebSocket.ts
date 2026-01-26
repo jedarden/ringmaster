@@ -1,205 +1,141 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { useCardStore } from '../store/cardStore';
-import { useLoopStore } from '../store/loopStore';
-import type { Card, LoopState } from '../types';
+import { useEffect, useRef, useCallback, useState } from "react";
 
-const WS_URL = import.meta.env.VITE_WS_URL || `ws://${window.location.host}/api/ws`;
-const RECONNECT_INTERVAL = 3000;
-const HEARTBEAT_INTERVAL = 30000;
+export type EventType =
+  | "task.created"
+  | "task.updated"
+  | "task.deleted"
+  | "task.started"
+  | "task.completed"
+  | "task.failed"
+  | "worker.created"
+  | "worker.updated"
+  | "worker.deleted"
+  | "worker.connected"
+  | "worker.disconnected"
+  | "project.created"
+  | "project.updated"
+  | "project.deleted"
+  | "queue.updated"
+  | "decision.created"
+  | "decision.resolved"
+  | "question.created"
+  | "question.answered"
+  | "scheduler.started"
+  | "scheduler.stopped";
 
-interface WebSocketMessage {
-  type: string;
-  cardId?: string;
-  data?: unknown;
-  timestamp?: string;
+export interface WebSocketEvent {
+  id: string;
+  type: EventType;
+  timestamp: string;
+  data: Record<string, unknown>;
+  project_id: string | null;
 }
 
-export function useWebSocket() {
+export type EventHandler = (event: WebSocketEvent) => void;
+
+interface UseWebSocketOptions {
+  projectId?: string;
+  onEvent?: EventHandler;
+  autoReconnect?: boolean;
+  reconnectInterval?: number;
+}
+
+interface UseWebSocketReturn {
+  connected: boolean;
+  lastEvent: WebSocketEvent | null;
+  send: (message: object) => void;
+}
+
+export function useWebSocket(options: UseWebSocketOptions = {}): UseWebSocketReturn {
+  const {
+    projectId,
+    onEvent,
+    autoReconnect = true,
+    reconnectInterval = 3000,
+  } = options;
+
+  const [connected, setConnected] = useState(false);
+  const [lastEvent, setLastEvent] = useState<WebSocketEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const heartbeatIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const connectRef = useRef<() => void>(() => {});
-  const [isConnected, setIsConnected] = useState(false);
+  const reconnectTimeoutRef = useRef<number | null>(null);
 
-  const updateCard = useCardStore((s) => s.updateCard);
-  const addCard = useCardStore((s) => s.addCard);
-  const setLoopState = useLoopStore((s) => s.setLoopState);
-  const updateLoopIteration = useLoopStore((s) => s.updateLoopIteration);
-  const updateLoopStatus = useLoopStore((s) => s.updateLoopStatus);
+  const connect = useCallback(() => {
+    // Build WebSocket URL
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const params = projectId ? `?project_id=${projectId}` : "";
+    const wsUrl = `${protocol}//${host}/ws${params}`;
 
-  const handleMessage = useCallback(
-    (message: WebSocketMessage) => {
-      switch (message.type) {
-        case 'card_created':
-          addCard(message.data as Card);
-          break;
+    const ws = new WebSocket(wsUrl);
 
-        case 'card_updated':
-          updateCard(message.data as Card);
-          break;
-
-        case 'state_changed':
-          if (message.data && typeof message.data === 'object') {
-            const data = message.data as { card: Card };
-            updateCard(data.card);
-          }
-          break;
-
-        case 'loop_started':
-          if (message.cardId && message.data) {
-            setLoopState(message.cardId, message.data as LoopState);
-          }
-          break;
-
-        case 'loop_iteration':
-          if (message.cardId && message.data) {
-            const data = message.data as {
-              iteration: number;
-              costUsd: number;
-              tokensUsed: number;
-            };
-            updateLoopIteration(
-              message.cardId,
-              data.iteration,
-              data.costUsd,
-              data.tokensUsed
-            );
-          }
-          break;
-
-        case 'loop_paused':
-          if (message.cardId) {
-            updateLoopStatus(message.cardId, 'paused');
-          }
-          break;
-
-        case 'loop_resumed':
-          if (message.cardId) {
-            updateLoopStatus(message.cardId, 'running');
-          }
-          break;
-
-        case 'loop_completed':
-        case 'loop_stopped':
-        case 'loop_failed':
-          if (message.cardId) {
-            setLoopState(message.cardId, null);
-          }
-          break;
-
-        case 'error_detected':
-          // Could show a toast notification here
-          console.warn('Error detected:', message.data);
-          break;
-
-        case 'pong':
-          // Heartbeat response, no action needed
-          break;
-
-        default:
-          console.log('Unknown WebSocket message:', message.type);
-      }
-    },
-    [addCard, updateCard, setLoopState, updateLoopIteration, updateLoopStatus]
-  );
-
-  // Use ref to break circular dependency in useCallback
-  useEffect(() => {
-    const scheduleReconnect = () => {
-      reconnectTimeoutRef.current = setTimeout(() => {
-        connectRef.current();
-      }, RECONNECT_INTERVAL);
+    ws.onopen = () => {
+      setConnected(true);
     };
 
-    connectRef.current = () => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        return;
-      }
-
+    ws.onmessage = (event) => {
       try {
-        const ws = new WebSocket(WS_URL);
-        wsRef.current = ws;
-
-        ws.onopen = () => {
-          console.log('WebSocket connected');
-          setIsConnected(true);
-
-          // Start heartbeat
-          heartbeatIntervalRef.current = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ type: 'ping' }));
-            }
-          }, HEARTBEAT_INTERVAL);
-        };
-
-        ws.onclose = () => {
-          console.log('WebSocket disconnected');
-          setIsConnected(false);
-
-          // Clear heartbeat
-          if (heartbeatIntervalRef.current) {
-            clearInterval(heartbeatIntervalRef.current);
-          }
-
-          // Reconnect after delay
-          scheduleReconnect();
-        };
-
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-
-        ws.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data) as WebSocketMessage;
-            handleMessage(message);
-          } catch (e) {
-            console.error('Failed to parse WebSocket message:', e);
-          }
-        };
-      } catch (e) {
-        console.error('Failed to create WebSocket:', e);
-        scheduleReconnect();
+        const data = JSON.parse(event.data) as WebSocketEvent;
+        setLastEvent(data);
+        onEvent?.(data);
+      } catch {
+        // Ignore non-JSON messages (like pong responses)
       }
     };
 
-    // Initial connection
-    connectRef.current();
+    ws.onerror = () => {
+      // Error handling is done in onclose
+    };
+
+    ws.onclose = () => {
+      setConnected(false);
+      wsRef.current = null;
+
+      if (autoReconnect) {
+        reconnectTimeoutRef.current = window.setTimeout(() => {
+          connect();
+        }, reconnectInterval);
+      }
+    };
+
+    wsRef.current = ws;
+  }, [projectId, onEvent, autoReconnect, reconnectInterval]);
+
+  useEffect(() => {
+    connect();
 
     return () => {
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      if (heartbeatIntervalRef.current) {
-        clearInterval(heartbeatIntervalRef.current);
+      if (wsRef.current) {
+        wsRef.current.close();
       }
-      wsRef.current?.close();
     };
-  }, [handleMessage]);
+  }, [connect]);
 
-  const subscribe = useCallback((cardIds: string[], projectIds: string[] = []) => {
+  const send = useCallback((message: object) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'subscribe',
-          cardIds,
-          projectIds,
-        })
-      );
+      wsRef.current.send(JSON.stringify(message));
     }
   }, []);
 
-  const unsubscribe = useCallback((cardIds: string[], projectIds: string[] = []) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'unsubscribe',
-          cardIds,
-          projectIds,
-        })
-      );
-    }
-  }, []);
+  return { connected, lastEvent, send };
+}
 
-  return { isConnected, subscribe, unsubscribe };
+// Hook for subscribing to specific event types
+export function useEventSubscription(
+  eventTypes: EventType[],
+  handler: EventHandler,
+  projectId?: string
+): { connected: boolean } {
+  const { connected } = useWebSocket({
+    projectId,
+    onEvent: (event) => {
+      if (eventTypes.includes(event.type)) {
+        handler(event);
+      }
+    },
+  });
+
+  return { connected };
 }
