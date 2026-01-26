@@ -37,6 +37,9 @@ export function Layout() {
             <NavLink to="/queue" className={({ isActive }) => isActive ? "active" : ""}>
               Queue
             </NavLink>
+            <NavLink to="/metrics" className={({ isActive }) => isActive ? "active" : ""}>
+              Metrics
+            </NavLink>
           </nav>
         </div>
         <div className="header-right">

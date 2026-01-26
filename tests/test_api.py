@@ -991,3 +991,152 @@ class TestFileBrowserAPI:
                 f"/api/projects/{project_id}/files", params={"path": "../../../etc"}
             )
             assert response.status_code == 403
+
+
+class TestMetricsAPI:
+    """Tests for metrics API."""
+
+    async def test_get_metrics(self, client: AsyncClient):
+        """Test getting complete metrics."""
+        response = await client.get("/api/metrics")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check structure
+        assert "timestamp" in data
+        assert "task_stats" in data
+        assert "worker_stats" in data
+        assert "recent_events" in data
+        assert "activity_24h" in data
+        assert "activity_7d" in data
+
+        # Check task_stats fields
+        task_stats = data["task_stats"]
+        assert "total" in task_stats
+        assert "draft" in task_stats
+        assert "ready" in task_stats
+        assert "done" in task_stats
+        assert "failed" in task_stats
+
+        # Check worker_stats fields
+        worker_stats = data["worker_stats"]
+        assert "total" in worker_stats
+        assert "idle" in worker_stats
+        assert "busy" in worker_stats
+        assert "offline" in worker_stats
+        assert "total_completed" in worker_stats
+        assert "total_failed" in worker_stats
+
+        # Check activity fields
+        assert "tasks_completed" in data["activity_24h"]
+        assert "tasks_failed" in data["activity_24h"]
+        assert "tasks_created" in data["activity_24h"]
+
+    async def test_get_metrics_with_data(self, client: AsyncClient):
+        """Test metrics after creating tasks and workers."""
+        # Create a project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Metrics Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create some tasks
+        for i in range(3):
+            await client.post(
+                "/api/tasks",
+                json={"project_id": project_id, "title": f"Task {i}"},
+            )
+
+        # Create a worker
+        await client.post(
+            "/api/workers",
+            json={
+                "name": "Test Worker",
+                "type": "test",
+                "command": "echo",
+            },
+        )
+
+        # Get metrics
+        response = await client.get("/api/metrics")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Verify counts reflect our data
+        assert data["task_stats"]["total"] >= 3
+        assert data["worker_stats"]["total"] >= 1
+
+    async def test_get_task_stats(self, client: AsyncClient):
+        """Test getting task stats endpoint."""
+        response = await client.get("/api/metrics/tasks")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "ready" in data
+        assert "done" in data
+
+    async def test_get_worker_metrics(self, client: AsyncClient):
+        """Test getting worker metrics endpoint."""
+        response = await client.get("/api/metrics/workers")
+        assert response.status_code == 200
+        data = response.json()
+        assert "total" in data
+        assert "idle" in data
+        assert "busy" in data
+        assert "total_completed" in data
+
+    async def test_get_events(self, client: AsyncClient):
+        """Test getting recent events."""
+        response = await client.get("/api/metrics/events")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    async def test_get_events_with_filter(self, client: AsyncClient):
+        """Test getting events with filters."""
+        # Create a project and task to generate events
+        project_response = await client.post(
+            "/api/projects", json={"name": "Event Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Event Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Mark task as ready
+        await client.post("/api/queue/enqueue", json={"task_id": task_id})
+
+        # Get events filtered by entity_type
+        response = await client.get(
+            "/api/metrics/events", params={"entity_type": "task"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    async def test_get_activity(self, client: AsyncClient):
+        """Test getting activity summary."""
+        response = await client.get("/api/metrics/activity")
+        assert response.status_code == 200
+        data = response.json()
+        assert "tasks_completed" in data
+        assert "tasks_failed" in data
+        assert "tasks_created" in data
+
+    async def test_get_activity_custom_hours(self, client: AsyncClient):
+        """Test getting activity with custom hours parameter."""
+        response = await client.get("/api/metrics/activity", params={"hours": 48})
+        assert response.status_code == 200
+        data = response.json()
+        assert "tasks_completed" in data
+
+    async def test_get_metrics_event_limit(self, client: AsyncClient):
+        """Test metrics with custom event limit."""
+        response = await client.get("/api/metrics", params={"event_limit": 5})
+        assert response.status_code == 200
+        data = response.json()
+        # Recent events should be capped at the limit
+        assert len(data["recent_events"]) <= 5

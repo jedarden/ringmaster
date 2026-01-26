@@ -27,6 +27,11 @@ import type {
   HistoryContextResponse,
   DirectoryListing,
   FileContent,
+  MetricsResponse,
+  TaskStats,
+  WorkerMetrics,
+  RecentEvent,
+  ActivitySummary,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -451,6 +456,46 @@ export async function getFileContent(
   const params = new URLSearchParams({ path });
   const response = await fetch(`${API_BASE}/projects/${projectId}/files/content?${params}`);
   return handleResponse<FileContent>(response);
+}
+
+// Metrics API
+
+export async function getMetrics(eventLimit = 20): Promise<MetricsResponse> {
+  const params = new URLSearchParams({ event_limit: eventLimit.toString() });
+  const response = await fetch(`${API_BASE}/metrics?${params}`);
+  return handleResponse<MetricsResponse>(response);
+}
+
+export async function getTaskStats(): Promise<TaskStats> {
+  const response = await fetch(`${API_BASE}/metrics/tasks`);
+  return handleResponse<TaskStats>(response);
+}
+
+export async function getWorkerMetrics(): Promise<WorkerMetrics> {
+  const response = await fetch(`${API_BASE}/metrics/workers`);
+  return handleResponse<WorkerMetrics>(response);
+}
+
+export interface GetEventsParams {
+  limit?: number;
+  event_type?: string;
+  entity_type?: string;
+}
+
+export async function getEvents(params: GetEventsParams = {}): Promise<RecentEvent[]> {
+  const searchParams = new URLSearchParams();
+  if (params.limit) searchParams.set("limit", params.limit.toString());
+  if (params.event_type) searchParams.set("event_type", params.event_type);
+  if (params.entity_type) searchParams.set("entity_type", params.entity_type);
+
+  const response = await fetch(`${API_BASE}/metrics/events?${searchParams}`);
+  return handleResponse<RecentEvent[]>(response);
+}
+
+export async function getActivity(hours = 24): Promise<ActivitySummary> {
+  const params = new URLSearchParams({ hours: hours.toString() });
+  const response = await fetch(`${API_BASE}/metrics/activity?${params}`);
+  return handleResponse<ActivitySummary>(response);
 }
 
 export { ApiError };

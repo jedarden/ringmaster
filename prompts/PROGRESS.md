@@ -187,11 +187,26 @@ src/ringmaster/
 - ✅ Project working directory from repo_url or settings.working_dir
 - ✅ 6 integration tests covering all endpoints
 
+### Metrics API (`src/ringmaster/api/routes/metrics.py`)
+- ✅ Complete metrics endpoint with task/worker stats, events, activity summaries
+- ✅ Task stats endpoint (counts by status)
+- ✅ Worker metrics endpoint (status counts, completion totals)
+- ✅ Recent events endpoint with filtering (by event_type, entity_type)
+- ✅ Activity summary endpoint with custom time period
+- ✅ 9 integration tests covering all endpoints
+
+### Metrics Dashboard (`frontend/src/components/MetricsDashboard.tsx`)
+- ✅ Task overview grid with status counts and color coding
+- ✅ Worker status with success rate calculation
+- ✅ Activity comparison (24h vs 7 days)
+- ✅ Recent events timeline with icons and time-ago display
+- ✅ WebSocket integration for real-time updates
+- ✅ Dedicated /metrics route in navigation
+
 ## Next Steps
 
 1. **Voice Input**: Add voice input to chat interface
 2. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
-3. **Dashboard Metrics**: Add live metrics display (tasks completed, errors, reload history)
 
 ## Iteration Log
 
@@ -212,6 +227,7 @@ src/ringmaster/
 | 13 | 2026-01-26 | Integrate hot-reload into scheduler for self-improvement flywheel: detect source modifications after task completion, run tests, reload modules on success, rollback on failure, SCHEDULER_RELOAD event, 5 new tests, total 113 tests passing |
 | 14 | 2026-01-26 | Add file browser: REST API for directory listing and file content, FileBrowser React component with breadcrumb navigation, file preview with syntax detection, path traversal protection, 6 new tests, total 119 tests passing |
 | 15 | 2026-01-26 | Add end-to-end flywheel tests: 9 integration tests covering file change detection, hot-reload success/failure, mock worker simulation, protected file handling, total 128 tests passing |
+| 16 | 2026-01-26 | Add metrics dashboard: REST API for task/worker stats and events, MetricsDashboard React component with activity summaries and event timeline, 9 new tests, total 137 tests passing |
 
 ## Blockers
 

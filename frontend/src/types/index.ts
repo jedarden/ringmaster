@@ -285,3 +285,50 @@ export interface FileContent {
   mime_type: string | null;
   is_binary: boolean;
 }
+
+// Metrics types
+
+export interface TaskStats {
+  total: number;
+  draft: number;
+  ready: number;
+  assigned: number;
+  in_progress: number;
+  blocked: number;
+  review: number;
+  done: number;
+  failed: number;
+}
+
+export interface WorkerMetrics {
+  total: number;
+  idle: number;
+  busy: number;
+  offline: number;
+  total_completed: number;
+  total_failed: number;
+}
+
+export interface RecentEvent {
+  id: number;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  data: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ActivitySummary {
+  tasks_completed: number;
+  tasks_failed: number;
+  tasks_created: number;
+}
+
+export interface MetricsResponse {
+  timestamp: string;
+  task_stats: TaskStats;
+  worker_stats: WorkerMetrics;
+  recent_events: RecentEvent[];
+  activity_24h: ActivitySummary;
+  activity_7d: ActivitySummary;
+}
