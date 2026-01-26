@@ -1,217 +1,210 @@
-// Card states based on the state machine
-export type CardState =
-  | 'draft'
-  | 'planning'
-  | 'coding'
-  | 'code_review'
-  | 'testing'
-  | 'build_queue'
-  | 'building'
-  | 'build_success'
-  | 'build_failed'
-  | 'deploy_queue'
-  | 'deploying'
-  | 'verifying'
-  | 'completed'
-  | 'error_fixing'
-  | 'archived'
-  | 'failed';
+// Domain types matching backend models
 
-export interface Card {
-  id: string;
-  projectId: string;
-  title: string;
-  description?: string;
-  taskPrompt: string;
-  state: CardState;
-  previousState?: CardState;
-  loopIteration: number;
-  errorCount: number;
-  totalCostUsd: number;
-  totalTokens: number;
-  labels: string[];
-  priority: number;
-  pullRequestUrl?: string;
-  branchName?: string;
-  worktreePath?: string;
-  deploymentName?: string;
-  deploymentNamespace?: string;
-  argocdAppName?: string;
-  deadline?: string;
-  acceptanceCriteria?: AcceptanceCriterion[];
-  createdAt: string;
-  updatedAt: string;
-  stateChangedAt?: string;
-}
+export const Priority = {
+  P0: "P0",
+  P1: "P1",
+  P2: "P2",
+  P3: "P3",
+  P4: "P4",
+} as const;
+export type Priority = (typeof Priority)[keyof typeof Priority];
 
-export interface AcceptanceCriterion {
-  id: string;
-  description: string;
-  met: boolean;
-}
+export const TaskStatus = {
+  DRAFT: "draft",
+  READY: "ready",
+  ASSIGNED: "assigned",
+  IN_PROGRESS: "in_progress",
+  BLOCKED: "blocked",
+  REVIEW: "review",
+  DONE: "done",
+  FAILED: "failed",
+} as const;
+export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
+
+export const TaskType = {
+  EPIC: "epic",
+  TASK: "task",
+  SUBTASK: "subtask",
+  DECISION: "decision",
+  QUESTION: "question",
+} as const;
+export type TaskType = (typeof TaskType)[keyof typeof TaskType];
+
+export const WorkerStatus = {
+  IDLE: "idle",
+  BUSY: "busy",
+  OFFLINE: "offline",
+} as const;
+export type WorkerStatus = (typeof WorkerStatus)[keyof typeof WorkerStatus];
 
 export interface Project {
   id: string;
   name: string;
-  description?: string;
-  repositoryUrl: string;
-  repositoryPath?: string;
-  defaultBranch: string;
-  techStack?: string[];
-  codingConventions?: string;
-  cardCount: number;
-  activeLoops: number;
-  totalCostUsd: number;
-  createdAt: string;
-  updatedAt: string;
+  description: string | null;
+  tech_stack: string[];
+  repo_url: string | null;
+  settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface LoopConfig {
-  maxIterations: number;
-  maxRuntimeSeconds: number;
-  maxCostUsd: number;
-  checkpointInterval: number;
-  cooldownSeconds: number;
-  maxConsecutiveErrors: number;
-  completionSignal: string;
+export interface ProjectCreate {
+  name: string;
+  description?: string | null;
+  tech_stack?: string[];
+  repo_url?: string | null;
 }
 
-export type LoopStatus = 'running' | 'paused' | 'completed' | 'stopped' | 'failed';
-
-export type StopReason =
-  | 'CompletionSignal'
-  | 'MaxIterations'
-  | 'CostLimit'
-  | 'TimeLimit'
-  | 'UserStopped'
-  | 'CircuitBreaker'
-  | { Error: string };
-
-export interface LoopState {
-  cardId: string;
-  iteration: number;
-  status: LoopStatus;
-  totalCostUsd: number;
-  totalTokens: number;
-  consecutiveErrors: number;
-  lastCheckpoint?: number;
-  startTime: string;
-  elapsedSeconds: number;
-  config: LoopConfig;
-  stopReason?: StopReason;
+export interface ProjectUpdate {
+  name?: string | null;
+  description?: string | null;
+  tech_stack?: string[] | null;
+  repo_url?: string | null;
 }
 
-// Response type for GET /api/loops (list all active loops)
-export interface ActiveLoopInfo {
-  cardId: string;
-  cardTitle: string;
-  iteration: number;
-  status: LoopStatus;
-  totalCostUsd: number;
-}
-
-export interface ActiveLoopsStats {
-  totalActive: number;
-  running: number;
-  paused: number;
-  totalCostUsd: number;
-  totalIterations: number;
-}
-
-export interface ActiveLoopsResponse {
-  loops: ActiveLoopInfo[];
-  stats: ActiveLoopsStats;
-}
-
-export interface Attempt {
+export interface TaskBase {
   id: string;
-  cardId: string;
-  attemptNumber: number;
-  iteration: number;
-  promptHash: string;
-  inputTokens: number;
-  outputTokens: number;
-  tokensUsed?: number;
-  costUsd: number;
-  durationMs: number;
-  output?: string;
-  outputSummary?: string;
-  completionSignalFound: boolean;
-  commitSha?: string;
-  diffStats?: {
-    insertions: number;
-    deletions: number;
-    filesChanged: number;
-  };
-  status: 'pending' | 'running' | 'completed' | 'failed';
-  errorMessage?: string;
-  startedAt: string;
-  createdAt: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  priority: Priority;
+  status: TaskStatus;
+  created_at: string;
+  updated_at: string;
+  prompt_path: string | null;
+  output_path: string | null;
+  context_hash: string | null;
 }
 
-export interface CardError {
+export interface Epic extends TaskBase {
+  type: typeof TaskType.EPIC;
+  acceptance_criteria: string[];
+  context: string | null;
+  child_ids: string[];
+}
+
+export interface Task extends TaskBase {
+  type: typeof TaskType.TASK;
+  parent_id: string | null;
+  worker_id: string | null;
+  attempts: number;
+  max_attempts: number;
+  started_at: string | null;
+  completed_at: string | null;
+  pagerank_score: number;
+  betweenness_score: number;
+  on_critical_path: boolean;
+  combined_priority: number;
+  subtask_ids: string[];
+}
+
+export interface Subtask extends TaskBase {
+  type: typeof TaskType.SUBTASK;
+  parent_id: string;
+  worker_id: string | null;
+  attempts: number;
+  max_attempts: number;
+}
+
+export type AnyTask = Epic | Task | Subtask;
+
+export interface TaskCreate {
+  project_id: string;
+  title: string;
+  description?: string | null;
+  priority?: Priority;
+  parent_id?: string | null;
+  task_type?: TaskType;
+}
+
+export interface EpicCreate {
+  project_id: string;
+  title: string;
+  description?: string | null;
+  priority?: Priority;
+  acceptance_criteria?: string[];
+}
+
+export interface TaskUpdate {
+  title?: string | null;
+  description?: string | null;
+  priority?: Priority | null;
+  status?: TaskStatus | null;
+}
+
+export interface Dependency {
+  child_id: string;
+  parent_id: string;
+  created_at: string;
+}
+
+export interface DependencyCreate {
+  parent_id: string;
+}
+
+export interface Worker {
   id: string;
-  cardId: string;
-  errorType: string;
-  category: 'build' | 'test' | 'deploy' | 'runtime' | 'other';
-  message: string;
-  stackTrace?: string;
-  context?: Record<string, unknown>;
-  resolved: boolean;
-  resolvedAt?: string;
-  createdAt: string;
+  name: string;
+  type: string;
+  status: WorkerStatus;
+  current_task_id: string | null;
+  command: string;
+  args: string[];
+  prompt_flag: string;
+  working_dir: string | null;
+  timeout_seconds: number;
+  env_vars: Record<string, string>;
+  tasks_completed: number;
+  tasks_failed: number;
+  avg_completion_seconds: number | null;
+  created_at: string;
+  last_active_at: string | null;
 }
 
-// API response types
-export interface ApiResponse<T> {
-  data: T;
-  meta: {
-    timestamp: string;
-  };
+export interface WorkerCreate {
+  name: string;
+  type: string;
+  command: string;
+  args?: string[];
+  prompt_flag?: string;
+  working_dir?: string | null;
+  timeout_seconds?: number;
+  env_vars?: Record<string, string>;
 }
 
-export interface PaginatedResponse<T> {
-  data: T[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-    hasMore: boolean;
-  };
+export interface WorkerUpdate {
+  name?: string | null;
+  status?: WorkerStatus | null;
+  command?: string | null;
+  args?: string[] | null;
+  prompt_flag?: string | null;
+  working_dir?: string | null;
+  timeout_seconds?: number | null;
+  env_vars?: Record<string, string> | null;
 }
 
-export interface ApiError {
-  error: {
-    code: string;
-    message: string;
-    details?: unknown;
-  };
+export interface QueueStats {
+  total_tasks: number;
+  ready_tasks: number;
+  in_progress_tasks: number;
+  blocked_tasks: number;
+  completed_tasks: number;
+  failed_tasks: number;
+  total_workers: number;
+  idle_workers: number;
+  busy_workers: number;
 }
 
-// Trigger types for state transitions
-export type Trigger =
-  | 'StartPlanning'
-  | 'PlanApproved'
-  | 'StartCoding'
-  | 'LoopComplete'
-  | 'RequestReview'
-  | 'ReviewApproved'
-  | 'ReviewRejected'
-  | 'StartTesting'
-  | 'TestsPassed'
-  | 'TestsFailed'
-  | 'QueueBuild'
-  | 'BuildStarted'
-  | 'BuildSucceeded'
-  | 'BuildFailed'
-  | 'QueueDeploy'
-  | 'DeployStarted'
-  | 'DeployCompleted'
-  | 'VerificationPassed'
-  | 'VerificationFailed'
-  | 'ErrorDetected'
-  | 'ErrorFixed'
-  | 'Retry'
-  | 'Archive'
-  | 'Unarchive'
-  | 'MarkFailed';
+export interface EnqueueRequest {
+  task_id: string;
+}
+
+export interface CompleteRequest {
+  task_id: string;
+  success?: boolean;
+  output_path?: string | null;
+}
+
+export interface RecalculateRequest {
+  project_id: string;
+}

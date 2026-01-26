@@ -1,42 +1,602 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
+/* Ringmaster UI Styles */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --color-bg: #1a1a2e;
+  --color-surface: #16213e;
+  --color-surface-hover: #1f2b4a;
+  --color-primary: #0f3460;
+  --color-accent: #e94560;
+  --color-text: #eaeaea;
+  --color-text-muted: #888;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  --radius: 8px;
+  --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  line-height: 1.5;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.app-header {
+  background: var(--color-surface);
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--color-accent);
+}
+
+.main-nav {
+  display: flex;
+  gap: 1rem;
+}
+
+.main-nav a {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+
+.main-nav a:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.main-nav a.active {
+  background: var(--color-primary);
+  color: var(--color-text);
+}
+
+.api-status {
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.api-status.status-connected {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--color-success);
+}
+
+.api-status.status-disconnected {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+}
+
+.api-status.status-checking {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--color-warning);
+}
+
+/* Main Content */
+.app-main {
+  flex: 1;
   padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Page Header */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  margin: 0;
+}
+
+.back-link {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  margin-right: 1rem;
+}
+
+.back-link:hover {
+  color: var(--color-text);
+}
+
+/* Buttons */
+button {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+}
+
+button:hover {
+  background: var(--color-accent);
+}
+
+.delete-btn {
+  background: transparent;
+  color: var(--color-error);
+  border: 1px solid var(--color-error);
+}
+
+.delete-btn:hover {
+  background: var(--color-error);
+  color: white;
+}
+
+/* Forms */
+.create-form {
+  background: var(--color-surface);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  margin-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.create-form h3 {
+  margin: 0 0 0.5rem 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+input,
+textarea,
+select {
+  padding: 0.5rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 1rem;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* Cards */
+.project-card,
+.worker-card,
+.epic-card,
+.task-card {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+  transition: all 0.2s;
+}
+
+.project-card:hover,
+.worker-card:hover {
+  background: var(--color-surface-hover);
+}
+
+.project-link {
+  text-decoration: none;
+  color: inherit;
+  display: block;
+}
+
+.project-card h3,
+.worker-card h3 {
+  margin: 0 0 0.5rem 0;
+}
+
+.project-card p {
+  margin: 0.5rem 0;
+  color: var(--color-text-muted);
+}
+
+.tech-stack {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.tech-badge {
+  background: var(--color-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* Worker Cards */
+.worker-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.worker-type {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.worker-info {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.worker-info p {
+  margin: 0.25rem 0;
+}
+
+.worker-info code {
+  background: var(--color-bg);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+.worker-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.worker-card.offline {
+  opacity: 0.6;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.status-idle {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--color-success);
+}
+
+.status-busy {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--color-warning);
+}
+
+.status-offline {
+  background: rgba(136, 136, 136, 0.2);
+  color: var(--color-text-muted);
+}
+
+/* Priority Badges */
+.priority {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.priority-p0 {
+  background: var(--color-error);
+  color: white;
+}
+
+.priority-p1 {
+  background: var(--color-warning);
+  color: black;
+}
+
+.priority-p2 {
+  background: var(--color-info);
+  color: white;
+}
+
+.priority-p3,
+.priority-p4 {
+  background: var(--color-primary);
+  color: var(--color-text-muted);
+}
+
+/* Task Status */
+.status {
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.status-ready {
+  color: var(--color-success);
+}
+
+.status-in_progress {
+  color: var(--color-warning);
+}
+
+.status-blocked {
+  color: var(--color-error);
+}
+
+.status-done {
+  color: var(--color-text-muted);
+}
+
+/* Kanban Board */
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.kanban-column {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  padding: 1rem;
+  min-height: 200px;
+}
+
+.column-header {
+  margin: 0 0 1rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--color-primary);
+  text-transform: capitalize;
+  font-size: 0.875rem;
+}
+
+.task-card {
+  background: var(--color-bg);
+  padding: 0.75rem;
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.task-id {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  font-family: monospace;
+}
+
+.task-card h4 {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.task-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.task-actions select {
+  flex: 1;
+  padding: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.task-actions .delete-btn {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* Queue Page */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: var(--color-surface);
+  padding: 1rem;
+  border-radius: var(--radius);
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafbaa);
+.stat-card h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
 }
 
-@keyframes logo-spin {
-  from {
-    transform: rotate(0deg);
+.stat-value {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.stat-card.ready .stat-value {
+  color: var(--color-success);
+}
+
+.stat-card.in-progress .stat-value {
+  color: var(--color-warning);
+}
+
+.stat-card.blocked .stat-value {
+  color: var(--color-error);
+}
+
+.stat-card.completed .stat-value {
+  color: var(--color-info);
+}
+
+.workers-summary {
+  background: var(--color-surface);
+  padding: 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 2rem;
+}
+
+.workers-summary h2 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+}
+
+.stats-row {
+  display: flex;
+  gap: 2rem;
+}
+
+.stat-item .label {
+  color: var(--color-text-muted);
+  margin-right: 0.5rem;
+}
+
+.stat-item .value.idle {
+  color: var(--color-success);
+}
+
+.stat-item .value.busy {
+  color: var(--color-warning);
+}
+
+.ready-tasks-list {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--color-bg);
+}
+
+.task-row:last-child {
+  border-bottom: none;
+}
+
+.task-title {
+  flex: 1;
+}
+
+.task-score {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
+
+.critical-path-badge {
+  background: var(--color-error);
+  color: white;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+/* Section */
+.section {
+  margin-top: 2rem;
+}
+
+.section h2 {
+  margin: 0 0 1rem 0;
+}
+
+/* States */
+.loading,
+.error,
+.empty-state {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-error);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-header {
+    flex-direction: column;
+    gap: 1rem;
   }
-  to {
-    transform: rotate(360deg);
+
+  .header-left {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .kanban-board {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  a:nth-of-type(2) .logo {
-    animation: logo-spin infinite 20s linear;
-  }
+/* Project Actions */
+.project-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
-.card {
-  padding: 2em;
+/* Epic Card */
+.epic-card {
+  border-left: 4px solid var(--color-accent);
 }
 
-.read-the-docs {
-  color: #888;
+.epic-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.epic-header h3 {
+  flex: 1;
+  margin: 0;
+}
+
+.description {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
 }

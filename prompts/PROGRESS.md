@@ -133,9 +133,20 @@ src/ringmaster/
     └── executor.py        # Task execution
 ```
 
+### Frontend (`frontend/`)
+- ✅ React + Vite + TypeScript scaffold
+- ✅ React Router with 4 views (Projects, ProjectDetail, Workers, Queue)
+- ✅ API client with full coverage of backend endpoints
+- ✅ TypeScript types matching backend domain models
+- ✅ Layout component with navigation and API health indicator
+- ✅ Vite proxy configuration for development
+- 🔲 Real-time WebSocket updates
+- 🔲 File browser and preview
+- 🔲 Voice input and file attachments
+
 ## Next Steps
 
-1. **Frontend**: Build React/TypeScript UI (Kanban board, stats, controls)
+1. **WebSocket Integration**: Connect frontend to real-time events
 2. **RLM Summarization**: Implement recursive chat history compression
 3. **Code Context**: Intelligent file selection based on task
 4. **Hot Reload**: Implement component hot-reload for self-improvement
@@ -148,6 +159,7 @@ src/ringmaster/
 | 2 | 2026-01-26 | Fix deprecation warnings: replaced datetime.utcnow() with timezone-aware datetime.now(UTC), updated ruff config, removed unused import |
 | 3 | 2026-01-26 | Add WebSocket support: event bus system, EventType enum, /ws endpoint with project filtering, event emission from task API routes |
 | 4 | 2026-01-26 | Add comprehensive API integration tests: 29 tests covering health, projects, tasks, workers, and queue endpoints |
+| 5 | 2026-01-26 | Build React frontend: Vite scaffold, TypeScript types, API client, React Router with 4 views (Projects, ProjectDetail, Workers, Queue), Layout with nav and API health indicator |
 
 ## Blockers
 
