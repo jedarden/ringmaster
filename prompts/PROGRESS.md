@@ -54,7 +54,7 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Stage-based architecture
 - ✅ Context hash for deduplication
 - ✅ RLM summarization with hierarchical compression
-- 🔲 Code context extraction (placeholder)
+- ✅ Code context extraction with intelligent file selection
 
 ### Scheduler (`src/ringmaster/scheduler/`)
 - ✅ Worker lifecycle management
@@ -148,10 +148,9 @@ src/ringmaster/
 
 ## Next Steps
 
-1. **Code Context**: Intelligent file selection based on task
-2. **Hot Reload**: Implement component hot-reload for self-improvement
-3. **File Browser**: Add file system browsing in project detail view
-4. **Chat API**: Add API endpoints for chat messages to enable RLM integration
+1. **Hot Reload**: Implement component hot-reload for self-improvement
+2. **File Browser**: Add file system browsing in project detail view
+3. **Chat API**: Add API endpoints for chat messages to enable RLM integration
 
 ## Iteration Log
 
@@ -164,6 +163,7 @@ src/ringmaster/
 | 5 | 2026-01-26 | Build React frontend: Vite scaffold, TypeScript types, API client, React Router with 4 views (Projects, ProjectDetail, Workers, Queue), Layout with nav and API health indicator |
 | 6 | 2026-01-26 | Add WebSocket integration to frontend: useWebSocket hook with auto-reconnect, all pages use real-time events for auto-refresh, WS connection status in header |
 | 7 | 2026-01-26 | Implement RLM summarization: ChatMessage/Summary domain models, ChatRepository, RLMSummarizer with hierarchical compression, decision extraction, token budgeting, 11 new tests |
+| 8 | 2026-01-26 | Implement code context extraction: CodeContextExtractor with explicit file detection, keyword-based search, import resolution, token budgeting, 16 new tests |
 
 ## Blockers
 
