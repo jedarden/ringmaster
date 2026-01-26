@@ -62,6 +62,14 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Health check monitoring
 - ✅ Graceful shutdown handling
 
+### Hot-Reload (`src/ringmaster/reload/`)
+- ✅ FileChangeWatcher for monitoring source directories
+- ✅ ConfigWatcher for configuration file changes
+- ✅ SafetyValidator for protected files and test coverage
+- ✅ HotReloader orchestrating tests, reload, and rollback
+- ✅ Hash-based change detection for accurate modification tracking
+- ✅ Git-based rollback on test failure
+
 ### CLI (`src/ringmaster/cli.py`)
 - ✅ `ringmaster serve` - Start API server
 - ✅ `ringmaster scheduler` - Start task scheduler
@@ -78,6 +86,7 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Dependency tracking tests
 - ✅ Event bus unit tests
 - ✅ API integration tests (29 tests covering all endpoints)
+- ✅ Hot-reload tests (22 tests covering watcher, safety, reloader)
 
 ## Tech Stack
 
@@ -124,6 +133,11 @@ src/ringmaster/
 │   ├── __init__.py
 │   ├── manager.py         # Queue management
 │   └── priority.py        # Priority algorithms
+├── reload/
+│   ├── __init__.py
+│   ├── watcher.py         # File change detection
+│   ├── safety.py          # Protected files & validation
+│   └── reloader.py        # Hot-reload orchestration
 ├── scheduler/
 │   ├── __init__.py
 │   └── manager.py         # Scheduler loop
@@ -160,8 +174,9 @@ src/ringmaster/
 
 ## Next Steps
 
-1. **Hot Reload**: Implement component hot-reload for self-improvement
-2. **File Browser**: Add file system browsing in project detail view
+1. **File Browser**: Add file system browsing in project detail view
+2. **Voice Input**: Add voice input to chat interface
+3. **Integration**: Wire hot-reload into scheduler for self-improvement loop
 
 ## Iteration Log
 
@@ -178,6 +193,7 @@ src/ringmaster/
 | 9 | 2026-01-26 | Add Chat API endpoints: 8 REST endpoints for messages/summaries/context, integrates RLM summarization, 12 new tests, total 86 tests passing |
 | 10 | 2026-01-26 | Add Chat UI to frontend: ChatPanel component with message list and input, Chat API client functions, TypeScript types, integrated in project detail page as sidebar |
 | 11 | 2026-01-26 | Wire ChatPanel to WebSocket: MESSAGE_CREATED event type, real-time message updates without polling, duplicate detection |
+| 12 | 2026-01-26 | Implement hot-reload system: FileChangeWatcher, ConfigWatcher, SafetyValidator, HotReloader with test validation, module reload, and git rollback, 22 new tests, total 108 tests passing |
 
 ## Blockers
 
