@@ -77,6 +77,7 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Database CRUD tests
 - ✅ Dependency tracking tests
 - ✅ Event bus unit tests
+- ✅ API integration tests (29 tests covering all endpoints)
 
 ## Tech Stack
 
@@ -138,7 +139,6 @@ src/ringmaster/
 2. **RLM Summarization**: Implement recursive chat history compression
 3. **Code Context**: Intelligent file selection based on task
 4. **Hot Reload**: Implement component hot-reload for self-improvement
-5. **E2E Tests**: Integration tests for full workflow
 
 ## Iteration Log
 
@@ -147,6 +147,7 @@ src/ringmaster/
 | 1 | 2026-01-26 | Initial Python implementation with all core components |
 | 2 | 2026-01-26 | Fix deprecation warnings: replaced datetime.utcnow() with timezone-aware datetime.now(UTC), updated ruff config, removed unused import |
 | 3 | 2026-01-26 | Add WebSocket support: event bus system, EventType enum, /ws endpoint with project filtering, event emission from task API routes |
+| 4 | 2026-01-26 | Add comprehensive API integration tests: 29 tests covering health, projects, tasks, workers, and queue endpoints |
 
 ## Blockers
 
