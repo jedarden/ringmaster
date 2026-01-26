@@ -145,6 +145,7 @@ src/ringmaster/
 - ✅ WebSocket connection status in header
 - ✅ ChatPanel component integrated in project detail view
 - ✅ Chat API client functions (messages, summaries, context)
+- ✅ Real-time chat message updates via WebSocket
 - 🔲 File browser and preview
 - 🔲 Voice input and file attachments
 
@@ -161,7 +162,6 @@ src/ringmaster/
 
 1. **Hot Reload**: Implement component hot-reload for self-improvement
 2. **File Browser**: Add file system browsing in project detail view
-3. **Real-time Chat Updates**: Wire ChatPanel to WebSocket for live message updates
 
 ## Iteration Log
 
@@ -177,6 +177,7 @@ src/ringmaster/
 | 8 | 2026-01-26 | Implement code context extraction: CodeContextExtractor with explicit file detection, keyword-based search, import resolution, token budgeting, 16 new tests |
 | 9 | 2026-01-26 | Add Chat API endpoints: 8 REST endpoints for messages/summaries/context, integrates RLM summarization, 12 new tests, total 86 tests passing |
 | 10 | 2026-01-26 | Add Chat UI to frontend: ChatPanel component with message list and input, Chat API client functions, TypeScript types, integrated in project detail page as sidebar |
+| 11 | 2026-01-26 | Wire ChatPanel to WebSocket: MESSAGE_CREATED event type, real-time message updates without polling, duplicate detection |
 
 ## Blockers
 
