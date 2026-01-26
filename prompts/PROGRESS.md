@@ -33,6 +33,13 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ RESTful routes for projects, tasks, workers
 - ✅ Queue management endpoints
 - ✅ Health check endpoint
+- ✅ WebSocket endpoint for real-time events
+
+### Event System (`src/ringmaster/events/`)
+- ✅ EventBus with pub/sub pattern
+- ✅ EventType enum (task, worker, project, queue, scheduler events)
+- ✅ Async callback support
+- ✅ Project-based event filtering
 
 ### Worker Interface (`src/ringmaster/worker/`)
 - ✅ Abstract WorkerInterface base class
@@ -69,6 +76,7 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Domain model unit tests
 - ✅ Database CRUD tests
 - ✅ Dependency tracking tests
+- ✅ Event bus unit tests
 
 ## Tech Stack
 
@@ -92,7 +100,8 @@ src/ringmaster/
 │       ├── projects.py
 │       ├── tasks.py
 │       ├── workers.py
-│       └── queue.py
+│       ├── queue.py
+│       └── ws.py
 ├── db/
 │   ├── __init__.py
 │   ├── connection.py      # Database connection
@@ -105,6 +114,10 @@ src/ringmaster/
 │   ├── __init__.py
 │   ├── pipeline.py        # Prompt assembly
 │   └── stages.py          # Individual stages
+├── events/
+│   ├── __init__.py
+│   ├── bus.py             # Event bus pub/sub
+│   └── types.py           # Event type definitions
 ├── queue/
 │   ├── __init__.py
 │   ├── manager.py         # Queue management
@@ -124,15 +137,16 @@ src/ringmaster/
 1. **Frontend**: Build React/TypeScript UI (Kanban board, stats, controls)
 2. **RLM Summarization**: Implement recursive chat history compression
 3. **Code Context**: Intelligent file selection based on task
-4. **WebSocket**: Real-time updates for UI
-5. **Hot Reload**: Implement component hot-reload for self-improvement
-6. **E2E Tests**: Integration tests for full workflow
+4. **Hot Reload**: Implement component hot-reload for self-improvement
+5. **E2E Tests**: Integration tests for full workflow
 
 ## Iteration Log
 
 | Iteration | Date | Summary |
 |-----------|------|---------|
 | 1 | 2026-01-26 | Initial Python implementation with all core components |
+| 2 | 2026-01-26 | Fix deprecation warnings: replaced datetime.utcnow() with timezone-aware datetime.now(UTC), updated ruff config, removed unused import |
+| 3 | 2026-01-26 | Add WebSocket support: event bus system, EventType enum, /ws endpoint with project filtering, event emission from task API routes |
 
 ## Blockers
 
