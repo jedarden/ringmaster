@@ -1,43 +1,36 @@
--- Chat Messages Table extensions for RLM (Recursive Language Model) summarization
--- This adds columns needed for summarization and loop recovery
+-- Chat history and RLM summaries
+-- For context enrichment and conversation tracking
 
--- Add columns for summarization support if they don't exist
--- SQLite doesn't have ADD COLUMN IF NOT EXISTS, so we use a workaround
--- First check if the columns already exist by trying to select them
-
--- Note: These columns may not exist in older databases, the application code
--- handles the case where these columns are NULL or missing.
-
--- Add summarized flag column
-ALTER TABLE chat_messages ADD COLUMN tokens_estimate INTEGER;
-
--- Update the tokens_estimate from existing tokens column where available
-UPDATE chat_messages SET tokens_estimate = tokens WHERE tokens IS NOT NULL AND tokens_estimate IS NULL;
-
--- Add summarized flag
-ALTER TABLE chat_messages ADD COLUMN summarized INTEGER DEFAULT 0;
-
--- Add summary group reference
-ALTER TABLE chat_messages ADD COLUMN summary_group_id TEXT;
-
--- Index for summary groups
-CREATE INDEX IF NOT EXISTS idx_chat_messages_summary ON chat_messages(summary_group_id);
-
--------------------------------------------------------------------------------
--- RLM Summaries Table - stores compressed summaries of chat history
--------------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS rlm_summaries (
-    id TEXT PRIMARY KEY NOT NULL,
-    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
-    summary TEXT NOT NULL,
-    messages_summarized INTEGER NOT NULL,
-    tokens_before INTEGER NOT NULL,
-    tokens_after INTEGER NOT NULL,
-    compression_ratio REAL NOT NULL,
-    first_message_id TEXT NOT NULL,
-    last_message_id TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+-- Chat messages table
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+    role TEXT NOT NULL CHECK(role IN ('user', 'assistant', 'system')),
+    content TEXT NOT NULL,
+    media_type TEXT,   -- text, audio, image
+    media_path TEXT,   -- Path to original media file
+    token_count INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_rlm_summaries_card ON rlm_summaries(card_id);
-CREATE INDEX IF NOT EXISTS idx_rlm_summaries_created ON rlm_summaries(card_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_chat_project ON chat_messages(project_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_task ON chat_messages(task_id, created_at);
+
+-- Summaries table (RLM compressed history)
+CREATE TABLE IF NOT EXISTS summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
+    message_range_start INTEGER NOT NULL,
+    message_range_end INTEGER NOT NULL,
+    summary TEXT NOT NULL,
+    key_decisions TEXT,  -- JSON array
+    token_count INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_summaries_project ON summaries(project_id);
+CREATE INDEX IF NOT EXISTS idx_summaries_range ON summaries(message_range_start, message_range_end);
+
+INSERT OR IGNORE INTO _migrations (version, name) VALUES (2, '002_chat_history');

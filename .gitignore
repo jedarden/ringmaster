@@ -1,31 +1,38 @@
-# Rust
+# Build artifacts
 /target/
-Cargo.lock
-
-# Frontend
-/frontend/node_modules/
-/frontend/dist/
+debug/
+*.pdb
 
 # Database
 *.db
-*.db-shm
 *.db-wal
+*.db-shm
+.ringmaster/
+
+# Environment
+.env
+.env.local
+.env.*.local
 
 # IDE
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
 
 # OS
 .DS_Store
+Thumbs.db
 
-# Environment
-.env
-.env.local
-core
+# Frontend build
+/frontend/dist/
+/frontend/node_modules/
 
-# Root-level node artifacts
-node_modules/
-package.json
-package-lock.json
-test-views.mjs
+# Logs
+*.log
+/logs/
+
+# Test artifacts
+/coverage/
+*.profraw
