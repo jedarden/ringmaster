@@ -9,11 +9,13 @@ from uuid import UUID
 
 from ringmaster.db.connection import Database
 from ringmaster.domain import (
+    ChatMessage,
     Dependency,
     Epic,
     Priority,
     Project,
     Subtask,
+    Summary,
     Task,
     TaskStatus,
     TaskType,
@@ -511,4 +513,244 @@ class WorkerRepository:
             avg_completion_seconds=row["avg_completion_seconds"],
             created_at=datetime.fromisoformat(row["created_at"]),
             last_active_at=datetime.fromisoformat(row["last_active_at"]) if row["last_active_at"] else None,
+        )
+
+
+class ChatRepository:
+    """Repository for ChatMessage and Summary entities.
+
+    Provides methods for storing and retrieving chat history,
+    as well as RLM-compressed summaries for context enrichment.
+    """
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    async def create_message(self, message: ChatMessage) -> ChatMessage:
+        """Create a new chat message."""
+        cursor = await self.db.execute(
+            """
+            INSERT INTO chat_messages (
+                project_id, task_id, role, content, media_type, media_path,
+                token_count, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(message.project_id),
+                message.task_id,
+                message.role,
+                message.content,
+                message.media_type,
+                message.media_path,
+                message.token_count,
+                message.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        message.id = cursor.lastrowid
+        return message
+
+    async def get_messages(
+        self,
+        project_id: UUID,
+        task_id: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        since_id: int | None = None,
+    ) -> list[ChatMessage]:
+        """Get chat messages for a project, optionally filtered by task."""
+        conditions = ["project_id = ?"]
+        params: list[Any] = [str(project_id)]
+
+        if task_id:
+            conditions.append("task_id = ?")
+            params.append(task_id)
+
+        if since_id:
+            conditions.append("id > ?")
+            params.append(since_id)
+
+        query = f"""
+            SELECT * FROM chat_messages
+            WHERE {' AND '.join(conditions)}
+            ORDER BY created_at ASC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self._row_to_message(row) for row in rows]
+
+    async def get_recent_messages(
+        self,
+        project_id: UUID,
+        count: int = 10,
+        task_id: str | None = None,
+    ) -> list[ChatMessage]:
+        """Get the most recent N messages."""
+        conditions = ["project_id = ?"]
+        params: list[Any] = [str(project_id)]
+
+        if task_id:
+            conditions.append("task_id = ?")
+            params.append(task_id)
+
+        # Get recent messages in reverse order, then reverse the result
+        query = f"""
+            SELECT * FROM chat_messages
+            WHERE {' AND '.join(conditions)}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        params.append(count)
+
+        rows = await self.db.fetchall(query, tuple(params))
+        messages = [self._row_to_message(row) for row in rows]
+        return list(reversed(messages))
+
+    async def get_message_count(
+        self, project_id: UUID, task_id: str | None = None
+    ) -> int:
+        """Get total message count for a project/task."""
+        conditions = ["project_id = ?"]
+        params: list[Any] = [str(project_id)]
+
+        if task_id:
+            conditions.append("task_id = ?")
+            params.append(task_id)
+
+        query = f"""
+            SELECT COUNT(*) as count FROM chat_messages
+            WHERE {' AND '.join(conditions)}
+        """
+
+        row = await self.db.fetchone(query, tuple(params))
+        return row["count"] if row else 0
+
+    async def get_message_range(
+        self, start_id: int, end_id: int
+    ) -> list[ChatMessage]:
+        """Get messages within an ID range (inclusive)."""
+        rows = await self.db.fetchall(
+            """
+            SELECT * FROM chat_messages
+            WHERE id >= ? AND id <= ?
+            ORDER BY created_at ASC
+            """,
+            (start_id, end_id),
+        )
+        return [self._row_to_message(row) for row in rows]
+
+    async def create_summary(self, summary: Summary) -> Summary:
+        """Create a new RLM summary."""
+        cursor = await self.db.execute(
+            """
+            INSERT INTO summaries (
+                project_id, task_id, message_range_start, message_range_end,
+                summary, key_decisions, token_count, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(summary.project_id),
+                summary.task_id,
+                summary.message_range_start,
+                summary.message_range_end,
+                summary.summary,
+                json.dumps(summary.key_decisions),
+                summary.token_count,
+                summary.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        summary.id = cursor.lastrowid
+        return summary
+
+    async def get_summaries(
+        self,
+        project_id: UUID,
+        task_id: str | None = None,
+    ) -> list[Summary]:
+        """Get all summaries for a project/task."""
+        conditions = ["project_id = ?"]
+        params: list[Any] = [str(project_id)]
+
+        if task_id:
+            conditions.append("task_id = ?")
+            params.append(task_id)
+
+        query = f"""
+            SELECT * FROM summaries
+            WHERE {' AND '.join(conditions)}
+            ORDER BY message_range_start ASC
+        """
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self._row_to_summary(row) for row in rows]
+
+    async def get_latest_summary(
+        self, project_id: UUID, task_id: str | None = None
+    ) -> Summary | None:
+        """Get the most recent summary."""
+        conditions = ["project_id = ?"]
+        params: list[Any] = [str(project_id)]
+
+        if task_id:
+            conditions.append("task_id = ?")
+            params.append(task_id)
+
+        query = f"""
+            SELECT * FROM summaries
+            WHERE {' AND '.join(conditions)}
+            ORDER BY message_range_end DESC
+            LIMIT 1
+        """
+
+        row = await self.db.fetchone(query, tuple(params))
+        return self._row_to_summary(row) if row else None
+
+    async def delete_summaries_after(
+        self, project_id: UUID, start_id: int
+    ) -> int:
+        """Delete summaries that cover messages after start_id.
+
+        Used when messages are invalidated and need to be re-summarized.
+        """
+        cursor = await self.db.execute(
+            """
+            DELETE FROM summaries
+            WHERE project_id = ? AND message_range_start >= ?
+            """,
+            (str(project_id), start_id),
+        )
+        await self.db.commit()
+        return cursor.rowcount
+
+    def _row_to_message(self, row: Any) -> ChatMessage:
+        """Convert a database row to a ChatMessage."""
+        return ChatMessage(
+            id=row["id"],
+            project_id=UUID(row["project_id"]),
+            task_id=row["task_id"],
+            role=row["role"],
+            content=row["content"],
+            media_type=row["media_type"],
+            media_path=row["media_path"],
+            token_count=row["token_count"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    def _row_to_summary(self, row: Any) -> Summary:
+        """Convert a database row to a Summary."""
+        return Summary(
+            id=row["id"],
+            project_id=UUID(row["project_id"]),
+            task_id=row["task_id"],
+            message_range_start=row["message_range_start"],
+            message_range_end=row["message_range_end"],
+            summary=row["summary"],
+            key_decisions=json.loads(row["key_decisions"]) if row["key_decisions"] else [],
+            token_count=row["token_count"],
+            created_at=datetime.fromisoformat(row["created_at"]),
         )

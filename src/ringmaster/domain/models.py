@@ -160,3 +160,31 @@ class Worker(BaseModel):
     # Timestamps
     created_at: datetime = Field(default_factory=utc_now)
     last_active_at: datetime | None = None
+
+
+class ChatMessage(BaseModel):
+    """A message in the chat history for context enrichment."""
+
+    id: int | None = None  # Set by database
+    project_id: UUID
+    task_id: str | None = None
+    role: str  # user, assistant, system
+    content: str
+    media_type: str | None = None  # text, audio, image
+    media_path: str | None = None
+    token_count: int | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
+class Summary(BaseModel):
+    """An RLM-compressed summary of chat messages."""
+
+    id: int | None = None  # Set by database
+    project_id: UUID
+    task_id: str | None = None
+    message_range_start: int  # First message ID in range
+    message_range_end: int  # Last message ID in range
+    summary: str
+    key_decisions: list[str] = Field(default_factory=list)
+    token_count: int | None = None
+    created_at: datetime = Field(default_factory=utc_now)

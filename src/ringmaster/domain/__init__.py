@@ -2,12 +2,14 @@
 
 from ringmaster.domain.enums import Priority, TaskStatus, TaskType, WorkerStatus
 from ringmaster.domain.models import (
+    ChatMessage,
     Decision,
     Dependency,
     Epic,
     Project,
     Question,
     Subtask,
+    Summary,
     Task,
     Worker,
 )
@@ -25,4 +27,6 @@ __all__ = [
     "Question",
     "Worker",
     "Dependency",
+    "ChatMessage",
+    "Summary",
 ]

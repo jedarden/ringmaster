@@ -11,7 +11,9 @@ import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ringmaster.db import Database
 from ringmaster.domain import Project, Task
+from ringmaster.enricher.rlm import CompressionConfig, RLMSummarizer
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +52,21 @@ class EnrichmentPipeline:
         self,
         project_dir: Path | None = None,
         max_context_tokens: int = 100000,
+        db: Database | None = None,
+        rlm_config: CompressionConfig | None = None,
     ):
         self.project_dir = project_dir or Path.cwd()
         self.max_context_tokens = max_context_tokens
+        self.db = db
+        self.rlm_config = rlm_config or CompressionConfig()
+        self._rlm_summarizer: RLMSummarizer | None = None
+
+    @property
+    def rlm_summarizer(self) -> RLMSummarizer | None:
+        """Get or create the RLM summarizer (lazy initialization)."""
+        if self._rlm_summarizer is None and self.db is not None:
+            self._rlm_summarizer = RLMSummarizer(self.db, self.rlm_config)
+        return self._rlm_summarizer
 
     async def enrich(self, task: Task, project: Project) -> AssembledPrompt:
         """Assemble an enriched prompt for a task.
@@ -186,13 +200,39 @@ class EnrichmentPipeline:
     async def _build_history_context(self, task: Task, project: Project) -> str | None:
         """Build history context layer with RLM summarization.
 
-        TODO: Implement RLM (Recursive Language Model) summarization:
+        Uses the RLM summarizer to:
         - Fetch recent chat history for this task
-        - Summarize using hierarchical compression
+        - Summarize older messages using hierarchical compression
         - Include key decisions and context
         """
-        # Placeholder - return None for now
-        return None
+        if self.rlm_summarizer is None:
+            logger.debug("No database configured, skipping history context")
+            return None
+
+        try:
+            # Get compressed history context
+            context = await self.rlm_summarizer.get_history_context(
+                project_id=project.id,
+                task_id=task.id,
+            )
+
+            # If no messages, skip this layer
+            if context.total_messages == 0:
+                logger.debug("No chat history found for task %s", task.id)
+                return None
+
+            # Format for prompt inclusion
+            formatted = self.rlm_summarizer.format_for_prompt(context)
+            logger.info(
+                "Built history context: %d messages, ~%d tokens",
+                context.total_messages,
+                context.estimated_tokens,
+            )
+            return formatted
+
+        except Exception as e:
+            logger.warning("Failed to build history context: %s", e)
+            return None
 
     def _build_refinement_context(self, task: Task) -> str:
         """Build refinement context with safety guardrails."""
@@ -224,9 +264,16 @@ class EnrichmentPipeline:
 _pipeline: EnrichmentPipeline | None = None
 
 
-def get_pipeline(project_dir: Path | None = None) -> EnrichmentPipeline:
+def get_pipeline(
+    project_dir: Path | None = None,
+    db: Database | None = None,
+) -> EnrichmentPipeline:
     """Get or create the enrichment pipeline singleton."""
     global _pipeline
     if _pipeline is None:
-        _pipeline = EnrichmentPipeline(project_dir=project_dir)
+        _pipeline = EnrichmentPipeline(project_dir=project_dir, db=db)
+    elif db is not None and _pipeline.db is None:
+        # Update with database if provided later
+        _pipeline.db = db
+        _pipeline._rlm_summarizer = None  # Reset to pick up new db
     return _pipeline
