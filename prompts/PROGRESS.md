@@ -143,6 +143,8 @@ src/ringmaster/
 - ✅ Vite proxy configuration for development
 - ✅ Real-time WebSocket updates via useWebSocket hook
 - ✅ WebSocket connection status in header
+- ✅ ChatPanel component integrated in project detail view
+- ✅ Chat API client functions (messages, summaries, context)
 - 🔲 File browser and preview
 - 🔲 Voice input and file attachments
 
@@ -159,7 +161,7 @@ src/ringmaster/
 
 1. **Hot Reload**: Implement component hot-reload for self-improvement
 2. **File Browser**: Add file system browsing in project detail view
-3. **Frontend Chat UI**: Add chat interface to consume the new Chat API
+3. **Real-time Chat Updates**: Wire ChatPanel to WebSocket for live message updates
 
 ## Iteration Log
 
@@ -174,6 +176,7 @@ src/ringmaster/
 | 7 | 2026-01-26 | Implement RLM summarization: ChatMessage/Summary domain models, ChatRepository, RLMSummarizer with hierarchical compression, decision extraction, token budgeting, 11 new tests |
 | 8 | 2026-01-26 | Implement code context extraction: CodeContextExtractor with explicit file detection, keyword-based search, import resolution, token budgeting, 16 new tests |
 | 9 | 2026-01-26 | Add Chat API endpoints: 8 REST endpoints for messages/summaries/context, integrates RLM summarization, 12 new tests, total 86 tests passing |
+| 10 | 2026-01-26 | Add Chat UI to frontend: ChatPanel component with message list and input, Chat API client functions, TypeScript types, integrated in project detail page as sidebar |
 
 ## Blockers
 
