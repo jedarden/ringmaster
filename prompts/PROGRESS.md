@@ -241,6 +241,16 @@ src/ringmaster/
   - POST `/api/input/suggest-related` - Find related existing tasks
 - ✅ 32 tests (26 creator + 6 API integration)
 
+### Worker Executor (`src/ringmaster/worker/executor.py`)
+- ✅ EnrichmentPipeline integration for context-aware prompts
+  - Lazy initialization of enrichment pipeline
+  - Automatic project context fetching
+  - 5-layer prompt assembly (task, project, code, history, refinement)
+  - Context hash tracking for deduplication
+  - Prompt file saving for debugging/auditing
+  - Fallback prompt when enrichment fails
+- ✅ 11 new tests covering executor enrichment
+
 ## Next Steps
 
 1. **Voice Input**: Add voice input to chat interface
@@ -268,6 +278,7 @@ src/ringmaster/
 | 16 | 2026-01-26 | Add metrics dashboard: REST API for task/worker stats and events, MetricsDashboard React component with activity summaries and event timeline, 9 new tests, total 137 tests passing |
 | 17 | 2026-01-26 | Add bead creator service: Parser with action detection and ordering, Decomposer for large task breakdown, Matcher for duplicate detection, BeadCreator service, Input API endpoints, 32 new tests, total 169 tests passing |
 | 18 | 2026-01-26 | Add frontend TaskInput component: natural language task creation UI, Input API types and client functions, priority selector, auto-decompose toggle, related task search with debouncing, result display with type badges |
+| 19 | 2026-01-26 | Integrate EnrichmentPipeline into WorkerExecutor: 5-layer prompt assembly, project context fetching, context hash tracking, prompt file saving, fallback prompt, 11 new tests, total 180 tests passing |
 
 ## Blockers
 

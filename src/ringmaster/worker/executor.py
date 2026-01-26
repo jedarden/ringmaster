@@ -7,8 +7,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ringmaster.db import Database, TaskRepository, WorkerRepository
-from ringmaster.domain import Task, TaskStatus, Worker, WorkerStatus
+from ringmaster.db import Database, ProjectRepository, TaskRepository, WorkerRepository
+from ringmaster.domain import Project, Task, TaskStatus, Worker, WorkerStatus
+from ringmaster.enricher import EnrichmentPipeline
 from ringmaster.worker.interface import SessionConfig, SessionResult, SessionStatus
 from ringmaster.worker.platforms import get_worker
 
@@ -23,14 +24,33 @@ class WorkerExecutor:
     - Monitor session progress
     - Handle completion and failure
     - Record metrics
+    - Enrich prompts with project/code/history context
     """
 
-    def __init__(self, db: Database, output_dir: Path | None = None):
+    def __init__(
+        self,
+        db: Database,
+        output_dir: Path | None = None,
+        project_dir: Path | None = None,
+    ):
         self.db = db
         self.task_repo = TaskRepository(db)
         self.worker_repo = WorkerRepository(db)
+        self.project_repo = ProjectRepository(db)
         self.output_dir = output_dir or Path.home() / ".ringmaster" / "tasks"
+        self.project_dir = project_dir or Path.cwd()
         self._active_sessions: dict[str, asyncio.Task] = {}
+        self._enrichment_pipeline: EnrichmentPipeline | None = None
+
+    @property
+    def enrichment_pipeline(self) -> EnrichmentPipeline:
+        """Get or create the enrichment pipeline (lazy initialization)."""
+        if self._enrichment_pipeline is None:
+            self._enrichment_pipeline = EnrichmentPipeline(
+                project_dir=self.project_dir,
+                db=self.db,
+            )
+        return self._enrichment_pipeline
 
     async def execute_task(
         self,
@@ -50,6 +70,16 @@ class WorkerExecutor:
         """
         logger.info(f"Executing task {task.id} with worker {worker.id}")
 
+        # Fetch project for context enrichment
+        project = await self.project_repo.get(task.project_id)
+        if not project:
+            logger.error(f"Project {task.project_id} not found for task {task.id}")
+            return SessionResult(
+                status=SessionStatus.FAILED,
+                output="",
+                error=f"Project {task.project_id} not found",
+            )
+
         # Update task status
         task.status = TaskStatus.IN_PROGRESS
         task.started_at = datetime.now(UTC)
@@ -66,11 +96,16 @@ class WorkerExecutor:
         task_output_dir = self.output_dir / task.id
         task_output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Prepare working directory
-        working_dir = Path(worker.working_dir) if worker.working_dir else Path.cwd()
+        # Prepare working directory - use project repo_url if set, else worker dir
+        if project.repo_url and Path(project.repo_url).is_dir():
+            working_dir = Path(project.repo_url)
+        elif worker.working_dir:
+            working_dir = Path(worker.working_dir)
+        else:
+            working_dir = Path.cwd()
 
-        # Build the prompt
-        prompt = self._build_prompt(task)
+        # Build the enriched prompt with context
+        prompt = await self._build_enriched_prompt(task, project, task_output_dir)
 
         # Create session config
         config = SessionConfig(
@@ -160,10 +195,59 @@ class WorkerExecutor:
 
         return True
 
-    def _build_prompt(self, task: Task) -> str:
-        """Build the prompt to send to the worker.
+    async def _build_enriched_prompt(
+        self, task: Task, project: Project, output_dir: Path
+    ) -> str:
+        """Build an enriched prompt using the EnrichmentPipeline.
 
-        TODO: Integrate with Enricher service for full context assembly.
+        The pipeline assembles context in layers:
+        1. Task Context - Task title, description, state, iteration
+        2. Project Context - Repo URL, tech stack, conventions
+        3. Code Context - Relevant files based on task description
+        4. History Context - RLM-summarized conversation history
+        5. Refinement Context - Safety guardrails, constraints
+
+        Args:
+            task: The task to build a prompt for.
+            project: The project the task belongs to.
+            output_dir: Directory to save the assembled prompt.
+
+        Returns:
+            The assembled prompt string.
+        """
+        try:
+            # Use enrichment pipeline for full context assembly
+            assembled = await self.enrichment_pipeline.enrich(task, project)
+
+            # Update task with context hash for tracking
+            task.context_hash = assembled.context_hash
+            await self.task_repo.update_task(task)
+
+            # Save assembled prompt for debugging/auditing
+            prompt_file = output_dir / f"prompt_{task.attempts:03d}.md"
+            with open(prompt_file, "w") as f:
+                f.write(f"# System Prompt\n\n{assembled.system_prompt}\n\n")
+                f.write(f"# User Prompt\n\n{assembled.user_prompt}\n")
+            task.prompt_path = str(prompt_file)
+
+            logger.info(
+                f"Built enriched prompt for task {task.id}: "
+                f"~{assembled.metrics.estimated_tokens} tokens, "
+                f"stages: {assembled.metrics.stages_applied}"
+            )
+
+            # Return the combined prompt (system + user for CLI workers)
+            return f"{assembled.system_prompt}\n\n{assembled.user_prompt}"
+
+        except Exception as e:
+            # Fallback to basic prompt on enrichment failure
+            logger.warning(f"Enrichment failed for task {task.id}, using fallback: {e}")
+            return self._build_fallback_prompt(task)
+
+    def _build_fallback_prompt(self, task: Task) -> str:
+        """Build a basic prompt when enrichment fails.
+
+        This is a safety fallback that provides minimal context.
         """
         parts = [
             f"# Task: {task.title}",
@@ -175,7 +259,7 @@ class WorkerExecutor:
             "2. Ensure all tests pass",
             "3. Follow the project's coding conventions",
             "",
-            f"When complete, output: {task.context_hash or '<promise>COMPLETE</promise>'}",
+            "When complete, output: <promise>COMPLETE</promise>",
         ]
         return "\n".join(parts)
 

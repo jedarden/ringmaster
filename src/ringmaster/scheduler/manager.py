@@ -50,7 +50,9 @@ class Scheduler:
         self.task_repo = TaskRepository(db)
         self.worker_repo = WorkerRepository(db)
         self.queue_manager = QueueManager(db)
-        self.executor = WorkerExecutor(db, output_dir=output_dir)
+        self.executor = WorkerExecutor(
+            db, output_dir=output_dir, project_dir=project_root
+        )
 
         self.poll_interval = poll_interval
         self.max_concurrent_tasks = max_concurrent_tasks
