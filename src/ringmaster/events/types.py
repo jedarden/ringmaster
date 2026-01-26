@@ -46,6 +46,9 @@ class EventType(str, Enum):
     SCHEDULER_STARTED = "scheduler.started"
     SCHEDULER_STOPPED = "scheduler.stopped"
 
+    # Chat/Message events
+    MESSAGE_CREATED = "message.created"
+
 
 class Event(BaseModel):
     """A broadcast event."""

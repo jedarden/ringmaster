@@ -21,7 +21,8 @@ export type EventType =
   | "question.created"
   | "question.answered"
   | "scheduler.started"
-  | "scheduler.stopped";
+  | "scheduler.stopped"
+  | "message.created";
 
 export interface WebSocketEvent {
   id: string;

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listMessages, createMessage, getMessageCount } from "../api/client";
+import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import type { ChatMessage, MessageCreate } from "../types";
 
 interface ChatPanelProps {
@@ -15,6 +16,42 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Handle incoming WebSocket events
+  const handleWebSocketEvent = useCallback((event: WebSocketEvent) => {
+    if (event.type === "message.created") {
+      const data = event.data;
+      // Only add if it matches our task filter (or no filter)
+      const eventTaskId = data.task_id as string | null;
+      if (taskId === undefined || taskId === null || eventTaskId === taskId) {
+        const newMsg: ChatMessage = {
+          id: data.message_id as number,
+          project_id: projectId,
+          task_id: eventTaskId,
+          role: data.role as "user" | "assistant" | "system",
+          content: data.content as string,
+          media_type: null,
+          media_path: null,
+          token_count: null,
+          created_at: (data.created_at as string) || new Date().toISOString(),
+        };
+        // Check if message already exists (avoid duplicates from our own sends)
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) {
+            return prev;
+          }
+          return [...prev, newMsg];
+        });
+        setMessageCount((prev) => prev + 1);
+      }
+    }
+  }, [projectId, taskId]);
+
+  // Subscribe to WebSocket events for this project
+  useWebSocket({
+    projectId,
+    onEvent: handleWebSocketEvent,
+  });
 
   const loadMessages = useCallback(async () => {
     try {
@@ -55,7 +92,8 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
       };
       await createMessage(projectId, messageData);
       setNewMessage("");
-      await loadMessages();
+      // Note: The new message will appear via WebSocket event
+      // No need to reload all messages
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
     } finally {

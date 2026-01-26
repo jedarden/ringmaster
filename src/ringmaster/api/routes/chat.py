@@ -13,6 +13,7 @@ from ringmaster.enricher.rlm import (
     CompressionConfig,
     RLMSummarizer,
 )
+from ringmaster.events import EventType, event_bus
 
 router = APIRouter()
 
@@ -93,7 +94,22 @@ async def create_message(
         media_path=body.media_path,
         token_count=body.token_count,
     )
-    return await repo.create_message(message)
+    created = await repo.create_message(message)
+
+    # Emit event for real-time updates
+    await event_bus.emit(
+        EventType.MESSAGE_CREATED,
+        data={
+            "message_id": created.id,
+            "role": created.role,
+            "content": created.content,
+            "task_id": created.task_id,
+            "created_at": created.created_at.isoformat() if created.created_at else None,
+        },
+        project_id=str(project_id),
+    )
+
+    return created
 
 
 @router.get("/projects/{project_id}/messages/recent")
