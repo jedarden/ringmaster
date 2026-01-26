@@ -61,6 +61,12 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Task assignment loop
 - ✅ Health check monitoring
 - ✅ Graceful shutdown handling
+- ✅ **Self-improvement flywheel integration**
+  - Detects when tasks modify ringmaster source code
+  - Runs tests via HotReloader after task completion
+  - Reloads modules on test success
+  - Rollback on test failure (configurable)
+  - Emits SCHEDULER_RELOAD events for UI notifications
 
 ### Hot-Reload (`src/ringmaster/reload/`)
 - ✅ FileChangeWatcher for monitoring source directories
@@ -86,7 +92,7 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Dependency tracking tests
 - ✅ Event bus unit tests
 - ✅ API integration tests (29 tests covering all endpoints)
-- ✅ Hot-reload tests (22 tests covering watcher, safety, reloader)
+- ✅ Hot-reload tests (27 tests covering watcher, safety, reloader, scheduler integration)
 
 ## Tech Stack
 
@@ -176,7 +182,7 @@ src/ringmaster/
 
 1. **File Browser**: Add file system browsing in project detail view
 2. **Voice Input**: Add voice input to chat interface
-3. **Integration**: Wire hot-reload into scheduler for self-improvement loop
+3. **End-to-end Test**: Create an integration test that runs the full flywheel loop
 
 ## Iteration Log
 
@@ -194,6 +200,7 @@ src/ringmaster/
 | 10 | 2026-01-26 | Add Chat UI to frontend: ChatPanel component with message list and input, Chat API client functions, TypeScript types, integrated in project detail page as sidebar |
 | 11 | 2026-01-26 | Wire ChatPanel to WebSocket: MESSAGE_CREATED event type, real-time message updates without polling, duplicate detection |
 | 12 | 2026-01-26 | Implement hot-reload system: FileChangeWatcher, ConfigWatcher, SafetyValidator, HotReloader with test validation, module reload, and git rollback, 22 new tests, total 108 tests passing |
+| 13 | 2026-01-26 | Integrate hot-reload into scheduler for self-improvement flywheel: detect source modifications after task completion, run tests, reload modules on success, rollback on failure, SCHEDULER_RELOAD event, 5 new tests, total 113 tests passing |
 
 ## Blockers
 
