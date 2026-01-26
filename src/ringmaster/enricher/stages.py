@@ -3,8 +3,13 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 from ringmaster.domain import Project, Task
+from ringmaster.enricher.code_context import (
+    CodeContextExtractor,
+    format_code_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -95,20 +100,45 @@ class ProjectContextStage(BaseStage):
 class CodeContextStage(BaseStage):
     """Stage 3: Code context (relevant files)."""
 
+    def __init__(self, project_dir: Path | None = None):
+        self._project_dir = project_dir
+
     @property
     def name(self) -> str:
         return "code_context"
 
     async def process(self, task: Task, project: Project) -> StageResult | None:
-        """Build code context.
+        """Build code context using intelligent file selection.
 
-        TODO: Implement intelligent file selection:
-        - Parse task description for file references
-        - Use embeddings or keyword matching
-        - Include imports and dependencies
+        Extracts relevant code files based on:
+        - Explicit file references in task description
+        - Keyword matching for function/class names
+        - Import dependencies
         """
-        # Placeholder - skip for now
-        return None
+        if not task.description:
+            return None
+
+        project_dir = self._project_dir or Path.cwd()
+        extractor = CodeContextExtractor(
+            project_dir=project_dir,
+            max_tokens=12000,
+            max_files=10,
+            max_file_lines=500,
+        )
+
+        result = extractor.extract(task.description)
+
+        if not result.files:
+            return None
+
+        content = format_code_context(result, project_dir)
+        sources = [str(f.path) for f in result.files]
+
+        return StageResult(
+            content=content,
+            tokens_estimate=result.total_tokens,
+            sources=sources,
+        )
 
 
 class HistoryContextStage(BaseStage):

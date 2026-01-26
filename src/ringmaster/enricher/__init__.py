@@ -1,5 +1,11 @@
 """Context enrichment service for prompt assembly."""
 
+from ringmaster.enricher.code_context import (
+    CodeContextExtractor,
+    CodeContextResult,
+    FileContext,
+    format_code_context,
+)
 from ringmaster.enricher.pipeline import AssembledPrompt, EnrichmentPipeline, get_pipeline
 from ringmaster.enricher.rlm import (
     CompressionConfig,
@@ -28,4 +34,8 @@ __all__ = [
     "CompressionConfig",
     "HistoryContext",
     "get_history_context",
+    "CodeContextExtractor",
+    "CodeContextResult",
+    "FileContext",
+    "format_code_context",
 ]

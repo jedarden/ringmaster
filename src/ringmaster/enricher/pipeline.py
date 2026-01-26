@@ -13,6 +13,10 @@ from pathlib import Path
 
 from ringmaster.db import Database
 from ringmaster.domain import Project, Task
+from ringmaster.enricher.code_context import (
+    CodeContextExtractor,
+    format_code_context,
+)
 from ringmaster.enricher.rlm import CompressionConfig, RLMSummarizer
 
 logger = logging.getLogger(__name__)
@@ -185,17 +189,35 @@ class EnrichmentPipeline:
     async def _build_code_context(self, task: Task, project: Project) -> str | None:
         """Build code context layer.
 
-        TODO: Implement intelligent file selection:
-        - Parse task description for file references
-        - Find related files using embeddings or keyword matching
-        - Include dependency information
+        Extracts relevant code files based on:
+        - Explicit file references in task description
+        - Keyword matching for function/class names
+        - Import dependencies
         """
-        # Placeholder - return None for now
-        # Real implementation would:
-        # 1. Search for relevant files based on task description
-        # 2. Include imports and dependencies
-        # 3. Apply RLM compression for large files
-        return None
+        if not task.description:
+            return None
+
+        extractor = CodeContextExtractor(
+            project_dir=self.project_dir,
+            max_tokens=12000,
+            max_files=10,
+            max_file_lines=500,
+        )
+
+        result = extractor.extract(task.description)
+
+        if not result.files:
+            logger.debug("No relevant code files found for task %s", task.id)
+            return None
+
+        logger.info(
+            "Found %d relevant files (~%d tokens) for task %s",
+            len(result.files),
+            result.total_tokens,
+            task.id,
+        )
+
+        return format_code_context(result, self.project_dir)
 
     async def _build_history_context(self, task: Task, project: Project) -> str | None:
         """Build history context layer with RLM summarization.
