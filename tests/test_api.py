@@ -574,3 +574,285 @@ class TestQueueAPI:
         )
         assert response.status_code == 200
         assert "tasks_updated" in response.json()
+
+
+class TestChatAPI:
+    """Tests for chat API - testing routes/chat.py."""
+
+    async def test_list_messages_empty(self, client: AsyncClient):
+        """Test listing messages when none exist."""
+        # Create project first
+        project_response = await client.post(
+            "/api/projects", json={"name": "Chat Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/chat/projects/{project_id}/messages")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_create_message(self, client: AsyncClient):
+        """Test creating a chat message."""
+        # Create project first
+        project_response = await client.post(
+            "/api/projects", json={"name": "Message Create Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "role": "user",
+                "content": "Hello, this is a test message",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["role"] == "user"
+        assert data["content"] == "Hello, this is a test message"
+        assert data["project_id"] == project_id
+
+    async def test_create_message_with_task(self, client: AsyncClient):
+        """Test creating a chat message associated with a task."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Message Task Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Chat Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "task_id": task_id,
+                "role": "assistant",
+                "content": "I will help with this task",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["task_id"] == task_id
+
+    async def test_create_message_project_mismatch(self, client: AsyncClient):
+        """Test that project_id in body must match URL."""
+        # Create two projects
+        project1_response = await client.post(
+            "/api/projects", json={"name": "Project 1"}
+        )
+        project1_id = project1_response.json()["id"]
+
+        project2_response = await client.post(
+            "/api/projects", json={"name": "Project 2"}
+        )
+        project2_id = project2_response.json()["id"]
+
+        # Try to create message with mismatched project IDs
+        response = await client.post(
+            f"/api/chat/projects/{project1_id}/messages",
+            json={
+                "project_id": project2_id,  # Different from URL
+                "role": "user",
+                "content": "This should fail",
+            },
+        )
+        assert response.status_code == 400
+
+    async def test_list_messages_with_filter(self, client: AsyncClient):
+        """Test listing messages with task filter."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Filter Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Filter Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create messages
+        await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "role": "user",
+                "content": "Message without task",
+            },
+        )
+        await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "task_id": task_id,
+                "role": "user",
+                "content": "Message with task",
+            },
+        )
+
+        # Filter by task
+        response = await client.get(
+            f"/api/chat/projects/{project_id}/messages?task_id={task_id}"
+        )
+        assert response.status_code == 200
+        messages = response.json()
+        assert len(messages) == 1
+        assert messages[0]["content"] == "Message with task"
+
+    async def test_get_recent_messages(self, client: AsyncClient):
+        """Test getting recent messages."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Recent Messages Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create multiple messages
+        for i in range(5):
+            await client.post(
+                f"/api/chat/projects/{project_id}/messages",
+                json={
+                    "project_id": project_id,
+                    "role": "user",
+                    "content": f"Message {i}",
+                },
+            )
+
+        # Get last 3
+        response = await client.get(
+            f"/api/chat/projects/{project_id}/messages/recent?count=3"
+        )
+        assert response.status_code == 200
+        messages = response.json()
+        assert len(messages) == 3
+        # Should be in chronological order (oldest first of the recent)
+        assert messages[0]["content"] == "Message 2"
+        assert messages[2]["content"] == "Message 4"
+
+    async def test_get_message_count(self, client: AsyncClient):
+        """Test getting message count."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Count Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create messages
+        for i in range(3):
+            await client.post(
+                f"/api/chat/projects/{project_id}/messages",
+                json={
+                    "project_id": project_id,
+                    "role": "user",
+                    "content": f"Message {i}",
+                },
+            )
+
+        response = await client.get(
+            f"/api/chat/projects/{project_id}/messages/count"
+        )
+        assert response.status_code == 200
+        assert response.json()["count"] == 3
+
+    async def test_list_summaries_empty(self, client: AsyncClient):
+        """Test listing summaries when none exist."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Summary Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/chat/projects/{project_id}/summaries")
+        assert response.status_code == 200
+        assert response.json() == []
+
+    async def test_get_latest_summary_not_found(self, client: AsyncClient):
+        """Test getting latest summary when none exist returns 404."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "No Summary Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(
+            f"/api/chat/projects/{project_id}/summaries/latest"
+        )
+        assert response.status_code == 404
+
+    async def test_get_history_context(self, client: AsyncClient):
+        """Test getting history context."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Context Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create some messages
+        for i in range(5):
+            await client.post(
+                f"/api/chat/projects/{project_id}/messages",
+                json={
+                    "project_id": project_id,
+                    "role": "user" if i % 2 == 0 else "assistant",
+                    "content": f"Message {i}",
+                },
+            )
+
+        response = await client.post(f"/api/chat/projects/{project_id}/context")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total_messages"] == 5
+        assert "recent_messages" in data
+        assert "summaries" in data
+        assert "key_decisions" in data
+        assert "formatted_prompt" in data
+        assert "estimated_tokens" in data
+
+    async def test_get_history_context_with_config(self, client: AsyncClient):
+        """Test getting history context with custom config."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Config Context Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create messages
+        for i in range(3):
+            await client.post(
+                f"/api/chat/projects/{project_id}/messages",
+                json={
+                    "project_id": project_id,
+                    "role": "user",
+                    "content": f"Message {i}",
+                },
+            )
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/context",
+            json={"recent_verbatim": 2},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Should only return 2 recent messages
+        assert len(data["recent_messages"]) == 2
+
+    async def test_clear_summaries(self, client: AsyncClient):
+        """Test clearing summaries."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Clear Summary Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.delete(
+            f"/api/chat/projects/{project_id}/summaries?after_id=0"
+        )
+        assert response.status_code == 200
+        assert "deleted" in response.json()

@@ -1,9 +1,9 @@
 """Tests for code context extraction."""
 
-import pytest
-from pathlib import Path
 import tempfile
-import os
+from pathlib import Path
+
+import pytest
 
 from ringmaster.enricher.code_context import (
     CodeContextExtractor,

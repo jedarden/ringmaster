@@ -146,11 +146,20 @@ src/ringmaster/
 - 🔲 File browser and preview
 - 🔲 Voice input and file attachments
 
+### Chat API (`src/ringmaster/api/routes/chat.py`)
+- ✅ Message CRUD endpoints (create, list, recent, count)
+- ✅ Task-scoped message filtering
+- ✅ Summary listing and latest retrieval
+- ✅ History context endpoint with RLM compression
+- ✅ Configurable compression parameters
+- ✅ Clear summaries endpoint for re-summarization
+- ✅ 12 integration tests covering all endpoints
+
 ## Next Steps
 
 1. **Hot Reload**: Implement component hot-reload for self-improvement
 2. **File Browser**: Add file system browsing in project detail view
-3. **Chat API**: Add API endpoints for chat messages to enable RLM integration
+3. **Frontend Chat UI**: Add chat interface to consume the new Chat API
 
 ## Iteration Log
 
@@ -164,6 +173,7 @@ src/ringmaster/
 | 6 | 2026-01-26 | Add WebSocket integration to frontend: useWebSocket hook with auto-reconnect, all pages use real-time events for auto-refresh, WS connection status in header |
 | 7 | 2026-01-26 | Implement RLM summarization: ChatMessage/Summary domain models, ChatRepository, RLMSummarizer with hierarchical compression, decision extraction, token budgeting, 11 new tests |
 | 8 | 2026-01-26 | Implement code context extraction: CodeContextExtractor with explicit file detection, keyword-based search, import resolution, token budgeting, 16 new tests |
+| 9 | 2026-01-26 | Add Chat API endpoints: 8 REST endpoints for messages/summaries/context, integrates RLM summarization, 12 new tests, total 86 tests passing |
 
 ## Blockers
 
