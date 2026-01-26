@@ -32,6 +32,10 @@ import type {
   WorkerMetrics,
   RecentEvent,
   ActivitySummary,
+  UserInputRequest,
+  UserInputResponse,
+  SuggestRelatedRequest,
+  SuggestRelatedResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -496,6 +500,28 @@ export async function getActivity(hours = 24): Promise<ActivitySummary> {
   const params = new URLSearchParams({ hours: hours.toString() });
   const response = await fetch(`${API_BASE}/metrics/activity?${params}`);
   return handleResponse<ActivitySummary>(response);
+}
+
+// Input API (Bead Creator)
+
+export async function submitInput(data: UserInputRequest): Promise<UserInputResponse> {
+  const response = await fetch(`${API_BASE}/input`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<UserInputResponse>(response);
+}
+
+export async function suggestRelatedTasks(
+  data: SuggestRelatedRequest
+): Promise<SuggestRelatedResponse> {
+  const response = await fetch(`${API_BASE}/input/suggest-related`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<SuggestRelatedResponse>(response);
 }
 
 export { ApiError };

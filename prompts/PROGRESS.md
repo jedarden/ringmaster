@@ -173,6 +173,12 @@ src/ringmaster/
 - ✅ Chat API client functions (messages, summaries, context)
 - ✅ Real-time chat message updates via WebSocket
 - ✅ FileBrowser component with directory navigation and file preview
+- ✅ TaskInput component for natural language task creation
+  - Text area with auto-resize and placeholder examples
+  - Priority selector with color-coded options
+  - Auto-decompose toggle for large task breakdown
+  - Debounced related task search for duplicate detection
+  - Created tasks display with type badges and update indicators
 - 🔲 Voice input and file attachments
 
 ### Chat API (`src/ringmaster/api/routes/chat.py`)
@@ -239,7 +245,6 @@ src/ringmaster/
 
 1. **Voice Input**: Add voice input to chat interface
 2. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
-3. **Frontend Input Integration**: Add input component to frontend for natural language task creation
 
 ## Iteration Log
 
@@ -262,6 +267,7 @@ src/ringmaster/
 | 15 | 2026-01-26 | Add end-to-end flywheel tests: 9 integration tests covering file change detection, hot-reload success/failure, mock worker simulation, protected file handling, total 128 tests passing |
 | 16 | 2026-01-26 | Add metrics dashboard: REST API for task/worker stats and events, MetricsDashboard React component with activity summaries and event timeline, 9 new tests, total 137 tests passing |
 | 17 | 2026-01-26 | Add bead creator service: Parser with action detection and ordering, Decomposer for large task breakdown, Matcher for duplicate detection, BeadCreator service, Input API endpoints, 32 new tests, total 169 tests passing |
+| 18 | 2026-01-26 | Add frontend TaskInput component: natural language task creation UI, Input API types and client functions, priority selector, auto-decompose toggle, related task search with debouncing, result display with type badges |
 
 ## Blockers
 

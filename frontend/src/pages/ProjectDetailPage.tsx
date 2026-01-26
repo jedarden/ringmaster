@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getProject, listTasks, createTask, createEpic, updateTask, deleteTask } from "../api/client";
-import type { Project, AnyTask, TaskCreate, EpicCreate } from "../types";
+import type { Project, AnyTask, TaskCreate, EpicCreate, UserInputResponse } from "../types";
 import { TaskStatus, TaskType, Priority } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { ChatPanel } from "../components/ChatPanel";
 import { FileBrowser } from "../components/FileBrowser";
+import { TaskInput } from "../components/TaskInput";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -88,6 +89,11 @@ export function ProjectDetailPage() {
     }
   };
 
+  const handleTasksCreated = useCallback((_response: UserInputResponse) => {
+    // Reload task list when new tasks are created via TaskInput
+    loadData();
+  }, [loadData]);
+
   if (loading) {
     return <div className="loading">Loading...</div>;
   }
@@ -123,14 +129,18 @@ export function ProjectDetailPage() {
 
       <div className="project-detail-with-chat">
         <div className="project-main-content">
+          {projectId && (
+            <TaskInput projectId={projectId} onTasksCreated={handleTasksCreated} />
+          )}
+
           {projectId && <FileBrowser projectId={projectId} />}
 
           <div className="project-actions">
             <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("task"); }}>
-              + New Task
+              + Manual Task
             </button>
             <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("epic"); }}>
-              + New Epic
+              + Manual Epic
             </button>
           </div>
 

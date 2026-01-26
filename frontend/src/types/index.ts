@@ -332,3 +332,44 @@ export interface MetricsResponse {
   activity_24h: ActivitySummary;
   activity_7d: ActivitySummary;
 }
+
+// Input API types (Bead Creator)
+
+export interface UserInputRequest {
+  project_id: string;
+  text: string;
+  priority?: Priority;
+  auto_decompose?: boolean;
+}
+
+export interface CreatedTaskInfo {
+  task_id: string;
+  title: string;
+  task_type: string;
+  was_updated: boolean;
+  matched_task_id: string | null;
+}
+
+export interface UserInputResponse {
+  success: boolean;
+  epic_id: string | null;
+  created_tasks: CreatedTaskInfo[];
+  dependencies_count: number;
+  messages: string[];
+}
+
+export interface RelatedTaskInfo {
+  task_id: string;
+  title: string;
+  similarity: number;
+}
+
+export interface SuggestRelatedRequest {
+  project_id: string;
+  text: string;
+  max_results?: number;
+}
+
+export interface SuggestRelatedResponse {
+  related_tasks: RelatedTaskInfo[];
+}
