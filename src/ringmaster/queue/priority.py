@@ -8,7 +8,7 @@ Based on docs/03-prioritization.md:
 
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from ringmaster.db import Database, TaskRepository
@@ -258,4 +258,4 @@ class DeadlineCalculator:
 
         if task.started_at:
             return task.started_at + estimated_duration
-        return datetime.utcnow() + estimated_duration
+        return datetime.now(UTC) + estimated_duration

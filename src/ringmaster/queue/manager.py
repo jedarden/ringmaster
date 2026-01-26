@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 from ringmaster.db import Database, TaskRepository, WorkerRepository
@@ -77,13 +77,13 @@ class QueueManager:
         # Update task
         task.status = TaskStatus.ASSIGNED
         task.worker_id = worker.id
-        task.updated_at = datetime.utcnow()
+        task.updated_at = datetime.now(UTC)
         await self.task_repo.update_task(task)
 
         # Update worker
         worker.status = WorkerStatus.BUSY
         worker.current_task_id = task.id
-        worker.last_active_at = datetime.utcnow()
+        worker.last_active_at = datetime.now(UTC)
         await self.worker_repo.update(worker)
 
         # Log event
@@ -111,7 +111,7 @@ class QueueManager:
 
         # Mark as ready
         task.status = TaskStatus.READY
-        task.updated_at = datetime.utcnow()
+        task.updated_at = datetime.now(UTC)
         await self.task_repo.update_task(task)
 
         logger.info(f"Task {task_id} enqueued")
@@ -134,7 +134,7 @@ class QueueManager:
 
         if success:
             task.status = TaskStatus.DONE
-            task.completed_at = datetime.utcnow()
+            task.completed_at = datetime.now(UTC)
             if worker:
                 worker.tasks_completed += 1
         else:
@@ -148,13 +148,13 @@ class QueueManager:
 
         task.output_path = output_path
         task.worker_id = None
-        task.updated_at = datetime.utcnow()
+        task.updated_at = datetime.now(UTC)
         await self.task_repo.update_task(task)
 
         if worker:
             worker.status = WorkerStatus.IDLE
             worker.current_task_id = None
-            worker.last_active_at = datetime.utcnow()
+            worker.last_active_at = datetime.now(UTC)
             await self.worker_repo.update(worker)
 
         # Check if any blocked tasks can now be enqueued

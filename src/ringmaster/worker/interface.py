@@ -12,7 +12,7 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -125,7 +125,7 @@ class SessionHandle:
         self.process = process
         self.config = config
         self.worker_name = worker_name
-        self.started_at = datetime.utcnow()
+        self.started_at = datetime.now(UTC)
         self._output_lines: list[str] = []
         self._error_lines: list[str] = []
         self._completed = False
@@ -201,7 +201,7 @@ class SessionHandle:
             except Exception:
                 pass
 
-        ended_at = datetime.utcnow()
+        ended_at = datetime.now(UTC)
         self._completed = True
 
         return SessionResult(

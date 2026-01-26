@@ -8,7 +8,7 @@ Based on the Beads-inspired work unit hierarchy:
 - Question: Non-blocking clarification request
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -22,6 +22,11 @@ def generate_bead_id() -> str:
     return f"bd-{uuid4().hex[:8]}"
 
 
+def utc_now() -> datetime:
+    """Get current UTC datetime (timezone-aware)."""
+    return datetime.now(UTC)
+
+
 class Project(BaseModel):
     """A project containing epics and tasks."""
 
@@ -31,8 +36,8 @@ class Project(BaseModel):
     tech_stack: list[str] = Field(default_factory=list)
     repo_url: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class TaskBase(BaseModel):
@@ -44,8 +49,8 @@ class TaskBase(BaseModel):
     description: str | None = None
     priority: Priority = Priority.P2
     status: TaskStatus = TaskStatus.DRAFT
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
     # File references
     prompt_path: str | None = None
@@ -106,7 +111,7 @@ class Decision(BaseModel):
     recommendation: str | None = None
     resolution: str | None = None
     resolved_at: datetime | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class Question(BaseModel):
@@ -119,7 +124,7 @@ class Question(BaseModel):
     default_answer: str | None = None  # What worker will assume if no answer
     answer: str | None = None
     answered_at: datetime | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class Dependency(BaseModel):
@@ -127,7 +132,7 @@ class Dependency(BaseModel):
 
     child_id: str  # Task that depends on another
     parent_id: str  # Task that must complete first
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class Worker(BaseModel):
@@ -153,5 +158,5 @@ class Worker(BaseModel):
     avg_completion_seconds: float | None = None
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     last_active_at: datetime | None = None

@@ -10,7 +10,7 @@ Based on docs/06-deployment.md:
 import asyncio
 import contextlib
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ringmaster.db import Database, TaskRepository, WorkerRepository
@@ -171,7 +171,7 @@ class Scheduler:
     async def _perform_health_checks(self) -> None:
         """Perform health checks on workers and tasks."""
         # Check for stuck tasks
-        stuck_threshold = datetime.utcnow() - timedelta(hours=2)
+        stuck_threshold = datetime.now(UTC) - timedelta(hours=2)
         in_progress = await self.task_repo.list_tasks(status=TaskStatus.IN_PROGRESS)
 
         for task in in_progress:

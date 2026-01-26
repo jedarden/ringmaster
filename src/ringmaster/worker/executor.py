@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ringmaster.db import Database, TaskRepository, WorkerRepository
@@ -52,14 +52,14 @@ class WorkerExecutor:
 
         # Update task status
         task.status = TaskStatus.IN_PROGRESS
-        task.started_at = datetime.utcnow()
+        task.started_at = datetime.now(UTC)
         task.attempts += 1
         await self.task_repo.update_task(task)
 
         # Update worker status
         worker.status = WorkerStatus.BUSY
         worker.current_task_id = task.id
-        worker.last_active_at = datetime.utcnow()
+        worker.last_active_at = datetime.now(UTC)
         await self.worker_repo.update(worker)
 
         # Create output directory for this task
@@ -116,7 +116,7 @@ class WorkerExecutor:
             task.output_path = str(output_file)
             if result.success:
                 task.status = TaskStatus.REVIEW  # Go to review before done
-                task.completed_at = datetime.utcnow()
+                task.completed_at = datetime.now(UTC)
             else:
                 if task.attempts >= task.max_attempts:
                     task.status = TaskStatus.FAILED
@@ -132,7 +132,7 @@ class WorkerExecutor:
                 worker.tasks_failed += 1
             worker.status = WorkerStatus.IDLE
             worker.current_task_id = None
-            worker.last_active_at = datetime.utcnow()
+            worker.last_active_at = datetime.now(UTC)
             await self.worker_repo.update(worker)
 
             # Record metrics

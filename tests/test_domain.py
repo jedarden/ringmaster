@@ -2,8 +2,6 @@
 
 from uuid import UUID
 
-import pytest
-
 from ringmaster.domain import (
     Epic,
     Priority,

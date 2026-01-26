@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -68,7 +68,7 @@ class ProjectRepository:
 
     async def update(self, project: Project) -> Project:
         """Update an existing project."""
-        project.updated_at = datetime.utcnow()
+        project.updated_at = datetime.now(UTC)
         await self.db.execute(
             """
             UPDATE projects SET
@@ -205,7 +205,7 @@ class TaskRepository:
 
     async def update_task(self, task: Task | Epic | Subtask) -> Task | Epic | Subtask:
         """Update an existing task."""
-        task.updated_at = datetime.utcnow()
+        task.updated_at = datetime.now(UTC)
         await self.db.execute(
             """
             UPDATE tasks SET
