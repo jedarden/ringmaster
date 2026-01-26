@@ -17,6 +17,7 @@ from ringmaster.domain import (
     TaskStatus,
     TaskType,
 )
+from ringmaster.events import EventType, event_bus
 
 router = APIRouter()
 
@@ -106,7 +107,16 @@ async def create_task(
             parent_id=body.parent_id,
         )
 
-    return await repo.create_task(task)
+    created = await repo.create_task(task)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_CREATED,
+        data={"task_id": created.id, "title": created.title, "type": created.type.value},
+        project_id=str(body.project_id),
+    )
+
+    return created
 
 
 @router.post("/epics", status_code=201)
@@ -123,7 +133,16 @@ async def create_epic(
         priority=body.priority,
         acceptance_criteria=body.acceptance_criteria,
     )
-    return await repo.create_task(epic)
+    created = await repo.create_task(epic)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_CREATED,
+        data={"task_id": created.id, "title": created.title, "type": "epic"},
+        project_id=str(body.project_id),
+    )
+
+    return created
 
 
 @router.get("/{task_id}")
@@ -160,7 +179,16 @@ async def update_task(
     if body.status is not None:
         task.status = body.status
 
-    return await repo.update_task(task)
+    updated = await repo.update_task(task)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_UPDATED,
+        data={"task_id": updated.id, "status": updated.status.value},
+        project_id=str(updated.project_id),
+    )
+
+    return updated
 
 
 @router.delete("/{task_id}", status_code=204)
@@ -170,9 +198,22 @@ async def delete_task(
 ) -> None:
     """Delete a task."""
     repo = TaskRepository(db)
+
+    # Get task before deleting to get project_id for event
+    task = await repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
     deleted = await repo.delete_task(task_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_DELETED,
+        data={"task_id": task_id},
+        project_id=str(task.project_id),
+    )
 
 
 @router.get("/{task_id}/dependencies")
