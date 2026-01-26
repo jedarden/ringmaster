@@ -1,38 +1,40 @@
-# Build artifacts
-/target/
-debug/
-*.pdb
-
-# Database
-*.db
-*.db-wal
-*.db-shm
-.ringmaster/
-
-# Environment
-.env
-.env.local
-.env.*.local
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Database
+*.db
+*.sqlite
+
+# Logs
+*.log
+prompts/.marathon/logs/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Frontend build
-/frontend/dist/
-/frontend/node_modules/
-
-# Logs
-*.log
-/logs/
-
-# Test artifacts
-/coverage/
-*.profraw
+# Node (frontend)
+node_modules/
+frontend/dist/
