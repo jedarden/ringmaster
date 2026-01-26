@@ -190,8 +190,8 @@ src/ringmaster/
 ## Next Steps
 
 1. **Voice Input**: Add voice input to chat interface
-2. **End-to-end Test**: Create an integration test that runs the full flywheel loop
-3. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
+2. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
+3. **Dashboard Metrics**: Add live metrics display (tasks completed, errors, reload history)
 
 ## Iteration Log
 
@@ -211,6 +211,7 @@ src/ringmaster/
 | 12 | 2026-01-26 | Implement hot-reload system: FileChangeWatcher, ConfigWatcher, SafetyValidator, HotReloader with test validation, module reload, and git rollback, 22 new tests, total 108 tests passing |
 | 13 | 2026-01-26 | Integrate hot-reload into scheduler for self-improvement flywheel: detect source modifications after task completion, run tests, reload modules on success, rollback on failure, SCHEDULER_RELOAD event, 5 new tests, total 113 tests passing |
 | 14 | 2026-01-26 | Add file browser: REST API for directory listing and file content, FileBrowser React component with breadcrumb navigation, file preview with syntax detection, path traversal protection, 6 new tests, total 119 tests passing |
+| 15 | 2026-01-26 | Add end-to-end flywheel tests: 9 integration tests covering file change detection, hot-reload success/failure, mock worker simulation, protected file handling, total 128 tests passing |
 
 ## Blockers
 
