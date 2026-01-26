@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from ringmaster.api.routes import chat, files, metrics, projects, queue, tasks, workers, ws
+from ringmaster.api.routes import chat, files, input, metrics, projects, queue, tasks, workers, ws
 from ringmaster.db.connection import close_database, get_database
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
     app.include_router(files.router, prefix="/api/projects", tags=["files"])
     app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
+    app.include_router(input.router, prefix="/api/input", tags=["input"])
     app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/health")

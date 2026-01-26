@@ -1140,3 +1140,144 @@ class TestMetricsAPI:
         data = response.json()
         # Recent events should be capped at the limit
         assert len(data["recent_events"]) <= 5
+
+
+class TestInputAPI:
+    """Tests for input API - testing routes/input.py."""
+
+    async def test_submit_simple_input(self, client: AsyncClient):
+        """Test submitting simple input creates a task."""
+        # Create project first
+        project_response = await client.post(
+            "/api/projects", json={"name": "Input Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.post(
+            "/api/input",
+            json={
+                "project_id": project_id,
+                "text": "Add a logout button to the navigation bar",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["created_tasks"]) >= 1
+        assert any("logout" in t["title"].lower() or "button" in t["title"].lower()
+                   for t in data["created_tasks"])
+
+    async def test_submit_multiple_tasks_input(self, client: AsyncClient):
+        """Test submitting input with multiple tasks."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Multi Input Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.post(
+            "/api/input",
+            json={
+                "project_id": project_id,
+                "text": "Fix the login bug. Then add password reset. Finally, test the authentication flow.",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert len(data["created_tasks"]) >= 2
+
+    async def test_submit_empty_input(self, client: AsyncClient):
+        """Test submitting empty input."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Empty Input Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.post(
+            "/api/input",
+            json={
+                "project_id": project_id,
+                "text": "",
+            },
+        )
+        # Should fail validation
+        assert response.status_code == 422
+
+    async def test_suggest_related(self, client: AsyncClient):
+        """Test suggesting related tasks."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Suggest Related Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create initial task
+        await client.post(
+            "/api/input",
+            json={
+                "project_id": project_id,
+                "text": "Implement user authentication system",
+            },
+        )
+
+        # Get suggestions
+        response = await client.post(
+            "/api/input/suggest-related",
+            json={
+                "project_id": project_id,
+                "text": "user authentication",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "related_tasks" in data
+
+    async def test_submit_with_priority(self, client: AsyncClient):
+        """Test submitting input with custom priority."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Priority Input Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.post(
+            "/api/input",
+            json={
+                "project_id": project_id,
+                "text": "Fix critical security vulnerability",
+                "priority": "P0",
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify task was created with P0 priority
+        tasks_response = await client.get(
+            f"/api/tasks?project_id={project_id}"
+        )
+        tasks = tasks_response.json()
+        assert len(tasks) > 0
+        assert tasks[0]["priority"] == "P0"
+
+    async def test_submit_without_decompose(self, client: AsyncClient):
+        """Test submitting input with decomposition disabled."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "No Decompose Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.post(
+            "/api/input",
+            json={
+                "project_id": project_id,
+                "text": "Build a complete API with multiple endpoints",
+                "auto_decompose": False,
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True

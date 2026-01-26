@@ -147,6 +147,12 @@ src/ringmaster/
 ├── scheduler/
 │   ├── __init__.py
 │   └── manager.py         # Scheduler loop
+├── creator/
+│   ├── __init__.py
+│   ├── parser.py          # Input parsing
+│   ├── decomposer.py      # Task decomposition
+│   ├── matcher.py         # Duplicate detection
+│   └── service.py         # BeadCreator service
 └── worker/
     ├── __init__.py
     ├── interface.py       # Abstract interface
@@ -203,10 +209,37 @@ src/ringmaster/
 - ✅ WebSocket integration for real-time updates
 - ✅ Dedicated /metrics route in navigation
 
+### Bead Creator Service (`src/ringmaster/creator/`)
+- ✅ Parser module for extracting task candidates from natural language
+  - Action type detection (create, fix, update, remove, test, document, investigate)
+  - Target extraction from action phrases
+  - Ordering hints detection (first, then, finally, after)
+  - Multi-segment splitting (conjunctions, lists, bullets)
+  - Epic detection based on size/keyword signals
+- ✅ Decomposer module for breaking large tasks into subtasks
+  - Size signal detection (length, components, concerns, conjunctions)
+  - List-based subtask extraction (numbered/bulleted)
+  - Component-based subtask extraction
+  - Standard subtask inference based on action type
+- ✅ Matcher module for finding existing similar tasks
+  - Jaccard and Cosine similarity scoring
+  - Configurable match threshold
+  - Related task suggestions
+- ✅ BeadCreator service orchestrating the full flow
+  - Parse → Match → Decompose → Create pipeline
+  - Duplicate detection to update instead of recreate
+  - Dependency creation based on ordering
+  - Event emission for real-time updates
+- ✅ Input API endpoints (`/api/input`)
+  - POST `/api/input` - Create tasks from natural language
+  - POST `/api/input/suggest-related` - Find related existing tasks
+- ✅ 32 tests (26 creator + 6 API integration)
+
 ## Next Steps
 
 1. **Voice Input**: Add voice input to chat interface
 2. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
+3. **Frontend Input Integration**: Add input component to frontend for natural language task creation
 
 ## Iteration Log
 
@@ -228,6 +261,7 @@ src/ringmaster/
 | 14 | 2026-01-26 | Add file browser: REST API for directory listing and file content, FileBrowser React component with breadcrumb navigation, file preview with syntax detection, path traversal protection, 6 new tests, total 119 tests passing |
 | 15 | 2026-01-26 | Add end-to-end flywheel tests: 9 integration tests covering file change detection, hot-reload success/failure, mock worker simulation, protected file handling, total 128 tests passing |
 | 16 | 2026-01-26 | Add metrics dashboard: REST API for task/worker stats and events, MetricsDashboard React component with activity summaries and event timeline, 9 new tests, total 137 tests passing |
+| 17 | 2026-01-26 | Add bead creator service: Parser with action detection and ordering, Decomposer for large task breakdown, Matcher for duplicate detection, BeadCreator service, Input API endpoints, 32 new tests, total 169 tests passing |
 
 ## Blockers
 
