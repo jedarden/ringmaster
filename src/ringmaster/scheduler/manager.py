@@ -15,7 +15,10 @@ from pathlib import Path
 
 from ringmaster.db import Database, TaskRepository, WorkerRepository
 from ringmaster.domain import Task, TaskStatus, Worker, WorkerStatus
+from ringmaster.events import EventBus, EventType
 from ringmaster.queue import QueueManager
+from ringmaster.reload import FileChangeWatcher, HotReloader, ReloadResult
+from ringmaster.reload.reloader import ReloadStatus
 from ringmaster.worker import WorkerExecutor
 
 logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ class Scheduler:
     - Execute tasks using WorkerExecutor
     - Handle completion/failure lifecycle
     - Health monitoring and recovery
+    - Self-improvement flywheel with hot-reload
     """
 
     def __init__(
@@ -38,6 +42,9 @@ class Scheduler:
         poll_interval: float = 2.0,
         max_concurrent_tasks: int = 4,
         output_dir: Path | None = None,
+        project_root: Path | None = None,
+        event_bus: EventBus | None = None,
+        enable_hot_reload: bool = True,
     ):
         self.db = db
         self.task_repo = TaskRepository(db)
@@ -47,10 +54,122 @@ class Scheduler:
 
         self.poll_interval = poll_interval
         self.max_concurrent_tasks = max_concurrent_tasks
+        self.project_root = project_root or Path.cwd()
+        self.event_bus = event_bus
 
         self._running = False
         self._tasks: dict[str, asyncio.Task] = {}
         self._health_check_interval = 30.0  # seconds
+
+        # Hot-reload for self-improvement flywheel
+        self.enable_hot_reload = enable_hot_reload
+        self._hot_reloader: HotReloader | None = None
+        self._file_watcher: FileChangeWatcher | None = None
+
+        if enable_hot_reload:
+            self._setup_hot_reload()
+
+    def _setup_hot_reload(self) -> None:
+        """Initialize hot-reload components."""
+        src_dir = self.project_root / "src"
+        venv_python = self.project_root / ".venv" / "bin" / "python"
+
+        self._hot_reloader = HotReloader(
+            project_root=self.project_root,
+            venv_python=venv_python if venv_python.exists() else None,
+        )
+
+        self._file_watcher = FileChangeWatcher(
+            watch_dirs=[src_dir],
+            patterns=["*.py"],
+        )
+        self._file_watcher.initialize()
+
+        logger.info("Hot-reload initialized for self-improvement flywheel")
+
+    def _is_self_improvement_task(self, task: Task) -> bool:
+        """Check if task modifies Ringmaster's own source code.
+
+        A task is a self-improvement task if it modifies files in:
+        - src/ringmaster/
+        - tests/
+
+        Args:
+            task: The completed task to check.
+
+        Returns:
+            True if this is a self-improvement task.
+        """
+        if not task.output_path:
+            return False
+
+        # Check file watcher for any changes in src/ringmaster
+        if self._file_watcher:
+            changes = self._file_watcher.detect_changes()
+            if changes:
+                # Any change to ringmaster source is a self-improvement
+                for change in changes:
+                    if "ringmaster" in str(change.path):
+                        logger.info(
+                            f"Detected self-improvement: {change.change_type} {change.path}"
+                        )
+                        return True
+
+        return False
+
+    async def _handle_self_improvement(self, task: Task) -> ReloadResult | None:
+        """Handle hot-reload after a self-improvement task.
+
+        Flow:
+        1. Detect modified files
+        2. Validate safety (protected files, test coverage)
+        3. Run tests
+        4. If tests pass: reload affected modules
+        5. If tests fail: rollback changes
+
+        Args:
+            task: The completed self-improvement task.
+
+        Returns:
+            ReloadResult describing outcome, or None if not applicable.
+        """
+        if not self._hot_reloader or not self._file_watcher:
+            return None
+
+        logger.info(f"Processing self-improvement for task {task.id}")
+
+        # Get detected changes
+        changes = self._file_watcher.detect_changes()
+        if not changes:
+            logger.info("No file changes detected for hot-reload")
+            return None
+
+        # Process through hot-reloader
+        result = await self._hot_reloader.process_changes(changes)
+
+        # Emit event
+        if self.event_bus:
+            await self.event_bus.emit(
+                EventType.SCHEDULER_RELOAD,
+                {
+                    "task_id": task.id,
+                    "status": result.status.value,
+                    "reloaded_modules": result.reloaded_modules,
+                    "error": result.error_message,
+                },
+            )
+
+        # Log outcome
+        if result.status == ReloadStatus.SUCCESS:
+            logger.info(
+                f"Self-improvement applied: {len(result.reloaded_modules)} modules reloaded"
+            )
+        elif result.status == ReloadStatus.ROLLED_BACK:
+            logger.warning(f"Self-improvement rolled back: {result.error_message}")
+        else:
+            logger.error(f"Self-improvement failed: {result.status.value}")
+
+        return result
 
     async def start(self) -> None:
         """Start the scheduler."""
@@ -134,6 +253,15 @@ class Scheduler:
                     await self.queue_manager.complete_task(
                         task.id, success=True, output_path=task.output_path
                     )
+
+                    # Check for self-improvement (flywheel)
+                    if self.enable_hot_reload and self._is_self_improvement_task(task):
+                        reload_result = await self._handle_self_improvement(task)
+                        if reload_result and reload_result.status == ReloadStatus.ROLLED_BACK:
+                            # Task succeeded but changes rolled back due to test failure
+                            logger.warning(
+                                f"Task {task.id} completed but changes rolled back"
+                            )
                 else:
                     await self.queue_manager.complete_task(
                         task.id, success=False, output_path=task.output_path
@@ -193,13 +321,42 @@ class Scheduler:
     async def get_status(self) -> dict:
         """Get scheduler status."""
         stats = await self.queue_manager.get_queue_stats()
-        return {
+        status = {
             "running": self._running,
             "active_tasks": list(self._tasks.keys()),
             "active_task_count": len(self._tasks),
             "max_concurrent_tasks": self.max_concurrent_tasks,
             "queue_stats": stats,
+            "hot_reload_enabled": self.enable_hot_reload,
         }
+
+        # Add hot-reload history if enabled
+        if self._hot_reloader:
+            history = self._hot_reloader.get_reload_history(limit=5)
+            status["recent_reloads"] = [
+                {
+                    "status": r.status.value,
+                    "modules": r.reloaded_modules,
+                    "timestamp": r.timestamp.isoformat(),
+                    "error": r.error_message,
+                }
+                for r in history
+            ]
+
+        return status
+
+    def get_reload_history(self, limit: int = 10) -> list[ReloadResult]:
+        """Get recent hot-reload history.
+
+        Args:
+            limit: Maximum number of results to return.
+
+        Returns:
+            List of recent ReloadResults.
+        """
+        if not self._hot_reloader:
+            return []
+        return self._hot_reloader.get_reload_history(limit)
 
     async def cancel_task(self, task_id: str) -> bool:
         """Cancel a running task."""

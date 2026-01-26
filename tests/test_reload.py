@@ -338,3 +338,125 @@ class TestHotReloader:
 
         # History should start empty
         assert reloader.get_reload_history() == []
+
+
+class TestSchedulerHotReload:
+    """Tests for Scheduler hot-reload integration."""
+
+    @pytest.mark.asyncio
+    async def test_scheduler_init_with_hot_reload(self, tmp_path: Path):
+        """Scheduler initializes hot-reload components when enabled."""
+        from ringmaster.db import Database
+        from ringmaster.scheduler import Scheduler
+
+        # Create minimal project structure
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+
+        db = Database(tmp_path / "test.db")
+        await db.connect()
+
+        scheduler = Scheduler(
+            db=db,
+            project_root=tmp_path,
+            enable_hot_reload=True,
+        )
+
+        assert scheduler.enable_hot_reload
+        assert scheduler._hot_reloader is not None
+        assert scheduler._file_watcher is not None
+
+        await db.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_scheduler_init_without_hot_reload(self, tmp_path: Path):
+        """Scheduler can be initialized without hot-reload."""
+        from ringmaster.db import Database
+        from ringmaster.scheduler import Scheduler
+
+        db = Database(tmp_path / "test.db")
+        await db.connect()
+
+        scheduler = Scheduler(
+            db=db,
+            project_root=tmp_path,
+            enable_hot_reload=False,
+        )
+
+        assert not scheduler.enable_hot_reload
+        assert scheduler._hot_reloader is None
+        assert scheduler._file_watcher is None
+
+        await db.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_scheduler_status_includes_reload_info(self, tmp_path: Path):
+        """Scheduler status includes hot-reload information."""
+        from ringmaster.db import Database
+        from ringmaster.scheduler import Scheduler
+
+        # Create minimal project structure
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+
+        db = Database(tmp_path / "test.db")
+        await db.connect()
+
+        scheduler = Scheduler(
+            db=db,
+            project_root=tmp_path,
+            enable_hot_reload=True,
+        )
+
+        status = await scheduler.get_status()
+
+        assert "hot_reload_enabled" in status
+        assert status["hot_reload_enabled"] is True
+        assert "recent_reloads" in status
+        assert status["recent_reloads"] == []
+
+        await db.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_get_reload_history(self, tmp_path: Path):
+        """Scheduler provides access to reload history."""
+        from ringmaster.db import Database
+        from ringmaster.scheduler import Scheduler
+
+        # Create minimal project structure
+        src_dir = tmp_path / "src"
+        src_dir.mkdir()
+
+        db = Database(tmp_path / "test.db")
+        await db.connect()
+
+        scheduler = Scheduler(
+            db=db,
+            project_root=tmp_path,
+            enable_hot_reload=True,
+        )
+
+        history = scheduler.get_reload_history()
+        assert history == []
+
+        await db.disconnect()
+
+    @pytest.mark.asyncio
+    async def test_get_reload_history_disabled(self, tmp_path: Path):
+        """Scheduler returns empty history when hot-reload is disabled."""
+        from ringmaster.db import Database
+        from ringmaster.scheduler import Scheduler
+
+        db = Database(tmp_path / "test.db")
+        await db.connect()
+
+        scheduler = Scheduler(
+            db=db,
+            project_root=tmp_path,
+            enable_hot_reload=False,
+        )
+
+        history = scheduler.get_reload_history()
+        assert history == []
+
+        await db.disconnect()

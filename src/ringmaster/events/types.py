@@ -45,6 +45,7 @@ class EventType(str, Enum):
     # Scheduler events
     SCHEDULER_STARTED = "scheduler.started"
     SCHEDULER_STOPPED = "scheduler.stopped"
+    SCHEDULER_RELOAD = "scheduler.reload"
 
     # Chat/Message events
     MESSAGE_CREATED = "message.created"
