@@ -611,6 +611,7 @@ Implemented shortcuts:
 | 42 | 2026-01-27 | Add Decision & Question API for human-in-the-loop workflows: Decision model (blocks task), Question model (non-blocking), repository methods, 12 API endpoints for CRUD/resolve/answer, event types (DECISION_CREATED/RESOLVED, QUESTION_CREATED/ANSWERED), task blocking integration, 14 new tests, total 337 tests passing |
 | 43 | 2026-01-27 | Add Decision & Question frontend UI: DecisionPanel component with option buttons and custom answers, QuestionPanel component with urgency badges and default answer support, TypeScript types and API client functions, CSS styles, integrated in ProjectDetailPage sidebar, fixed unused import in WorkersPage |
 | 44 | 2026-01-27 | Add rich project mailbox view: GET /api/projects/with-summaries endpoint returning task counts, active workers, pending decisions/questions, latest activity; GET /api/projects/{id}/summary endpoint; ProjectSummary type with TaskStatusCounts; ProjectsPage updated with status indicators, activity summaries, progress bars, time-ago display; CSS styles for project cards, 5 new tests, total 342 tests passing |
+| 45 | 2026-01-27 | Add task iteration progress display: shows attempt count (e.g., "2/5") in task cards, epic child tasks, and subtasks when tasks are in-progress; CSS styling for iteration badge; aligns with docs/07-user-experience.md iteration display spec |
 
 ## Blockers
 
