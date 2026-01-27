@@ -4880,3 +4880,259 @@ button:disabled {
   border-radius: 3px;
   font-size: 10px;
 }
+
+/* Git Revert Styles */
+.git-revert-btn {
+  background: transparent;
+  border: 1px solid var(--color-text-muted);
+  color: var(--color-text-muted);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, background 0.2s, border-color 0.2s;
+  margin-left: auto;
+}
+
+.git-commit-item:hover .git-revert-btn,
+.git-commit-item.selected .git-revert-btn {
+  opacity: 1;
+}
+
+.git-revert-btn:hover {
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: var(--color-bg);
+}
+
+.git-commit-item {
+  position: relative;
+}
+
+.git-revert-options {
+  position: absolute;
+  top: 100%;
+  right: 0.5rem;
+  z-index: 100;
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 200px;
+  margin-top: 0.25rem;
+}
+
+.git-revert-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.git-revert-option:first-child {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.git-revert-option:last-child {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.git-revert-option:hover {
+  background: var(--color-surface-hover);
+}
+
+.git-revert-option-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+}
+
+.revert-icon {
+  font-size: 1rem;
+  width: 1.25rem;
+  text-align: center;
+}
+
+/* Revert Modal */
+.git-revert-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1100;
+}
+
+.git-revert-modal {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  width: 90%;
+  max-width: 450px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.git-revert-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.git-revert-modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.git-revert-modal-close {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+  line-height: 1;
+}
+
+.git-revert-modal-close:hover {
+  color: var(--color-text);
+}
+
+.git-revert-modal-content {
+  padding: 1.5rem 1.25rem;
+  min-height: 100px;
+}
+
+.git-revert-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-text-muted);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.git-revert-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: var(--color-error);
+}
+
+.error-icon {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+
+.git-revert-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.git-revert-result .result-icon {
+  font-size: 2rem;
+  font-weight: bold;
+  display: block;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.git-revert-result.success .result-icon {
+  color: var(--color-success);
+}
+
+.git-revert-result.failure .result-icon {
+  color: var(--color-error);
+}
+
+.result-message {
+  margin: 0;
+  text-align: center;
+  color: var(--color-text);
+}
+
+.result-commit {
+  margin: 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.result-commit code {
+  background: var(--color-bg);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  color: var(--color-accent);
+}
+
+.result-conflicts {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius);
+}
+
+.conflicts-title {
+  margin: 0 0 0.5rem 0;
+  font-weight: 500;
+  color: var(--color-error);
+  font-size: 0.9rem;
+}
+
+.result-conflicts ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.result-conflicts li {
+  color: var(--color-text);
+}
+
+.git-revert-modal-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--color-primary);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-close-revert {
+  padding: 0.5rem 1.25rem;
+  background: var(--color-primary);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.btn-close-revert:hover {
+  background: var(--color-surface-hover);
+}

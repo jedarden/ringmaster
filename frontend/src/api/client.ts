@@ -72,6 +72,7 @@ import type {
   RejectResponse,
   WorkerHealthResponse,
   RoutingRecommendation,
+  RevertResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -1212,6 +1213,69 @@ export async function getTaskRouting(
     `${API_BASE}/tasks/${taskId}/routing${params.toString() ? "?" + params : ""}`
   );
   return handleResponse<RoutingRecommendation>(response);
+}
+
+// Git Revert API
+
+/**
+ * Revert a single git commit.
+ * Creates a new commit that undoes the changes from the specified commit.
+ */
+export async function revertCommit(
+  projectId: string,
+  commit: string,
+  noCommit = false
+): Promise<RevertResponse> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/git/revert/${commit}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ no_commit: noCommit }),
+  });
+  return handleResponse<RevertResponse>(response);
+}
+
+/**
+ * Revert all commits from HEAD back to (but not including) the target commit.
+ * Creates revert commits for each commit in the range.
+ */
+export async function revertToCommit(
+  projectId: string,
+  commit: string,
+  noCommit = false
+): Promise<RevertResponse> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/git/revert-to/${commit}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ no_commit: noCommit }),
+  });
+  return handleResponse<RevertResponse>(response);
+}
+
+/**
+ * Revert changes to a specific file from a commit.
+ * Restores the file to its state before the commit and stages the change.
+ */
+export async function revertFileInCommit(
+  projectId: string,
+  commit: string,
+  filePath: string
+): Promise<RevertResponse> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/git/revert/${commit}/file`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ file_path: filePath }),
+  });
+  return handleResponse<RevertResponse>(response);
+}
+
+/**
+ * Abort an in-progress git revert operation.
+ */
+export async function abortRevert(projectId: string): Promise<RevertResponse> {
+  const response = await fetch(`${API_BASE}/projects/${projectId}/git/revert-abort`, {
+    method: "POST",
+  });
+  return handleResponse<RevertResponse>(response);
 }
 
 export { ApiError };

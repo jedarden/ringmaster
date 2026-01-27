@@ -865,3 +865,12 @@ export interface RoutingRecommendation {
   suggested_models: string[];
   signals: RoutingSignals;
 }
+
+// Git Revert types
+
+export interface RevertResponse {
+  success: boolean;
+  new_commit_hash: string | null;
+  message: string;
+  conflicts: string[] | null;
+}
