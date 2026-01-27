@@ -10,7 +10,6 @@ import type { Worker, WorkerCreate } from "../types";
 import { WorkerStatus } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { useListNavigation } from "../hooks/useKeyboardShortcuts";
-import { WorkerOutputPanel } from "../components/WorkerOutputPanel";
 
 export function WorkersPage() {
   const [workers, setWorkers] = useState<Worker[]>([]);
@@ -22,7 +21,6 @@ export function WorkersPage() {
     type: "claude-code",
     command: "claude",
   });
-  const [selectedWorkerForOutput, setSelectedWorkerForOutput] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const loadWorkers = useCallback(async () => {

@@ -7,6 +7,8 @@ import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { ChatPanel } from "../components/ChatPanel";
 import { FileBrowser } from "../components/FileBrowser";
 import { TaskInput } from "../components/TaskInput";
+import { DecisionPanel } from "../components/DecisionPanel";
+import { QuestionPanel } from "../components/QuestionPanel";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -655,7 +657,19 @@ export function ProjectDetailPage() {
         </div>
 
         <div className="project-chat-sidebar">
-          {projectId && <ChatPanel projectId={projectId} />}
+          {projectId && (
+            <>
+              <DecisionPanel
+                projectId={projectId}
+                onDecisionResolved={() => loadData()}
+              />
+              <QuestionPanel
+                projectId={projectId}
+                onQuestionAnswered={() => loadData()}
+              />
+              <ChatPanel projectId={projectId} />
+            </>
+          )}
         </div>
       </div>
     </div>

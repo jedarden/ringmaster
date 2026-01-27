@@ -50,6 +50,14 @@ import type {
   ActionResponse,
   UndoResponse,
   HistoryResponse,
+  Decision,
+  DecisionCreate,
+  DecisionResolve,
+  DecisionStats,
+  Question,
+  QuestionCreate,
+  QuestionAnswer,
+  QuestionStats,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -819,6 +827,150 @@ export async function performRedo(projectId?: string): Promise<UndoResponse> {
     method: "POST",
   });
   return handleResponse<UndoResponse>(response);
+}
+
+// Decisions API
+
+export interface ListDecisionsParams {
+  project_id?: string;
+  blocks_id?: string;
+  pending_only?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listDecisions(
+  params: ListDecisionsParams = {}
+): Promise<Decision[]> {
+  const searchParams = new URLSearchParams();
+  if (params.project_id) searchParams.set("project_id", params.project_id);
+  if (params.blocks_id) searchParams.set("blocks_id", params.blocks_id);
+  if (params.pending_only !== undefined) {
+    searchParams.set("pending_only", params.pending_only.toString());
+  }
+  searchParams.set("limit", (params.limit || 100).toString());
+  searchParams.set("offset", (params.offset || 0).toString());
+
+  const response = await fetch(`${API_BASE}/decisions?${searchParams}`);
+  return handleResponse<Decision[]>(response);
+}
+
+export async function createDecision(data: DecisionCreate): Promise<Decision> {
+  const response = await fetch(`${API_BASE}/decisions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Decision>(response);
+}
+
+export async function getDecision(id: string): Promise<Decision> {
+  const response = await fetch(`${API_BASE}/decisions/${id}`);
+  return handleResponse<Decision>(response);
+}
+
+export async function resolveDecision(
+  id: string,
+  data: DecisionResolve
+): Promise<Decision> {
+  const response = await fetch(`${API_BASE}/decisions/${id}/resolve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Decision>(response);
+}
+
+export async function getDecisionsForTask(
+  taskId: string,
+  pendingOnly = false
+): Promise<Decision[]> {
+  const params = new URLSearchParams({
+    pending_only: pendingOnly.toString(),
+  });
+  const response = await fetch(
+    `${API_BASE}/decisions/for-task/${taskId}?${params}`
+  );
+  return handleResponse<Decision[]>(response);
+}
+
+export async function getDecisionStats(projectId: string): Promise<DecisionStats> {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/decisions/stats`
+  );
+  return handleResponse<DecisionStats>(response);
+}
+
+// Questions API
+
+export interface ListQuestionsParams {
+  project_id?: string;
+  related_id?: string;
+  pending_only?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export async function listQuestions(
+  params: ListQuestionsParams = {}
+): Promise<Question[]> {
+  const searchParams = new URLSearchParams();
+  if (params.project_id) searchParams.set("project_id", params.project_id);
+  if (params.related_id) searchParams.set("related_id", params.related_id);
+  if (params.pending_only !== undefined) {
+    searchParams.set("pending_only", params.pending_only.toString());
+  }
+  searchParams.set("limit", (params.limit || 100).toString());
+  searchParams.set("offset", (params.offset || 0).toString());
+
+  const response = await fetch(`${API_BASE}/questions?${searchParams}`);
+  return handleResponse<Question[]>(response);
+}
+
+export async function createQuestion(data: QuestionCreate): Promise<Question> {
+  const response = await fetch(`${API_BASE}/questions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Question>(response);
+}
+
+export async function getQuestion(id: string): Promise<Question> {
+  const response = await fetch(`${API_BASE}/questions/${id}`);
+  return handleResponse<Question>(response);
+}
+
+export async function answerQuestion(
+  id: string,
+  data: QuestionAnswer
+): Promise<Question> {
+  const response = await fetch(`${API_BASE}/questions/${id}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<Question>(response);
+}
+
+export async function getQuestionsForTask(
+  taskId: string,
+  pendingOnly = false
+): Promise<Question[]> {
+  const params = new URLSearchParams({
+    pending_only: pendingOnly.toString(),
+  });
+  const response = await fetch(
+    `${API_BASE}/questions/for-task/${taskId}?${params}`
+  );
+  return handleResponse<Question[]>(response);
+}
+
+export async function getQuestionStats(projectId: string): Promise<QuestionStats> {
+  const response = await fetch(
+    `${API_BASE}/projects/${projectId}/questions/stats`
+  );
+  return handleResponse<QuestionStats>(response);
 }
 
 export { ApiError };

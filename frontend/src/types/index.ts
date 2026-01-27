@@ -552,3 +552,73 @@ export interface OutputBufferStats {
     subscriber_count: number;
   };
 }
+
+// Decision and Question types for human-in-the-loop workflows
+
+export const Urgency = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+} as const;
+export type Urgency = (typeof Urgency)[keyof typeof Urgency];
+
+export interface Decision {
+  id: string;
+  blocks_id: string;
+  question: string;
+  context: string | null;
+  options: string[];
+  recommendation: string | null;
+  resolution: string | null;
+  resolved_at: string | null;
+  created_at: string;
+}
+
+export interface DecisionCreate {
+  project_id: string;
+  blocks_id: string;
+  question: string;
+  context?: string | null;
+  options?: string[];
+  recommendation?: string | null;
+}
+
+export interface DecisionResolve {
+  resolution: string;
+}
+
+export interface DecisionStats {
+  total: number;
+  pending: number;
+  resolved: number;
+}
+
+export interface Question {
+  id: string;
+  related_id: string;
+  question: string;
+  urgency: Urgency;
+  default_answer: string | null;
+  answer: string | null;
+  answered_at: string | null;
+  created_at: string;
+}
+
+export interface QuestionCreate {
+  project_id: string;
+  related_id: string;
+  question: string;
+  urgency?: Urgency;
+  default_answer?: string | null;
+}
+
+export interface QuestionAnswer {
+  answer: string;
+}
+
+export interface QuestionStats {
+  total: number;
+  pending: number;
+  answered: number;
+  by_urgency: Record<string, number>;
+}
