@@ -22,6 +22,10 @@ from ringmaster.enricher.deployment_context import (
     DeploymentContextExtractor,
     format_deployment_context,
 )
+from ringmaster.enricher.documentation_context import (
+    DocumentationContextExtractor,
+    format_documentation_context,
+)
 from ringmaster.enricher.rlm import CompressionConfig, RLMSummarizer
 
 logger = logging.getLogger(__name__)
@@ -54,10 +58,11 @@ class EnrichmentPipeline:
     2. Project Context - Repo URL, tech stack, conventions
     3. Code Context - Relevant files, imports, dependencies
     4. Deployment Context - Env configs, K8s manifests, CI/CD status
-    5. History Context - RLM-summarized conversation history
-    6. Logs Context - Error logs and stack traces for debugging
-    7. Research Context - Prior agent outputs and related task summaries
-    8. Refinement Context - Safety guardrails, constraints
+    5. Documentation Context - README, ADRs, conventions, API specs
+    6. History Context - RLM-summarized conversation history
+    7. Logs Context - Error logs and stack traces for debugging
+    8. Research Context - Prior agent outputs and related task summaries
+    9. Refinement Context - Safety guardrails, constraints
     """
 
     def __init__(
@@ -116,25 +121,31 @@ class EnrichmentPipeline:
             context_parts.append(deployment_context)
             metrics.stages_applied.append("deployment_context")
 
-        # Layer 5: History Context (RLM-summarized conversation history)
+        # Layer 5: Documentation Context (README, ADRs, conventions)
+        documentation_context = await self._build_documentation_context(task, project)
+        if documentation_context:
+            context_parts.append(documentation_context)
+            metrics.stages_applied.append("documentation_context")
+
+        # Layer 6: History Context (RLM-summarized conversation history)
         history_context = await self._build_history_context(task, project)
         if history_context:
             context_parts.append(history_context)
             metrics.stages_applied.append("history_context")
 
-        # Layer 6: Logs Context (for debugging tasks)
+        # Layer 7: Logs Context (for debugging tasks)
         logs_context = await self._build_logs_context(task, project)
         if logs_context:
             context_parts.append(logs_context)
             metrics.stages_applied.append("logs_context")
 
-        # Layer 7: Research Context (prior agent outputs)
+        # Layer 8: Research Context (prior agent outputs)
         research_context = await self._build_research_context(task, project)
         if research_context:
             context_parts.append(research_context)
             metrics.stages_applied.append("research_context")
 
-        # Layer 8: Refinement Context
+        # Layer 9: Refinement Context
         refinement_context = self._build_refinement_context(task)
         context_parts.append(refinement_context)
         metrics.stages_applied.append("refinement_context")
@@ -279,6 +290,42 @@ class EnrichmentPipeline:
         )
 
         return format_deployment_context(result, self.project_dir)
+
+    async def _build_documentation_context(self, task: Task, project: Project) -> str | None:
+        """Build documentation context layer.
+
+        Per docs/04-context-enrichment.md section 3, this provides:
+        - Project README and goals
+        - Architecture Decision Records (ADRs)
+        - Coding conventions and style guides
+        - API specifications (when API-related)
+        """
+        if not task.description:
+            return None
+
+        extractor = DocumentationContextExtractor(
+            project_dir=self.project_dir,
+            max_tokens=3000,
+            max_files=8,
+            max_file_lines=500,
+            include_adrs=True,
+            include_api_specs=True,
+        )
+
+        result = extractor.extract(task.description)
+
+        if not result.files:
+            logger.debug("No relevant documentation files found for task %s", task.id)
+            return None
+
+        logger.info(
+            "Found %d documentation files (~%d tokens) for task %s",
+            len(result.files),
+            result.total_tokens,
+            task.id,
+        )
+
+        return format_documentation_context(result, self.project_dir)
 
     async def _build_history_context(self, task: Task, project: Project) -> str | None:
         """Build history context layer with RLM summarization.

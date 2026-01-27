@@ -21,6 +21,10 @@ from ringmaster.enricher.deployment_context import (
     DeploymentContextExtractor,
     format_deployment_context,
 )
+from ringmaster.enricher.documentation_context import (
+    DocumentationContextExtractor,
+    format_documentation_context,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,8 +203,65 @@ class DeploymentContextStage(BaseStage):
         )
 
 
+class DocumentationContextStage(BaseStage):
+    """Stage 5: Documentation context (README, ADRs, conventions).
+
+    Per docs/04-context-enrichment.md section 3, this stage provides:
+    - Project README and goals
+    - Architecture Decision Records (ADRs)
+    - Coding conventions and style guides
+    - API specifications (when API-related)
+
+    Always includes README and conventions. ADRs and API specs
+    are filtered by relevance to the task.
+    """
+
+    def __init__(self, project_dir: Path | None = None):
+        self._project_dir = project_dir
+
+    @property
+    def name(self) -> str:
+        return "documentation_context"
+
+    async def process(self, task: Task, project: Project) -> StageResult | None:
+        """Build documentation context.
+
+        Extracts relevant documentation files based on:
+        - README (always included)
+        - Coding conventions (always included)
+        - ADRs (filtered by relevance to task)
+        - API specs (when task is API-related)
+        """
+        if not task.description:
+            return None
+
+        project_dir = self._project_dir or Path.cwd()
+        extractor = DocumentationContextExtractor(
+            project_dir=project_dir,
+            max_tokens=3000,
+            max_files=8,
+            max_file_lines=500,
+            include_adrs=True,
+            include_api_specs=True,
+        )
+
+        result = extractor.extract(task.description)
+
+        if not result.files:
+            return None
+
+        content = format_documentation_context(result, project_dir)
+        sources = [str(f.path) for f in result.files]
+
+        return StageResult(
+            content=content,
+            tokens_estimate=result.total_tokens,
+            sources=sources,
+        )
+
+
 class HistoryContextStage(BaseStage):
-    """Stage 5: Conversation history with RLM summarization."""
+    """Stage 6: Conversation history with RLM summarization."""
 
     def __init__(self, db: Database | None = None):
         """Initialize with optional database connection.
@@ -268,7 +329,7 @@ class HistoryContextStage(BaseStage):
 
 
 class LogsContextStage(BaseStage):
-    """Stage 6: Logs context for debugging tasks.
+    """Stage 7: Logs context for debugging tasks.
 
     Per docs/04-context-enrichment.md section 6, this stage provides:
     - Error logs from the last 24 hours
@@ -474,7 +535,7 @@ class LogsContextStage(BaseStage):
 
 
 class ResearchContextStage(BaseStage):
-    """Stage 7: Research context from prior agent outputs.
+    """Stage 8: Research context from prior agent outputs.
 
     Per docs/04-context-enrichment.md section 2, this stage provides:
     - Prior agent task outputs (when task is related)
@@ -716,7 +777,7 @@ class ResearchContextStage(BaseStage):
 
 
 class RefinementStage(BaseStage):
-    """Stage 8: Refinement and safety guardrails."""
+    """Stage 9: Refinement and safety guardrails."""
 
     @property
     def name(self) -> str:
