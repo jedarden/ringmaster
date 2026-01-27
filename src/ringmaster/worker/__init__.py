@@ -11,6 +11,14 @@ from ringmaster.worker.monitor import (
 )
 from ringmaster.worker.platforms import AiderWorker, ClaudeCodeWorker
 from ringmaster.worker.spawner import SpawnedWorker, SpawnStatus, WorkerSpawner
+from ringmaster.worker.validator import (
+    TaskValidator,
+    ValidationCheck,
+    ValidationResult,
+    ValidationStatus,
+    ValidatorConfig,
+    validate_task,
+)
 
 __all__ = [
     "WorkerInterface",
@@ -25,4 +33,10 @@ __all__ = [
     "WorkerSpawner",
     "SpawnedWorker",
     "SpawnStatus",
+    "TaskValidator",
+    "ValidationCheck",
+    "ValidationResult",
+    "ValidationStatus",
+    "ValidatorConfig",
+    "validate_task",
 ]

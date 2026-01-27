@@ -773,3 +773,247 @@ async def get_routing_recommendation(
             raw_score=result.signals.raw_score,
         ),
     )
+
+
+class ValidationCheckResponse(BaseModel):
+    """Result of a single validation check."""
+
+    name: str
+    status: str  # passed, failed, skipped, error
+    message: str
+    duration_seconds: float
+
+
+class ValidationResponse(BaseModel):
+    """Response from task validation."""
+
+    task_id: str
+    overall_passed: bool
+    needs_human_review: bool
+    review_reason: str
+    checks: list[ValidationCheckResponse]
+    summary: str
+    new_status: str  # The status the task was transitioned to
+
+
+@router.post("/{task_id}/validate")
+async def validate_task(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+    working_dir: str | None = Query(None, description="Working directory for validation"),
+) -> ValidationResponse:
+    """Validate a task in REVIEW status.
+
+    Runs deterministic validation checks (tests, linting) on a task's changes.
+    If validation passes, the task is transitioned to DONE.
+    If validation fails, the task can be sent back to IN_PROGRESS for fixes.
+
+    This is used by the scheduler to auto-approve tasks or by users
+    to manually trigger validation.
+
+    Args:
+        task_id: The task ID to validate.
+        working_dir: Optional working directory for validation commands.
+            Defaults to the project's repo_url or working_dir setting.
+
+    Returns:
+        ValidationResponse with check results and new task status.
+    """
+    from pathlib import Path
+
+    from ringmaster.db import ProjectRepository
+    from ringmaster.worker.validator import TaskValidator, ValidatorConfig
+
+    task_repo = TaskRepository(db)
+    project_repo = ProjectRepository(db)
+
+    task = await task_repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Only REVIEW tasks can be validated
+    if task.status != TaskStatus.REVIEW:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task must be in REVIEW status to validate (current: {task.status.value})",
+        )
+
+    # Get project for working directory
+    project = await project_repo.get(str(task.project_id))
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Determine working directory
+    work_dir_path: Path | None = None
+    if working_dir:
+        work_dir_path = Path(working_dir)
+    elif project.repo_url and Path(project.repo_url).is_dir():
+        work_dir_path = Path(project.repo_url)
+    elif project.settings and project.settings.get("working_dir"):
+        work_dir_path = Path(project.settings["working_dir"])
+
+    if not work_dir_path or not work_dir_path.is_dir():
+        raise HTTPException(
+            status_code=400,
+            detail="No valid working directory found for validation",
+        )
+
+    # Create validator with default config
+    config = ValidatorConfig()
+    validator = TaskValidator(config=config, working_dir=work_dir_path)
+
+    # Run validation
+    result = await validator.validate_task(
+        task_title=task.title,
+        task_description=task.description or "",
+        working_dir=work_dir_path,
+    )
+
+    # Determine new status based on validation result
+    if result.overall_passed:
+        new_status = TaskStatus.DONE
+        task.status = TaskStatus.DONE
+    elif result.needs_human_review:
+        # Keep in REVIEW for human attention
+        new_status = TaskStatus.REVIEW
+    else:
+        # Validation failed - send back for fixes
+        new_status = TaskStatus.IN_PROGRESS
+        task.status = TaskStatus.IN_PROGRESS
+        # Clear completed_at since we're sending it back
+        task.completed_at = None
+
+    await task_repo.update_task(task)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_STATUS,
+        data={
+            "task_id": task_id,
+            "status": new_status.value,
+            "validation_passed": result.overall_passed,
+            "needs_human_review": result.needs_human_review,
+        },
+        project_id=str(task.project_id),
+    )
+
+    return ValidationResponse(
+        task_id=task_id,
+        overall_passed=result.overall_passed,
+        needs_human_review=result.needs_human_review,
+        review_reason=result.review_reason,
+        checks=[
+            ValidationCheckResponse(
+                name=check.name,
+                status=check.status.value,
+                message=check.message,
+                duration_seconds=check.duration_seconds,
+            )
+            for check in result.checks
+        ],
+        summary=result.summary,
+        new_status=new_status.value,
+    )
+
+
+@router.post("/{task_id}/approve")
+async def approve_task(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+) -> dict:
+    """Manually approve a task in REVIEW status.
+
+    For tasks that need human review or when automated validation
+    is not applicable, this endpoint allows direct approval.
+
+    Args:
+        task_id: The task ID to approve.
+
+    Returns:
+        Dictionary with task_id and new status.
+    """
+    task_repo = TaskRepository(db)
+
+    task = await task_repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Only REVIEW tasks can be approved
+    if task.status != TaskStatus.REVIEW:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task must be in REVIEW status to approve (current: {task.status.value})",
+        )
+
+    # Transition to DONE
+    task.status = TaskStatus.DONE
+    await task_repo.update_task(task)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_STATUS,
+        data={
+            "task_id": task_id,
+            "status": "done",
+            "approved_by": "user",
+        },
+        project_id=str(task.project_id),
+    )
+
+    return {"task_id": task_id, "status": "done", "approved": True}
+
+
+@router.post("/{task_id}/reject")
+async def reject_task(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+    reason: str | None = Query(None, description="Reason for rejection"),
+) -> dict:
+    """Reject a task in REVIEW status.
+
+    Sends the task back to IN_PROGRESS status so the worker can address
+    the issues. An optional reason can be provided.
+
+    Args:
+        task_id: The task ID to reject.
+        reason: Optional reason for rejection.
+
+    Returns:
+        Dictionary with task_id and new status.
+    """
+    task_repo = TaskRepository(db)
+
+    task = await task_repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Only REVIEW tasks can be rejected
+    if task.status != TaskStatus.REVIEW:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Task must be in REVIEW status to reject (current: {task.status.value})",
+        )
+
+    # Transition to IN_PROGRESS
+    task.status = TaskStatus.IN_PROGRESS
+    task.completed_at = None  # Clear completion time
+
+    # Add rejection reason to description
+    if reason:
+        task.description = (task.description or "") + f"\n\n[Rejected: {reason}]"
+
+    await task_repo.update_task(task)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_STATUS,
+        data={
+            "task_id": task_id,
+            "status": "in_progress",
+            "rejected": True,
+            "rejection_reason": reason,
+        },
+        project_id=str(task.project_id),
+    )
+
+    return {"task_id": task_id, "status": "in_progress", "rejected": True, "reason": reason}
