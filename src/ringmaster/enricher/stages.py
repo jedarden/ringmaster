@@ -473,8 +473,250 @@ class LogsContextStage(BaseStage):
         return "\n".join(parts)
 
 
+class ResearchContextStage(BaseStage):
+    """Stage 7: Research context from prior agent outputs.
+
+    Per docs/04-context-enrichment.md section 2, this stage provides:
+    - Prior agent task outputs (when task is related)
+    - Task completion summaries
+    - Related exploration/spike results
+
+    Uses keyword-based matching to find related completed tasks.
+    """
+
+    # Keywords that increase relatedness between tasks
+    TECHNICAL_KEYWORDS = {
+        # API & web
+        "api", "endpoint", "route", "routes", "controller", "service",
+        "rest", "graphql", "request", "response", "http", "https",
+        # Data
+        "model", "schema", "database", "migration", "query", "sql",
+        "repository", "entity", "table", "column", "field",
+        # Testing
+        "test", "tests", "mock", "fixture", "assertion", "coverage",
+        "unit", "integration", "e2e", "spec",
+        # Auth & security
+        "auth", "authentication", "authorization", "jwt", "oauth",
+        "token", "tokens", "login", "logout", "session", "password",
+        "security", "vulnerability", "xss", "csrf", "injection",
+        # Error handling
+        "error", "errors", "exception", "handler", "middleware", "validator",
+        "validation", "validate",
+        # Caching & storage
+        "cache", "caching", "redis", "memcached", "storage",
+        # Async & workers
+        "queue", "worker", "workers", "job", "task", "scheduler", "async",
+        # Config
+        "config", "configuration", "environment", "settings", "variable",
+        # DevOps
+        "deploy", "deployment", "ci", "cd", "build", "docker", "kubernetes",
+        "container", "image", "pipeline",
+        # Frontend
+        "frontend", "component", "components", "hook", "hooks", "state", "redux",
+        "react", "vue", "angular", "ui", "ux",
+        # Performance
+        "performance", "optimization", "profiling", "memory", "cpu",
+        # Implementation patterns
+        "implement", "implementation", "refactor", "update", "add", "fix",
+        "create", "remove", "delete",
+    }
+
+    def __init__(
+        self,
+        db: Database | None = None,
+        max_tokens: int = 4000,
+        max_results: int = 5,
+        min_relevance_score: float = 0.3,
+    ):
+        """Initialize with optional database connection.
+
+        Args:
+            db: Database connection for task output access.
+                If None, this stage will be skipped.
+            max_tokens: Maximum tokens to allocate for research context.
+            max_results: Maximum number of related tasks to include.
+            min_relevance_score: Minimum relevance score threshold (0-1).
+        """
+        self._db = db
+        self.max_tokens = max_tokens
+        self.max_results = max_results
+        self.min_relevance_score = min_relevance_score
+
+    @property
+    def name(self) -> str:
+        return "research_context"
+
+    def _extract_keywords(self, text: str) -> set[str]:
+        """Extract relevant keywords from text."""
+        if not text:
+            return set()
+
+        text_lower = text.lower()
+        words = set(text_lower.split())
+
+        # Find technical keywords that appear in the text
+        return words & self.TECHNICAL_KEYWORDS
+
+    def _calculate_relevance(
+        self,
+        current_keywords: set[str],
+        current_title: str,
+        candidate_title: str,
+        candidate_description: str,
+    ) -> float:
+        """Calculate relevance score between current task and candidate.
+
+        Uses Jaccard similarity on keywords plus title word overlap.
+        """
+        # Extract keywords from candidate
+        candidate_text = f"{candidate_title} {candidate_description or ''}"
+        candidate_keywords = self._extract_keywords(candidate_text)
+
+        if not current_keywords and not candidate_keywords:
+            return 0.0
+
+        # Jaccard similarity on technical keywords
+        intersection = current_keywords & candidate_keywords
+        union = current_keywords | candidate_keywords
+
+        keyword_score = len(intersection) / len(union) if union else 0.0
+
+        # Title word overlap (non-stopword)
+        current_title_words = set(current_title.lower().split()) - {
+            "a", "an", "the", "to", "for", "in", "on", "with", "and", "or", "of",
+        }
+        candidate_title_words = set(candidate_title.lower().split()) - {
+            "a", "an", "the", "to", "for", "in", "on", "with", "and", "or", "of",
+        }
+
+        if current_title_words and candidate_title_words:
+            title_intersection = current_title_words & candidate_title_words
+            title_union = current_title_words | candidate_title_words
+            title_score = len(title_intersection) / len(title_union)
+        else:
+            title_score = 0.0
+
+        # Combined score (keywords weighted higher)
+        return keyword_score * 0.7 + title_score * 0.3
+
+    async def process(self, task: Task, project: Project) -> StageResult | None:
+        """Build research context from prior task outputs.
+
+        Queries completed tasks in the same project and includes
+        output summaries from semantically related tasks.
+        """
+        if self._db is None:
+            return None
+
+        try:
+            # Get completed tasks with output summaries
+            completed_tasks = await self._db.fetchall(
+                """
+                SELECT t.id, t.title, t.description, t.type,
+                       t.completed_at, sm.output_summary
+                FROM tasks t
+                LEFT JOIN session_metrics sm ON t.id = sm.task_id AND sm.success = 1
+                WHERE t.project_id = ?
+                  AND t.id != ?
+                  AND t.status = 'done'
+                  AND t.type IN ('task', 'subtask')
+                ORDER BY t.completed_at DESC
+                LIMIT 50
+                """,
+                (str(project.id), task.id),
+            )
+
+            if not completed_tasks:
+                logger.debug("No completed tasks found for project %s", project.id)
+                return None
+
+            # Extract keywords from current task
+            current_text = f"{task.title} {task.description or ''}"
+            current_keywords = self._extract_keywords(current_text)
+
+            # Score and rank related tasks
+            scored_tasks = []
+            for row in completed_tasks:
+                relevance = self._calculate_relevance(
+                    current_keywords,
+                    task.title,
+                    row["title"],
+                    row["description"],
+                )
+                if relevance >= self.min_relevance_score:
+                    scored_tasks.append((row, relevance))
+
+            # Sort by relevance, take top N
+            scored_tasks.sort(key=lambda x: x[1], reverse=True)
+            top_tasks = scored_tasks[: self.max_results]
+
+            if not top_tasks:
+                logger.debug("No related tasks found for task %s", task.id)
+                return None
+
+            # Format for context
+            content = self._format_research_context(top_tasks)
+
+            # Estimate tokens
+            tokens_estimate = len(content) // 4
+
+            # Truncate if exceeds budget
+            if tokens_estimate > self.max_tokens:
+                max_chars = self.max_tokens * 4
+                content = content[:max_chars] + "\n\n... (research context truncated)"
+                tokens_estimate = self.max_tokens
+
+            sources = [f"research:{len(top_tasks)} related tasks"]
+
+            logger.info(
+                "Built research context: %d related tasks, ~%d tokens for task %s",
+                len(top_tasks),
+                tokens_estimate,
+                task.id,
+            )
+
+            return StageResult(
+                content=content,
+                tokens_estimate=tokens_estimate,
+                sources=sources,
+            )
+
+        except Exception as e:
+            logger.warning("Failed to build research context: %s", e)
+            return None
+
+    def _format_research_context(self, scored_tasks: list[tuple[dict, float]]) -> str:
+        """Format related task outputs for prompt inclusion."""
+        parts = ["## Prior Research & Related Work", ""]
+
+        for row, relevance in scored_tasks:
+            task_id = row["id"]
+            title = row["title"]
+            task_type = row["type"]
+            output_summary = row["output_summary"]
+            completed_at = row["completed_at"]
+
+            parts.append(f"### {title}")
+            parts.append(f"- ID: {task_id} ({task_type})")
+            parts.append(f"- Completed: {completed_at}")
+            parts.append(f"- Relevance: {relevance:.0%}")
+
+            if output_summary:
+                parts.append(f"\n**Summary:** {output_summary}")
+            elif row["description"]:
+                # Fall back to description if no output summary
+                desc = row["description"][:500]
+                if len(row["description"]) > 500:
+                    desc += "..."
+                parts.append(f"\n**Description:** {desc}")
+
+            parts.append("")
+
+        return "\n".join(parts)
+
+
 class RefinementStage(BaseStage):
-    """Stage 7: Refinement and safety guardrails."""
+    """Stage 8: Refinement and safety guardrails."""
 
     @property
     def name(self) -> str:

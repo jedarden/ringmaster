@@ -55,7 +55,9 @@ class EnrichmentPipeline:
     3. Code Context - Relevant files, imports, dependencies
     4. Deployment Context - Env configs, K8s manifests, CI/CD status
     5. History Context - RLM-summarized conversation history
-    6. Refinement Context - Safety guardrails, constraints
+    6. Logs Context - Error logs and stack traces for debugging
+    7. Research Context - Prior agent outputs and related task summaries
+    8. Refinement Context - Safety guardrails, constraints
     """
 
     def __init__(
@@ -126,7 +128,13 @@ class EnrichmentPipeline:
             context_parts.append(logs_context)
             metrics.stages_applied.append("logs_context")
 
-        # Layer 7: Refinement Context
+        # Layer 7: Research Context (prior agent outputs)
+        research_context = await self._build_research_context(task, project)
+        if research_context:
+            context_parts.append(research_context)
+            metrics.stages_applied.append("research_context")
+
+        # Layer 8: Refinement Context
         refinement_context = self._build_refinement_context(task)
         context_parts.append(refinement_context)
         metrics.stages_applied.append("refinement_context")
@@ -422,6 +430,47 @@ class EnrichmentPipeline:
             parts.append(entry)
 
         return "\n".join(parts)
+
+    async def _build_research_context(self, task: Task, project: Project) -> str | None:
+        """Build research context from prior task outputs.
+
+        Per docs/04-context-enrichment.md section 2, this stage provides:
+        - Prior agent task outputs (when task is related)
+        - Task completion summaries
+        - Related exploration/spike results
+        """
+        if self.db is None:
+            logger.debug("No database configured, skipping research context")
+            return None
+
+        try:
+            # Import the ResearchContextStage for keyword extraction logic
+            from ringmaster.enricher.stages import ResearchContextStage
+
+            stage = ResearchContextStage(
+                db=self.db,
+                max_tokens=4000,
+                max_results=5,
+                min_relevance_score=0.3,
+            )
+
+            result = await stage.process(task, project)
+
+            if result is None:
+                logger.debug("No related research found for task %s", task.id)
+                return None
+
+            logger.info(
+                "Built research context: ~%d tokens for task %s",
+                result.tokens_estimate,
+                task.id,
+            )
+
+            return result.content
+
+        except Exception as e:
+            logger.warning("Failed to build research context: %s", e)
+            return None
 
     def _build_refinement_context(self, task: Task) -> str:
         """Build refinement context with safety guardrails."""
