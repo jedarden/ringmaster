@@ -179,7 +179,12 @@ src/ringmaster/
   - Auto-decompose toggle for large task breakdown
   - Debounced related task search for duplicate detection
   - Created tasks display with type badges and update indicators
-- 🔲 Voice input and file attachments
+- ✅ Voice input using Web Speech API
+  - useSpeechRecognition hook with browser-native transcription
+  - Voice toggle button with visual feedback (pulse animation)
+  - Interim and final transcript handling
+  - Error handling for microphone access and browser support
+- 🔲 File attachments
 
 ### Chat API (`src/ringmaster/api/routes/chat.py`)
 - ✅ Message CRUD endpoints (create, list, recent, count)
@@ -266,7 +271,7 @@ src/ringmaster/
 
 ## Next Steps
 
-1. **Voice Input**: Add voice input to chat interface
+1. **File Attachments**: Add file/image attachment support to chat interface
 2. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
 
 ## Iteration Log
@@ -293,6 +298,7 @@ src/ringmaster/
 | 18 | 2026-01-26 | Add frontend TaskInput component: natural language task creation UI, Input API types and client functions, priority selector, auto-decompose toggle, related task search with debouncing, result display with type badges |
 | 19 | 2026-01-26 | Integrate EnrichmentPipeline into WorkerExecutor: 5-layer prompt assembly, project context fetching, context hash tracking, prompt file saving, fallback prompt, 11 new tests, total 180 tests passing |
 | 20 | 2026-01-26 | Add Logs API for observability: structured logging with SQLite storage, FTS5 search, filtering by component/level/task/worker, pagination, statistics endpoint, 17 new tests, total 197 tests passing |
+| 21 | 2026-01-27 | Add voice input to ChatPanel: useSpeechRecognition hook using Web Speech API, voice toggle button with pulse animation, interim transcript display, browser compatibility handling |
 
 ## Blockers
 

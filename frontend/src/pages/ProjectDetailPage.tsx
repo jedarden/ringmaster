@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getProject, listTasks, createTask, createEpic, updateTask, deleteTask } from "../api/client";
-import type { Project, AnyTask, TaskCreate, EpicCreate, UserInputResponse } from "../types";
+import type { Project, AnyTask, TaskCreate, EpicCreate } from "../types";
 import { TaskStatus, TaskType, Priority } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { ChatPanel } from "../components/ChatPanel";
@@ -89,7 +89,7 @@ export function ProjectDetailPage() {
     }
   };
 
-  const handleTasksCreated = useCallback((_response: UserInputResponse) => {
+  const handleTasksCreated = useCallback(() => {
     // Reload task list when new tasks are created via TaskInput
     loadData();
   }, [loadData]);

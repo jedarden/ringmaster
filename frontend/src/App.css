@@ -832,6 +832,51 @@ textarea {
   cursor: not-allowed;
 }
 
+/* Voice Input Button */
+.chat-voice-btn {
+  padding: 0.5rem 0.75rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-voice-btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: var(--color-bg);
+}
+
+.chat-voice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-voice-btn-active {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: white;
+  animation: pulse-voice 1.5s infinite;
+}
+
+.chat-input-listening {
+  border-color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 10%, var(--color-bg));
+}
+
+@keyframes pulse-voice {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 /* Project Detail with Chat Layout */
 .project-detail-with-chat {
   display: grid;

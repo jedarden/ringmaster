@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { listMessages, createMessage, getMessageCount } from "../api/client";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
+import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import type { ChatMessage, MessageCreate } from "../types";
 
 interface ChatPanelProps {
@@ -16,6 +17,27 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Speech recognition for voice input
+  const {
+    isSupported: speechSupported,
+    isListening,
+    transcript,
+    error: speechError,
+    startListening,
+    stopListening,
+  } = useSpeechRecognition({
+    onTranscript: (text, isFinal) => {
+      if (isFinal) {
+        // Final transcript: append to existing message
+        setNewMessage((prev) => (prev ? prev + " " + text : text));
+      }
+    },
+    onError: (err) => {
+      setError(err);
+    },
+  });
 
   // Handle incoming WebSocket events
   const handleWebSocketEvent = useCallback((event: WebSocketEvent) => {
@@ -119,6 +141,17 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
     }
   };
 
+  const handleVoiceToggle = () => {
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  };
+
+  // Display value: show interim transcript while listening, otherwise the composed message
+  const displayValue = isListening && transcript ? newMessage + (newMessage ? " " : "") + transcript : newMessage;
+
   return (
     <div className="chat-panel">
       <div className="chat-header">
@@ -126,7 +159,7 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
         <span className="message-count">{messageCount} messages</span>
       </div>
 
-      {error && <div className="chat-error">{error}</div>}
+      {(error || speechError) && <div className="chat-error">{error || speechError}</div>}
 
       <div className="chat-messages">
         {loading ? (
@@ -164,14 +197,27 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
 
       <form onSubmit={handleSend} className="chat-input-form">
         <input
+          ref={inputRef}
           type="text"
-          value={newMessage}
+          value={displayValue}
           onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="Type a message..."
-          disabled={sending}
-          className="chat-input"
+          placeholder={isListening ? "Listening..." : "Type a message..."}
+          disabled={sending || isListening}
+          className={`chat-input ${isListening ? "chat-input-listening" : ""}`}
         />
-        <button type="submit" disabled={sending || !newMessage.trim()} className="chat-send-btn">
+        {speechSupported && (
+          <button
+            type="button"
+            onClick={handleVoiceToggle}
+            disabled={sending}
+            className={`chat-voice-btn ${isListening ? "chat-voice-btn-active" : ""}`}
+            title={isListening ? "Stop listening" : "Voice input"}
+            aria-label={isListening ? "Stop listening" : "Start voice input"}
+          >
+            {isListening ? "..." : "\uD83C\uDFA4"}
+          </button>
+        )}
+        <button type="submit" disabled={sending || !displayValue.trim()} className="chat-send-btn">
           {sending ? "..." : "Send"}
         </button>
       </form>
