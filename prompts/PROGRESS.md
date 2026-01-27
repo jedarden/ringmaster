@@ -627,6 +627,24 @@ Implemented shortcuts:
 - ✅ Path traversal security checks
 - ✅ 17 new tests (10 git operations + 7 API integration)
 
+### Git Revert Operations (`src/ringmaster/git/operations.py`, `src/ringmaster/api/routes/files.py`)
+- ✅ Git revert operations for commit reversibility:
+  - get_commit_info(): Get detailed info about a specific commit
+  - revert_commit(): Revert a single commit (creates revert commit)
+  - revert_to_commit(): Revert multiple commits back to a target commit
+  - revert_file_in_commit(): Revert changes to a specific file from a commit
+  - abort_revert(): Abort an in-progress revert operation
+- ✅ RevertResult dataclass with success, new_commit_hash, message, conflicts
+- ✅ API endpoints for git revert operations:
+  - POST /api/projects/{id}/git/revert/{commit} - Revert a single commit
+  - POST /api/projects/{id}/git/revert-to/{commit} - Revert to a target commit
+  - POST /api/projects/{id}/git/revert/{commit}/file - Revert a specific file
+  - POST /api/projects/{id}/git/revert-abort - Abort in-progress revert
+  - GET /api/projects/{id}/git/commit/{commit} - Get commit details
+- ✅ Support for no_commit flag (stage changes without committing)
+- ✅ Conflict detection and reporting
+- ✅ 13 new tests (6 operations + 4 API + 3 revert-to)
+
 ### Git History Frontend UI (`frontend/src/components/`)
 - ✅ GitHistoryModal component
   - Displays commit history for selected file
@@ -943,6 +961,7 @@ Implemented shortcuts:
 | 73 | 2026-01-27 | Add worker health status display to WorkersPage: WorkerHealthResponse/DegradationSignals/RecoveryAction types, LivenessStatus/RecoveryUrgency enums, getWorkerHealth() API client, health status badge with liveness icons for busy workers, degradation badge when context drift detected, recovery action badge with urgency colors, CSS styles for health components; all 625 tests passing |
 | 74 | 2026-01-27 | Add ActionHistoryPanel for viewing and undoing actions: slide-out panel showing recent actions with icons, descriptions, time-ago, and individual undo buttons; "History" button in header; "Undo All" button; WebSocket refresh on undo/redo events; keyboard hint for Cmd+Z/Cmd+Shift+Z; CSS styles for action history panel; implements Recent Actions UI from docs/07-user-experience.md; all 625 tests passing |
 | 75 | 2026-01-27 | Add task complexity badge with model routing info: TaskComplexityBadge component showing complexity (○/◐/●) color-coded by simple/moderate/complex, tooltip with reasoning, suggested models, and signals; RoutingRecommendation TypeScript types; getTaskRouting() API client; integrated in task cards in ProjectDetailPage; wires GET /api/tasks/{id}/routing to frontend; all 625 tests passing |
+| 76 | 2026-01-27 | Add git commit revert operations: get_commit_info(), revert_commit(), revert_to_commit(), revert_file_in_commit(), abort_revert() functions; RevertResult dataclass with conflict detection; API endpoints for single commit revert, revert-to, file-specific revert, abort, and commit details; no_commit flag support; per docs/07-user-experience.md Git History reversibility spec; 13 new tests, total 638 tests passing |
 
 ## Blockers
 

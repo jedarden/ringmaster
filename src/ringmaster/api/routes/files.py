@@ -12,10 +12,15 @@ from ringmaster.api.deps import get_db
 from ringmaster.db import Database, ProjectRepository
 from ringmaster.git import (
     GitError,
+    abort_revert,
+    get_commit_info,
     get_file_at_commit,
     get_file_diff,
     get_file_history,
     is_git_repo,
+    revert_commit,
+    revert_file_in_commit,
+    revert_to_commit,
 )
 
 router = APIRouter()
@@ -483,6 +488,239 @@ async def get_file_content_at_commit(
             commit=commit,
             content=content,
             exists=content is not None,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+# Git Revert Models
+
+
+class RevertRequest(BaseModel):
+    """Request for git revert operations."""
+
+    no_commit: bool = False  # Stage changes without committing
+
+
+class RevertResponse(BaseModel):
+    """Response for git revert operations."""
+
+    success: bool
+    new_commit_hash: str | None
+    message: str
+    conflicts: list[str] | None = None
+
+
+class RevertFileRequest(BaseModel):
+    """Request to revert a specific file from a commit."""
+
+    file_path: str
+
+
+# Git Revert Endpoints
+
+
+@router.post("/{project_id}/git/revert/{commit}")
+async def revert_git_commit(
+    project_id: str,
+    commit: str,
+    db: Annotated[Database, Depends(get_db)],
+    request: RevertRequest | None = None,
+) -> RevertResponse:
+    """Revert a single git commit.
+
+    Creates a new commit that undoes the changes from the specified commit.
+    """
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    no_commit = request.no_commit if request else False
+
+    try:
+        result = await revert_commit(project_root, commit, no_commit=no_commit)
+        return RevertResponse(
+            success=result.success,
+            new_commit_hash=result.new_commit_hash,
+            message=result.message,
+            conflicts=result.conflicts,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/{project_id}/git/revert-to/{commit}")
+async def revert_to_git_commit(
+    project_id: str,
+    commit: str,
+    db: Annotated[Database, Depends(get_db)],
+    request: RevertRequest | None = None,
+) -> RevertResponse:
+    """Revert all commits from HEAD back to (but not including) the target commit.
+
+    This reverts each commit from HEAD to the target, creating revert commits
+    for each one (or staging all changes without committing if no_commit is true).
+    """
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    no_commit = request.no_commit if request else False
+
+    try:
+        result = await revert_to_commit(project_root, commit, no_commit=no_commit)
+        return RevertResponse(
+            success=result.success,
+            new_commit_hash=result.new_commit_hash,
+            message=result.message,
+            conflicts=result.conflicts,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/{project_id}/git/revert/{commit}/file")
+async def revert_file_from_commit(
+    project_id: str,
+    commit: str,
+    request: RevertFileRequest,
+    db: Annotated[Database, Depends(get_db)],
+) -> RevertResponse:
+    """Revert changes to a specific file from a commit.
+
+    This restores the file to its state before the commit and stages the change.
+    Does NOT create a commit automatically - use git commit after to finalize.
+    """
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Security check
+    target_path = project_root / request.file_path
+    if not is_safe_path(project_root, target_path):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    try:
+        result = await revert_file_in_commit(project_root, commit, request.file_path)
+        return RevertResponse(
+            success=result.success,
+            new_commit_hash=result.new_commit_hash,
+            message=result.message,
+            conflicts=result.conflicts,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/{project_id}/git/revert-abort")
+async def abort_git_revert(
+    project_id: str,
+    db: Annotated[Database, Depends(get_db)],
+) -> RevertResponse:
+    """Abort an in-progress git revert operation."""
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    try:
+        result = await abort_revert(project_root)
+        return RevertResponse(
+            success=result.success,
+            new_commit_hash=result.new_commit_hash,
+            message=result.message,
+            conflicts=result.conflicts,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/{project_id}/git/commit/{commit}")
+async def get_commit_details(
+    project_id: str,
+    commit: str,
+    db: Annotated[Database, Depends(get_db)],
+) -> CommitInfo:
+    """Get detailed information about a specific commit."""
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    try:
+        commit_data = await get_commit_info(project_root, commit)
+        return CommitInfo(
+            hash=commit_data.hash,
+            short_hash=commit_data.short_hash,
+            message=commit_data.message,
+            author_name=commit_data.author_name,
+            author_email=commit_data.author_email,
+            date=commit_data.date,
+            additions=commit_data.additions,
+            deletions=commit_data.deletions,
         )
     except GitError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

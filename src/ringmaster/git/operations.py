@@ -351,3 +351,309 @@ async def get_file_at_commit(
         raise GitError(f"Failed to get file at commit: {stderr}")
 
     return stdout
+
+
+@dataclass
+class RevertResult:
+    """Result of a git revert operation."""
+
+    success: bool
+    new_commit_hash: str | None  # The hash of the revert commit, if created
+    message: str
+    conflicts: list[str] | None = None  # Files with conflicts, if any
+
+
+async def get_commit_info(repo_path: Path, commit: str) -> FileCommit:
+    """Get information about a specific commit.
+
+    Args:
+        repo_path: Path to the git repository root
+        commit: The commit hash or ref
+
+    Returns:
+        FileCommit object with commit information
+
+    Raises:
+        GitError: If commit doesn't exist or git command fails
+    """
+    format_str = "%H|%h|%an|%ae|%at|%s"
+    args = ["show", f"--format={format_str}", "-s", commit]
+
+    stdout, stderr, rc = await _run_git_command(args, repo_path)
+
+    if rc != 0:
+        if "unknown revision" in stderr or "bad object" in stderr:
+            raise GitError(f"Commit not found: {commit}")
+        raise GitError(f"Failed to get commit info: {stderr}")
+
+    line = stdout.strip()
+    parts = line.split("|", 5)
+    if len(parts) != 6:
+        raise GitError(f"Failed to parse commit info: {line}")
+
+    hash_full, short_hash, author, email, timestamp, subject = parts
+    return FileCommit(
+        hash=hash_full,
+        short_hash=short_hash,
+        author_name=author,
+        author_email=email,
+        date=datetime.fromtimestamp(int(timestamp), tz=UTC),
+        message=subject,
+        additions=0,
+        deletions=0,
+    )
+
+
+async def revert_commit(
+    repo_path: Path,
+    commit: str,
+    no_commit: bool = False,
+) -> RevertResult:
+    """Revert a single commit.
+
+    Creates a new commit that undoes the changes from the specified commit.
+
+    Args:
+        repo_path: Path to the git repository root
+        commit: The commit hash to revert
+        no_commit: If True, stages the revert changes without committing
+
+    Returns:
+        RevertResult with operation outcome
+
+    Raises:
+        GitError: If git command fails (other than merge conflicts)
+    """
+    args = ["revert", "--no-edit", commit]
+    if no_commit:
+        args.insert(1, "--no-commit")
+
+    stdout, stderr, rc = await _run_git_command(args, repo_path, timeout=60.0)
+
+    if rc == 0:
+        # Success - get the new commit hash if committed
+        if no_commit:
+            return RevertResult(
+                success=True,
+                new_commit_hash=None,
+                message="Revert changes staged (not committed)",
+            )
+        else:
+            # Get the hash of the revert commit
+            hash_out, _, _ = await _run_git_command(
+                ["rev-parse", "HEAD"], repo_path
+            )
+            return RevertResult(
+                success=True,
+                new_commit_hash=hash_out.strip(),
+                message=f"Successfully reverted commit {commit[:8]}",
+            )
+
+    # Check for merge conflicts
+    if "CONFLICT" in stderr or "conflict" in stderr.lower():
+        # Extract conflicted files
+        conflicts = _extract_conflicts(stderr)
+        return RevertResult(
+            success=False,
+            new_commit_hash=None,
+            message="Revert resulted in merge conflicts",
+            conflicts=conflicts,
+        )
+
+    # Other error
+    raise GitError(f"Failed to revert commit: {stderr}")
+
+
+async def revert_to_commit(
+    repo_path: Path,
+    target_commit: str,
+    no_commit: bool = False,
+) -> RevertResult:
+    """Revert all commits from HEAD back to (but not including) the target commit.
+
+    This is equivalent to reverting each commit from HEAD to target in order.
+
+    Args:
+        repo_path: Path to the git repository root
+        target_commit: The commit to revert back to (this commit will NOT be reverted)
+        no_commit: If True, stages all changes without creating revert commits
+
+    Returns:
+        RevertResult with operation outcome
+
+    Raises:
+        GitError: If git command fails
+    """
+    # Get list of commits to revert (from HEAD to target, exclusive)
+    args = ["rev-list", f"{target_commit}..HEAD"]
+    stdout, stderr, rc = await _run_git_command(args, repo_path)
+
+    if rc != 0:
+        raise GitError(f"Failed to get commit list: {stderr}")
+
+    commits_to_revert = [c for c in stdout.strip().split("\n") if c]
+
+    if not commits_to_revert:
+        return RevertResult(
+            success=True,
+            new_commit_hash=None,
+            message="Nothing to revert - target commit is at or ahead of HEAD",
+        )
+
+    # Revert each commit in order (oldest first would cause issues,
+    # we revert newest first which is what git rev-list gives us)
+    all_conflicts: list[str] = []
+
+    for commit in commits_to_revert:
+        result = await revert_commit(repo_path, commit, no_commit=no_commit)
+        if not result.success:
+            # Abort the revert on conflict
+            await _run_git_command(["revert", "--abort"], repo_path)
+            all_conflicts.extend(result.conflicts or [])
+            return RevertResult(
+                success=False,
+                new_commit_hash=None,
+                message=f"Revert stopped at {commit[:8]} due to conflicts",
+                conflicts=all_conflicts,
+            )
+
+    # All reverts succeeded
+    if no_commit:
+        return RevertResult(
+            success=True,
+            new_commit_hash=None,
+            message=f"Staged revert of {len(commits_to_revert)} commits",
+        )
+    else:
+        hash_out, _, _ = await _run_git_command(["rev-parse", "HEAD"], repo_path)
+        return RevertResult(
+            success=True,
+            new_commit_hash=hash_out.strip(),
+            message=f"Reverted {len(commits_to_revert)} commits back to {target_commit[:8]}",
+        )
+
+
+async def revert_file_in_commit(
+    repo_path: Path,
+    commit: str,
+    file_path: str,
+) -> RevertResult:
+    """Revert changes to a specific file from a commit.
+
+    This uses `git checkout` to restore the file to its state before the commit,
+    then stages the change. Does NOT create a commit.
+
+    Args:
+        repo_path: Path to the git repository root
+        commit: The commit whose changes to this file should be reverted
+        file_path: Relative path to the file within the repo
+
+    Returns:
+        RevertResult with operation outcome
+
+    Raises:
+        GitError: If git command fails
+    """
+    # Check if the file was modified in this commit
+    args = ["diff-tree", "--no-commit-id", "--name-only", "-r", commit]
+    stdout, stderr, rc = await _run_git_command(args, repo_path)
+
+    if rc != 0:
+        raise GitError(f"Failed to get commit file list: {stderr}")
+
+    files_in_commit = [f.strip() for f in stdout.strip().split("\n") if f.strip()]
+
+    if file_path not in files_in_commit:
+        return RevertResult(
+            success=False,
+            new_commit_hash=None,
+            message=f"File '{file_path}' was not modified in commit {commit[:8]}",
+        )
+
+    # Get the parent commit
+    parent_out, parent_err, parent_rc = await _run_git_command(
+        ["rev-parse", f"{commit}^"], repo_path
+    )
+
+    if parent_rc != 0:
+        # This might be the initial commit
+        if "unknown revision" in parent_err:
+            # For initial commit, we need to delete the file
+            args = ["rm", "--cached", file_path]
+        else:
+            raise GitError(f"Failed to get parent commit: {parent_err}")
+    else:
+        # Restore file from parent commit
+        parent_commit = parent_out.strip()
+        args = ["checkout", parent_commit, "--", file_path]
+
+    stdout, stderr, rc = await _run_git_command(args, repo_path)
+
+    if rc != 0:
+        raise GitError(f"Failed to revert file: {stderr}")
+
+    # Stage the change
+    stage_args = ["add", file_path]
+    _, stage_err, stage_rc = await _run_git_command(stage_args, repo_path)
+
+    if stage_rc != 0:
+        raise GitError(f"Failed to stage reverted file: {stage_err}")
+
+    return RevertResult(
+        success=True,
+        new_commit_hash=None,
+        message=f"Reverted '{file_path}' to state before {commit[:8]} (staged)",
+    )
+
+
+async def abort_revert(repo_path: Path) -> RevertResult:
+    """Abort an in-progress revert operation.
+
+    Args:
+        repo_path: Path to the git repository root
+
+    Returns:
+        RevertResult with operation outcome
+    """
+    _, stderr, rc = await _run_git_command(["revert", "--abort"], repo_path)
+
+    if rc == 0:
+        return RevertResult(
+            success=True,
+            new_commit_hash=None,
+            message="Revert aborted",
+        )
+    # Check for various ways git says "no revert in progress"
+    stderr_lower = stderr.lower()
+    if (
+        "no revert in progress" in stderr_lower
+        or "no cherry-pick or revert in progress" in stderr_lower
+    ):
+        return RevertResult(
+            success=True,
+            new_commit_hash=None,
+            message="No revert in progress",
+        )
+    else:
+        raise GitError(f"Failed to abort revert: {stderr}")
+
+
+def _extract_conflicts(stderr: str) -> list[str]:
+    """Extract list of conflicted files from git stderr output."""
+    conflicts: list[str] = []
+    for line in stderr.split("\n"):
+        # Common patterns: "CONFLICT (content): Merge conflict in <file>"
+        if "CONFLICT" in line and " in " in line:
+            # Extract filename after " in "
+            match = re.search(r" in (.+)$", line)
+            if match:
+                conflicts.append(match.group(1).strip())
+        # Also look for "Auto-merging <file>" followed by conflict
+        elif "Auto-merging" in line:
+            match = re.search(r"Auto-merging (.+)$", line)
+            if match:
+                potential_conflict = match.group(1).strip()
+                # Only add if there's actually a conflict mentioned
+                if potential_conflict not in conflicts and "CONFLICT" in stderr:
+                    conflicts.append(potential_conflict)
+    return list(set(conflicts))  # Deduplicate

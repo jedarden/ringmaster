@@ -11,10 +11,15 @@ from ringmaster.api.app import create_app
 from ringmaster.db.connection import Database
 from ringmaster.domain import Project
 from ringmaster.git import (
+    abort_revert,
+    get_commit_info,
     get_file_at_commit,
     get_file_diff,
     get_file_history,
     is_git_repo,
+    revert_commit,
+    revert_file_in_commit,
+    revert_to_commit,
 )
 
 
@@ -422,3 +427,329 @@ class TestGitAPI:
 
         assert response.status_code == 403
         assert "Access denied" in response.json()["detail"]
+
+
+class TestGitRevertOperations:
+    """Tests for git revert helper functions."""
+
+    async def test_get_commit_info(self, temp_git_repo: Path):
+        """Test getting commit information."""
+        commit_info = await get_commit_info(temp_git_repo, "HEAD")
+
+        assert commit_info.short_hash is not None
+        assert len(commit_info.hash) == 40
+        assert commit_info.message == "Add new file"
+        assert commit_info.author_name is not None
+
+    async def test_get_commit_info_invalid_commit(self, temp_git_repo: Path):
+        """Test getting info for invalid commit raises error."""
+        from ringmaster.git import GitError
+
+        with pytest.raises(GitError, match="Commit not found"):
+            await get_commit_info(temp_git_repo, "invalid_hash")
+
+    async def test_revert_commit_success(self, temp_git_repo: Path):
+        """Test reverting a single commit."""
+        # Get the hash of the commit that added new_file.py
+        commits = await get_file_history(temp_git_repo, "new_file.py")
+        commit_to_revert = commits[0].hash
+
+        # Revert it
+        result = await revert_commit(temp_git_repo, commit_to_revert)
+
+        assert result.success is True
+        assert result.new_commit_hash is not None
+        assert len(result.new_commit_hash) == 40
+        assert "reverted" in result.message.lower() or "Revert" in result.message
+
+        # new_file.py should no longer exist
+        assert not (temp_git_repo / "new_file.py").exists()
+
+    async def test_revert_commit_no_commit_flag(self, temp_git_repo: Path):
+        """Test reverting with no_commit flag stages but doesn't commit."""
+        commits = await get_file_history(temp_git_repo, "new_file.py")
+        commit_to_revert = commits[0].hash
+
+        # Revert without committing
+        result = await revert_commit(temp_git_repo, commit_to_revert, no_commit=True)
+
+        assert result.success is True
+        assert result.new_commit_hash is None
+        assert "staged" in result.message.lower()
+
+        # Check that new_file.py is removed from working tree
+        assert not (temp_git_repo / "new_file.py").exists()
+
+        # But HEAD should still be the same (revert not committed)
+        head_commit = await get_commit_info(temp_git_repo, "HEAD")
+        assert head_commit.message == "Add new file"
+
+    async def test_revert_file_in_commit(self, temp_git_repo: Path):
+        """Test reverting a specific file from a commit."""
+        # Get the commit that modified test.py
+        commits = await get_file_history(temp_git_repo, "test.py")
+        modify_commit = commits[0].hash  # "Add print world"
+
+        # Revert just test.py from that commit
+        result = await revert_file_in_commit(temp_git_repo, modify_commit, "test.py")
+
+        assert result.success is True
+        assert "test.py" in result.message
+
+        # The file should now have content from before that commit
+        content = (temp_git_repo / "test.py").read_text()
+        assert "print('world')" not in content
+        assert "print('hello')" in content
+
+    async def test_revert_file_not_in_commit(self, temp_git_repo: Path):
+        """Test reverting a file that wasn't modified in a commit."""
+        # Get the commit that modified test.py
+        commits = await get_file_history(temp_git_repo, "test.py")
+        modify_commit = commits[0].hash
+
+        # Try to revert new_file.py from that commit (it wasn't modified there)
+        result = await revert_file_in_commit(temp_git_repo, modify_commit, "new_file.py")
+
+        assert result.success is False
+        assert "not modified" in result.message.lower()
+
+    async def test_abort_revert_no_revert_in_progress(self, temp_git_repo: Path):
+        """Test aborting when no revert is in progress."""
+        result = await abort_revert(temp_git_repo)
+
+        assert result.success is True
+        assert "no revert in progress" in result.message.lower()
+
+
+@pytest.fixture
+def temp_git_repo_for_revert_to(tmp_path: Path) -> Path:
+    """Create a git repository with multiple commits for revert-to testing."""
+    import subprocess
+
+    repo_path = tmp_path / "revert_repo"
+    repo_path.mkdir()
+
+    # Initialize git repo
+    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
+    # Create initial file and commit
+    test_file = repo_path / "counter.txt"
+    test_file.write_text("0")
+    subprocess.run(["git", "add", "counter.txt"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-m", "Initial: 0"],
+        cwd=repo_path,
+        check=True,
+        capture_output=True,
+    )
+
+    # Multiple commits incrementing the counter
+    for i in range(1, 4):
+        test_file.write_text(str(i))
+        subprocess.run(["git", "add", "counter.txt"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", f"Increment to {i}"],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+        )
+
+    return repo_path
+
+
+class TestGitRevertTo:
+    """Tests for revert_to_commit function."""
+
+    async def test_revert_to_commit(self, temp_git_repo_for_revert_to: Path):
+        """Test reverting multiple commits to reach a target commit."""
+        repo_path = temp_git_repo_for_revert_to
+
+        # Get commit history
+        commits = await get_file_history(repo_path, "counter.txt")
+        assert len(commits) == 4
+
+        # Commits are newest first: "Increment to 3", "Increment to 2", "Increment to 1", "Initial: 0"
+        target_commit = commits[2].hash  # "Increment to 1"
+
+        # Revert to that commit
+        result = await revert_to_commit(repo_path, target_commit)
+
+        assert result.success is True
+        assert "2 commits" in result.message  # Should revert 2 commits
+
+        # The file should now have content "1"
+        content = (repo_path / "counter.txt").read_text()
+        assert content == "1"
+
+    async def test_revert_to_nothing_to_revert(self, temp_git_repo_for_revert_to: Path):
+        """Test revert_to when target is HEAD - nothing to revert."""
+        repo_path = temp_git_repo_for_revert_to
+
+        result = await revert_to_commit(repo_path, "HEAD")
+
+        assert result.success is True
+        assert "nothing to revert" in result.message.lower()
+
+
+class TestGitRevertAPI:
+    """Tests for git revert API endpoints."""
+
+    async def test_revert_commit_endpoint(self, client_with_git):
+        """Test POST /api/{project_id}/git/revert/{commit} endpoint."""
+        import subprocess
+
+        client, db, repo_path = client_with_git
+
+        # Add another commit so we can revert it
+        test_file = repo_path / "to_remove.txt"
+        test_file.write_text("temporary file\n")
+        subprocess.run(["git", "add", "to_remove.txt"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add temporary file"],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+        )
+
+        # Get commit hash
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        commit_hash = result.stdout.strip()
+
+        # Create a project
+        from ringmaster.db import ProjectRepository
+
+        project_repo = ProjectRepository(db)
+        project = Project(
+            name="Test Project",
+            settings={"working_dir": str(repo_path)},
+        )
+        project = await project_repo.create(project)
+
+        # Revert the commit
+        response = await client.post(
+            f"/api/projects/{project.id}/git/revert/{commit_hash}",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["new_commit_hash"] is not None
+
+        # File should be gone
+        assert not test_file.exists()
+
+    async def test_revert_file_endpoint(self, client_with_git):
+        """Test POST /api/{project_id}/git/revert/{commit}/file endpoint."""
+        import subprocess
+
+        client, db, repo_path = client_with_git
+
+        # Modify main.py and commit
+        test_file = repo_path / "main.py"
+        original_content = test_file.read_text()
+        test_file.write_text(original_content + "\nprint('extra')\n")
+        subprocess.run(["git", "add", "main.py"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Add extra print"],
+            cwd=repo_path,
+            check=True,
+            capture_output=True,
+        )
+
+        # Get commit hash
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        commit_hash = result.stdout.strip()
+
+        # Create a project
+        from ringmaster.db import ProjectRepository
+
+        project_repo = ProjectRepository(db)
+        project = Project(
+            name="Test Project",
+            settings={"working_dir": str(repo_path)},
+        )
+        project = await project_repo.create(project)
+
+        # Revert just main.py from that commit
+        response = await client.post(
+            f"/api/projects/{project.id}/git/revert/{commit_hash}/file",
+            json={"file_path": "main.py"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # File should be reverted (no "extra" line)
+        content = test_file.read_text()
+        assert "print('extra')" not in content
+
+    async def test_get_commit_details_endpoint(self, client_with_git):
+        """Test GET /api/{project_id}/git/commit/{commit} endpoint."""
+        client, db, repo_path = client_with_git
+
+        from ringmaster.db import ProjectRepository
+
+        project_repo = ProjectRepository(db)
+        project = Project(
+            name="Test Project",
+            settings={"working_dir": str(repo_path)},
+        )
+        project = await project_repo.create(project)
+
+        response = await client.get(
+            f"/api/projects/{project.id}/git/commit/HEAD",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["message"] == "Initial commit"
+        assert "hash" in data
+        assert "short_hash" in data
+        assert "author_name" in data
+
+    async def test_abort_revert_endpoint(self, client_with_git):
+        """Test POST /api/{project_id}/git/revert-abort endpoint."""
+        client, db, repo_path = client_with_git
+
+        from ringmaster.db import ProjectRepository
+
+        project_repo = ProjectRepository(db)
+        project = Project(
+            name="Test Project",
+            settings={"working_dir": str(repo_path)},
+        )
+        project = await project_repo.create(project)
+
+        # Abort (even though nothing is in progress)
+        response = await client.post(
+            f"/api/projects/{project.id}/git/revert-abort",
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
