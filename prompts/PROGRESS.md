@@ -294,11 +294,33 @@ src/ringmaster/
 - ✅ Components and levels listing endpoints
 - ✅ 17 integration tests covering all endpoints
 
+### Graph API (`src/ringmaster/api/routes/graph.py`)
+- ✅ GET /api/graph endpoint for task dependency graph data
+  - Returns nodes (tasks) and edges (dependencies)
+  - Filter by project_id (required)
+  - Optional include_done flag for completed tasks
+  - Optional include_subtasks flag
+  - Includes parent-child relationships (epic->task, task->subtask)
+  - Stats with counts by status and type
+- ✅ 8 integration tests covering all graph functionality
+
+### Dependency Graph UI (`frontend/src/components/DependencyGraph.tsx`)
+- ✅ Force-directed layout with SVG rendering
+- ✅ Node shapes by type (hexagon=epic, rect=task, circle=subtask)
+- ✅ Node colors by task status
+- ✅ Priority affects node size
+- ✅ Critical path highlighting (orange border)
+- ✅ Interactive: drag nodes, hover tooltips, click to select
+- ✅ Controls to toggle completed tasks and subtasks
+- ✅ Legend showing status colors and shape meanings
+- ✅ Dedicated /projects/:projectId/graph route
+- ✅ "View Graph" link on project detail page
+
 ## Next Steps
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
-2. **Graph Visualization**: Add dependency graph visualization for task relationships
-3. **Task Assignment UI**: Add UI for assigning tasks to workers manually
+2. **Task Assignment UI**: Add UI for assigning tasks to workers manually
+3. **Graph Editing**: Allow creating dependencies by dragging between nodes
 
 ## Iteration Log
 
@@ -329,6 +351,7 @@ src/ringmaster/
 | 23 | 2026-01-27 | Add Logs UI: LogsViewer component with live mode auto-refresh, level/component filtering, full-text search, log statistics bar, expandable log details, pagination; LogsPage with /logs route; TypeScript types and API client functions for all log endpoints |
 | 24 | 2026-01-27 | Add WebSocket log streaming: LOG_CREATED event emission from logs API, LogsViewer WebSocket integration for real-time updates in live mode, connection status indicator, duplicate prevention via seen log IDs, 2 new tests, total 206 tests passing |
 | 25 | 2026-01-27 | Add file download endpoint: GET /api/chat/projects/{id}/uploads/{filename}/download with proper Content-Type and Content-Disposition headers, frontend client helpers (getDownloadUrl, downloadFile, triggerDownload), 3 new tests, total 209 tests passing |
+| 26 | 2026-01-27 | Add task dependency graph visualization: /api/graph endpoint for graph data, DependencyGraph React component with force-directed SVG layout, node shapes by type, colors by status, size by priority, critical path highlighting, interactive drag/hover/click, /projects/:projectId/graph route, 8 new tests, total 217 tests passing |
 
 ## Blockers
 
