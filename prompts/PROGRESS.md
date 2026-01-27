@@ -502,6 +502,17 @@ Implemented shortcuts:
 - ✅ API client functions (performUndo, performRedo, getUndoHistory)
 - ✅ TypeScript types for undo/redo responses
 
+### Action History Panel (`frontend/src/components/ActionHistoryPanel.tsx`)
+- ✅ Slide-out panel for viewing recent actions
+- ✅ Action cards with icon, description, time-ago display
+- ✅ Individual undo buttons for each action
+- ✅ "Undo All" button for bulk undo
+- ✅ "Redo" button when redo is available
+- ✅ "History" button in Layout header
+- ✅ WebSocket refresh on undo/redo events
+- ✅ Keyboard hint for Cmd+Z/Cmd+Shift+Z
+- ✅ CSS styles for action history panel
+
 ### Worker Capabilities (`src/ringmaster/domain/models.py`, `src/ringmaster/db/repositories.py`)
 - ✅ capabilities field on Worker model (e.g., ["python", "typescript", "security"])
 - ✅ required_capabilities field on Task and Subtask models
@@ -930,6 +941,7 @@ Implemented shortcuts:
 | 71 | 2026-01-27 | Add Validation Frontend UI: ValidationPanel component for REVIEW status tasks, TypeScript types (ValidationStatus, ValidationCheck, ValidationResponse, ApproveResponse, RejectResponse), API client functions (validateTask, approveTask, rejectTask), CSS styles for validation panel with check result display, integrated in ProjectDetailPage sidebar; all 625 tests passing |
 | 72 | 2026-01-27 | Fix validator Python portability: use sys.executable instead of hardcoded 'python' in _detect_test_command, _detect_lint_command, _detect_type_check_command; ensures validator works on systems where Python is only available as python3 or within virtual environments; all 625 tests passing |
 | 73 | 2026-01-27 | Add worker health status display to WorkersPage: WorkerHealthResponse/DegradationSignals/RecoveryAction types, LivenessStatus/RecoveryUrgency enums, getWorkerHealth() API client, health status badge with liveness icons for busy workers, degradation badge when context drift detected, recovery action badge with urgency colors, CSS styles for health components; all 625 tests passing |
+| 74 | 2026-01-27 | Add ActionHistoryPanel for viewing and undoing actions: slide-out panel showing recent actions with icons, descriptions, time-ago, and individual undo buttons; "History" button in header; "Undo All" button; WebSocket refresh on undo/redo events; keyboard hint for Cmd+Z/Cmd+Shift+Z; CSS styles for action history panel; implements Recent Actions UI from docs/07-user-experience.md; all 625 tests passing |
 
 ## Blockers
 
