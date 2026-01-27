@@ -1,9 +1,7 @@
 """Tests for worker spawner."""
 
-import asyncio
-import shutil
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -127,52 +125,58 @@ class TestWorkerSpawner:
     @pytest.mark.asyncio
     async def test_spawn_no_tmux(self, spawner: WorkerSpawner) -> None:
         """Test spawn fails gracefully when tmux is not available."""
-        with patch.object(spawner, "_check_tmux_available", return_value=False):
-            with pytest.raises(RuntimeError, match="tmux is not available"):
-                await spawner.spawn("worker-1", "claude-code")
+        with (
+            patch.object(spawner, "_check_tmux_available", return_value=False),
+            pytest.raises(RuntimeError, match="tmux is not available"),
+        ):
+            await spawner.spawn("worker-1", "claude-code")
 
     @pytest.mark.asyncio
     async def test_spawn_creates_worker_record(self, spawner: WorkerSpawner) -> None:
         """Test that spawn creates a SpawnedWorker record."""
         # Mock the subprocess calls
-        with patch.object(spawner, "_check_tmux_available", return_value=True):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                # Create a mock process
-                mock_process = AsyncMock()
-                mock_process.returncode = 0
-                mock_process.communicate = AsyncMock(return_value=(b"", b""))
-                mock_exec.return_value = mock_process
+        with (
+            patch.object(spawner, "_check_tmux_available", return_value=True),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
+            # Create a mock process
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_exec.return_value = mock_process
 
-                worker = await spawner.spawn(
-                    worker_id="test-1",
-                    worker_type="claude-code",
-                    capabilities=["python"],
-                )
+            worker = await spawner.spawn(
+                worker_id="test-1",
+                worker_type="claude-code",
+                capabilities=["python"],
+            )
 
-                assert isinstance(worker, SpawnedWorker)
-                assert worker.worker_id == "test-1"
-                assert worker.worker_type == "claude-code"
-                assert worker.status == SpawnStatus.RUNNING
-                assert "rm-worker-test-1" in worker.tmux_session
+            assert isinstance(worker, SpawnedWorker)
+            assert worker.worker_id == "test-1"
+            assert worker.worker_type == "claude-code"
+            assert worker.status == SpawnStatus.RUNNING
+            assert "rm-worker-test-1" in worker.tmux_session
 
     @pytest.mark.asyncio
     async def test_spawn_idempotent(self, spawner: WorkerSpawner) -> None:
         """Test that spawning an already-running worker returns existing record."""
-        with patch.object(spawner, "_check_tmux_available", return_value=True):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                mock_process = AsyncMock()
-                mock_process.returncode = 0
-                mock_process.communicate = AsyncMock(return_value=(b"", b""))
-                mock_exec.return_value = mock_process
+        with (
+            patch.object(spawner, "_check_tmux_available", return_value=True),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_exec.return_value = mock_process
 
-                # First spawn
-                worker1 = await spawner.spawn("worker-1", "claude-code")
+            # First spawn
+            worker1 = await spawner.spawn("worker-1", "claude-code")
 
-                # Mock is_running to return True
-                with patch.object(spawner, "is_running", return_value=True):
-                    # Second spawn should return same worker
-                    worker2 = await spawner.spawn("worker-1", "claude-code")
-                    assert worker2.worker_id == worker1.worker_id
+            # Mock is_running to return True
+            with patch.object(spawner, "is_running", return_value=True):
+                # Second spawn should return same worker
+                worker2 = await spawner.spawn("worker-1", "claude-code")
+                assert worker2.worker_id == worker1.worker_id
 
     @pytest.mark.asyncio
     async def test_is_running_mock(self, spawner: WorkerSpawner) -> None:
@@ -195,22 +199,24 @@ class TestWorkerSpawner:
     @pytest.mark.asyncio
     async def test_kill_mock(self, spawner: WorkerSpawner) -> None:
         """Test killing a worker."""
-        with patch.object(spawner, "_check_tmux_available", return_value=True):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                mock_process = AsyncMock()
-                mock_process.returncode = 0
-                mock_process.communicate = AsyncMock(return_value=(b"", b""))
-                mock_process.wait = AsyncMock()
-                mock_exec.return_value = mock_process
+        with (
+            patch.object(spawner, "_check_tmux_available", return_value=True),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()
+            mock_exec.return_value = mock_process
 
-                # First spawn
-                await spawner.spawn("worker-1", "claude-code")
-                assert "worker-1" in spawner._spawned_workers
+            # First spawn
+            await spawner.spawn("worker-1", "claude-code")
+            assert "worker-1" in spawner._spawned_workers
 
-                # Kill
-                result = await spawner.kill("worker-1")
-                assert result is True
-                assert "worker-1" not in spawner._spawned_workers
+            # Kill
+            result = await spawner.kill("worker-1")
+            assert result is True
+            assert "worker-1" not in spawner._spawned_workers
 
     @pytest.mark.asyncio
     async def test_list_sessions_mock(self, spawner: WorkerSpawner) -> None:
@@ -253,26 +259,28 @@ class TestWorkerSpawner:
     @pytest.mark.asyncio
     async def test_get_worker_info(self, spawner: WorkerSpawner) -> None:
         """Test getting worker info."""
-        with patch.object(spawner, "_check_tmux_available", return_value=True):
-            with patch("asyncio.create_subprocess_exec") as mock_exec:
-                mock_process = AsyncMock()
-                mock_process.returncode = 0
-                mock_process.communicate = AsyncMock(return_value=(b"", b""))
-                mock_process.wait = AsyncMock()
-                mock_exec.return_value = mock_process
+        with (
+            patch.object(spawner, "_check_tmux_available", return_value=True),
+            patch("asyncio.create_subprocess_exec") as mock_exec,
+        ):
+            mock_process = AsyncMock()
+            mock_process.returncode = 0
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.wait = AsyncMock()
+            mock_exec.return_value = mock_process
 
-                # Spawn a worker
-                await spawner.spawn("worker-1", "claude-code")
+            # Spawn a worker
+            await spawner.spawn("worker-1", "claude-code")
 
-                # Get info
-                info = await spawner.get_worker_info("worker-1")
-                assert info is not None
-                assert info.worker_id == "worker-1"
-                assert info.status == SpawnStatus.RUNNING
+            # Get info
+            info = await spawner.get_worker_info("worker-1")
+            assert info is not None
+            assert info.worker_id == "worker-1"
+            assert info.status == SpawnStatus.RUNNING
 
-                # Non-existent worker
-                info = await spawner.get_worker_info("nonexistent")
-                assert info is None
+            # Non-existent worker
+            info = await spawner.get_worker_info("nonexistent")
+            assert info is None
 
     @pytest.mark.asyncio
     async def test_send_signal_mock(self, spawner: WorkerSpawner) -> None:
@@ -301,7 +309,7 @@ class TestWorkerSpawner:
         (spawner.script_dir / "worker-stale.sh").write_text("#!/bin/bash\necho test")
 
         with patch.object(spawner, "is_running", return_value=False):
-            cleaned = await spawner.cleanup_stale()
+            await spawner.cleanup_stale()
             # Script should be cleaned up
             assert not (spawner.script_dir / "worker-stale.sh").exists()
 

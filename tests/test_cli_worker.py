@@ -4,6 +4,7 @@ These tests verify the CLI commands work correctly for external worker scripts.
 """
 
 import subprocess
+import sys
 
 
 class TestPullBeadCommand:
@@ -12,7 +13,7 @@ class TestPullBeadCommand:
     async def test_pull_bead_help(self):
         """Test pull-bead help text."""
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "pull-bead", "--help"],
+            [sys.executable, "-m", "ringmaster.cli", "pull-bead", "--help"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -31,7 +32,7 @@ class TestBuildPromptCommand:
     async def test_build_prompt_help(self):
         """Test build-prompt help text."""
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "build-prompt", "--help"],
+            [sys.executable, "-m", "ringmaster.cli", "build-prompt", "--help"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -50,7 +51,7 @@ class TestReportResultCommand:
     async def test_report_result_help(self):
         """Test report-result help text."""
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "report-result", "--help"],
+            [sys.executable, "-m", "ringmaster.cli", "report-result", "--help"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -72,7 +73,7 @@ class TestWorkerCLIIntegration:
     async def test_cli_commands_registered(self):
         """Test that all worker commands are registered."""
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "--help"],
+            [sys.executable, "-m", "ringmaster.cli", "--help"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -87,7 +88,7 @@ class TestWorkerCLIIntegration:
     async def test_pull_bead_requires_worker_id(self):
         """Test that pull-bead requires a worker ID argument."""
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "pull-bead"],
+            [sys.executable, "-m", "ringmaster.cli", "pull-bead"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -100,7 +101,7 @@ class TestWorkerCLIIntegration:
     async def test_build_prompt_requires_task_id(self):
         """Test that build-prompt requires a task ID argument."""
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "build-prompt"],
+            [sys.executable, "-m", "ringmaster.cli", "build-prompt"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -114,7 +115,7 @@ class TestWorkerCLIIntegration:
         """Test that report-result requires task ID and status."""
         # Missing task ID
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "report-result"],
+            [sys.executable, "-m", "ringmaster.cli", "report-result"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
@@ -126,7 +127,7 @@ class TestWorkerCLIIntegration:
 
         # Missing status
         result = subprocess.run(
-            ["python", "-m", "ringmaster.cli", "report-result", "some-task-id"],
+            [sys.executable, "-m", "ringmaster.cli", "report-result", "some-task-id"],
             capture_output=True,
             text=True,
             cwd="/home/coder/ringmaster",
