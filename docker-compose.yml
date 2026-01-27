@@ -1,0 +1,75 @@
+version: "3.8"
+
+services:
+  ringmaster-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ringmaster-api
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+    volumes:
+      - ringmaster-data:/app/data
+      - ringmaster-logs:/app/logs
+      - ringmaster-output:/app/output
+      # Mount project code for workers to access
+      - ./projects:/workspace/projects:rw
+    environment:
+      - RINGMASTER_DATABASE_PATH=/app/data/ringmaster.db
+      - RINGMASTER_LOG_LEVEL=INFO
+      - RINGMASTER_OUTPUT_DIR=/app/output
+      - RINGMASTER_FRONTEND_DIST=/app/frontend/dist
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  ringmaster-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ringmaster-scheduler
+    volumes:
+      - ringmaster-data:/app/data
+      - ringmaster-logs:/app/logs
+      - ringmaster-output:/app/output
+      - ./projects:/workspace/projects:rw
+    environment:
+      - RINGMASTER_DATABASE_PATH=/app/data/ringmaster.db
+      - RINGMASTER_LOG_LEVEL=INFO
+      - RINGMASTER_OUTPUT_DIR=/app/output
+    command: ["python", "-m", "ringmaster.cli", "scheduler"]
+    depends_on:
+      ringmaster-api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional: PostgreSQL for production (instead of SQLite)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: ringmaster-postgres
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   environment:
+  #     POSTGRES_DB: ringmaster
+  #     POSTGRES_USER: ringmaster
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+  #   restart: unless-stopped
+
+volumes:
+  ringmaster-data:
+    driver: local
+  ringmaster-logs:
+    driver: local
+  ringmaster-output:
+    driver: local
+  # postgres-data:
+  #   driver: local
+
+networks:
+  default:
+    name: ringmaster-network

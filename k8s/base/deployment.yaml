@@ -1,0 +1,157 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringmaster-api
+  namespace: ringmaster
+  labels:
+    app: ringmaster
+    component: api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ringmaster
+      component: api
+  template:
+    metadata:
+      labels:
+        app: ringmaster
+        component: api
+    spec:
+      containers:
+      - name: api
+        image: ringmaster:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "-m", "ringmaster.cli", "serve", "--host", "0.0.0.0", "--port", "8000"]
+        ports:
+        - name: http
+          containerPort: 8000
+          protocol: TCP
+        - name: websocket
+          containerPort: 8001
+          protocol: TCP
+        env:
+        - name: RINGMASTER_DATABASE_PATH
+          value: "/app/data/ringmaster.db"
+        - name: RINGMASTER_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: ringmaster-config
+              key: RINGMASTER_LOG_LEVEL
+        - name: RINGMASTER_FRONTEND_DIST
+          valueFrom:
+            configMapKeyRef:
+              name: ringmaster-config
+              key: RINGMASTER_FRONTEND_DIST
+        - name: RINGMASTER_OUTPUT_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: ringmaster-config
+              key: RINGMASTER_OUTPUT_DIR
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: output
+          mountPath: /app/output
+        - name: projects
+          mountPath: /workspace/projects
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ringmaster-data-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ringmaster-logs-pvc
+      - name: output
+        emptyDir: {}
+      - name: projects
+        persistentVolumeClaim:
+          claimName: ringmaster-projects-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ringmaster-scheduler
+  namespace: ringmaster
+  labels:
+    app: ringmaster
+    component: scheduler
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ringmaster
+        component: scheduler
+    spec:
+      containers:
+      - name: scheduler
+        image: ringmaster:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python", "-m", "ringmaster.cli", "scheduler"]
+        env:
+        - name: RINGMASTER_DATABASE_PATH
+          value: "/app/data/ringmaster.db"
+        - name: RINGMASTER_LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: ringmaster-config
+              key: RINGMASTER_LOG_LEVEL
+        - name: RINGMASTER_OUTPUT_DIR
+          valueFrom:
+            configMapKeyRef:
+              name: ringmaster-config
+              key: RINGMASTER_OUTPUT_DIR
+        volumeMounts:
+        - name: data
+          mountPath: /app/data
+        - name: logs
+          mountPath: /app/logs
+        - name: projects
+          mountPath: /workspace/projects
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: ringmaster-data-pvc
+      - name: logs
+        persistentVolumeClaim:
+          claimName: ringmaster-logs-pvc
+      - name: projects
+        persistentVolumeClaim:
+          claimName: ringmaster-projects-pvc
+  selector:
+    matchLabels:
+      app: ringmaster
+      component: scheduler

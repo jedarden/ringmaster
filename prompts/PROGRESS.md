@@ -2,9 +2,9 @@
 
 ## Current State
 
-**Status**: ✅ PROJECT COMPLETE
+**Status**: ⚠️ FUNCTIONAL GAPS REMAIN
 
-The Python-based implementation is now functional with all core components in place.
+The Python-based implementation has most components in place, but there are **critical functional gaps** that prevent real-world usage. The codebase compiles and tests pass, but the system has NOT been validated end-to-end with actual AI coding agents.
 
 ## Completed Components
 
@@ -892,9 +892,54 @@ Implemented shortcuts:
 - ✅ conftest.py updated with pytest_addoption, pytest_configure, pytest_collection_modifyitems
 - ✅ 6 new live tests (skipped by default), total 650 tests + 6 skipped passing
 
-## Project Complete ✅
+## ⚠️ CRITICAL FUNCTIONAL GAPS
 
-All acceptance criteria from the GitHub issue are met:
+While the codebase has extensive components, the following **functional gaps** prevent real-world usage:
+
+### 1. End-to-End Worker Execution (HIGH PRIORITY)
+- **Gap**: Workers can be spawned but the full task execution loop has NOT been validated with real Claude Code/Aider/Codex
+- **Symptom**: `--run-live` tests exist but are skipped by default; no integration tests with actual AI agents
+- **Impact**: Cannot confirm workers actually complete tasks and report results correctly
+
+### 2. Enrichment Pipeline Real-World Testing
+- **Gap**: The 9-layer enrichment pipeline is implemented but NOT tested with actual project repositories
+- **Symptom**: Tests use mocked file systems and repositories
+- **Impact**: Unknown if context extraction works correctly on real codebases
+
+### 3. Hot-Reload Self-Improvement Loop
+- **Gap**: Hot-reload is implemented but the full "ringmaster improving itself" flywheel is untested
+- **Symptom**: No test that proves ringmaster can modify its own code and reload successfully
+- **Impact**: Core self-improvement feature is theoretical only
+
+### 4. Frontend-Backend Integration
+- **Gap**: Frontend components exist but may have runtime errors when connecting to real backend
+- **Symptom**: Frontend builds and lints but no E2E tests with Playwright/Cypress
+- **Impact**: UI may not work correctly in production
+
+### 5. Scheduler Task Assignment
+- **Gap**: Scheduler assigns tasks but integration with spawned workers is incomplete
+- **Symptom**: Scheduler tests use mocks, not real workers
+- **Impact**: Automatic task assignment may not work in practice
+
+### 6. Container/Deployment
+- **Gap**: No Dockerfile or Kubernetes manifests
+- **Symptom**: Cannot deploy to production
+- **Impact**: Project cannot be used outside local development
+
+## Required Next Steps
+
+**DO NOT mark project complete until these gaps are addressed:**
+
+1. **Run live worker test**: `pytest --run-live tests/test_live_worker.py` with actual Claude Code
+2. **Create integration test**: Full end-to-end test spawning a worker, assigning a task, and validating completion
+3. **Test enrichment on real repo**: Point enrichment pipeline at an actual codebase
+4. **Add E2E frontend tests**: Playwright tests for critical user flows
+5. **Create Dockerfile**: Backend + frontend container images
+6. **Test hot-reload**: Have ringmaster modify and reload its own code
+
+## Previous Assessment (Overly Optimistic)
+
+Previous iterations marked this as "PROJECT COMPLETE" based on:
 - ✅ Core domain types (Task, Project, Worker, Decision, Question)
 - ✅ SQLite persistence layer with 12 migrations
 - ✅ FastAPI server with 50+ endpoints
@@ -903,13 +948,7 @@ All acceptance criteria from the GitHub issue are met:
 - ✅ Ralph-Wiggum loop execution
 - ✅ 9-layer context enrichment pipeline
 
-## Optional Next Steps
-
-The MVP is complete. For production deployment:
-1. **Container Image**: Create Dockerfile for backend/frontend
-2. **K8s Manifests**: Deploy to Kubernetes cluster
-3. **Documentation**: User guide, API docs, contribution guide
-4. **Performance Testing**: Load test with multiple concurrent workers
+**However**, these are component-level achievements. The system has NOT been proven to work end-to-end.
 
 ## Iteration Log
 
@@ -1008,4 +1047,6 @@ The MVP is complete. For production deployment:
 
 ## Blockers
 
-None - project is complete.
+**The project is NOT complete.** See "CRITICAL FUNCTIONAL GAPS" section above.
+
+Primary blocker: End-to-end validation with actual AI coding agents has not been performed.

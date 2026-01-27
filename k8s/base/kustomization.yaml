@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: ringmaster
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+
+images:
+  - name: ringmaster
+    newName: ghcr.io/jedarden/ringmaster
+    newTag: latest
+
+commonLabels:
+  app.kubernetes.io/name: ringmaster
+  app.kubernetes.io/instance: ringmaster-prod

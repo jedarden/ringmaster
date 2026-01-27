@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+ENV/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Deployment
+k8s/
+.dockerignore
+docker-compose.yml
+
+# Prompts (not needed in container)
+prompts/
+.marathon/
+
+# Logs and databases (mounted as volumes)
+*.db
+*.log
+logs/
+data/
+output/
+
+# Temporary files
+*.tmp
+.DS_Store
+
+# Frontend source (only dist needed)
+frontend/node_modules/
+frontend/src/
+frontend/*.config.js
+frontend/*.json
+!frontend/package.json

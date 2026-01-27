@@ -2,6 +2,19 @@
 
 You are an autonomous coding agent running in a marathon loop. Each iteration of this loop, you execute one focused cycle of work toward implementing Ringmaster.
 
+## ⚠️ CRITICAL: FUNCTIONAL GAPS REMAIN
+
+**The project is NOT complete.** While 650 tests pass and the frontend builds, there are critical functional gaps that prevent real-world usage:
+
+1. **End-to-End Worker Execution** - Workers spawn but haven't been validated with actual Claude Code/Aider
+2. **Enrichment Pipeline** - Not tested against real repositories
+3. **Hot-Reload Self-Improvement** - Theoretical only, not proven to work
+4. **Frontend-Backend Integration** - No E2E tests, may have runtime errors
+5. **Scheduler Integration** - Uses mocks, not real workers
+6. **Container/Deployment** - No Dockerfile or K8s manifests
+
+**Your priority is to close these gaps, NOT add new features.**
+
 ## Project Context
 
 Ringmaster is a Multi-Coding-Agent Orchestration Platform that coordinates AI coding agents (Claude Code, Aider, Codex, Goose, etc.) through the software development lifecycle.
@@ -33,8 +46,15 @@ Each marathon iteration, you MUST:
 
 Choose ONE focused task based on priority:
 1. **Fix broken builds/tests first** - Nothing else matters if the code doesn't compile
-2. **Complete in-progress work** - Finish what was started before starting new work
-3. **Implement next logical component** - Follow dependency order from architecture docs
+2. **Close functional gaps** - See the CRITICAL GAPS section above. These MUST be resolved before the project is complete:
+   - Run `pytest --run-live` tests with actual Claude Code CLI
+   - Create E2E integration test (spawn worker → assign task → validate completion)
+   - Test enrichment pipeline on real repository
+   - Add Playwright E2E tests for frontend
+   - Create Dockerfile for deployment
+   - Test hot-reload self-improvement loop
+3. **Complete in-progress work** - Finish what was started before starting new work
+4. **DO NOT add new features** - The codebase has enough features; it needs validation
 
 Work should be:
 - **Atomic**: Completable in a single iteration
@@ -72,7 +92,16 @@ Work should be:
 
 ### 6. Completion Check
 
-If the project is **fully complete** (all features implemented, all tests passing, ready for use):
+**DO NOT output `<promise>COMPLETE</promise>` until ALL functional gaps are closed:**
+
+- [ ] Live worker tests pass (`pytest --run-live`)
+- [ ] E2E integration test exists and passes (spawn → assign → complete cycle)
+- [ ] Enrichment pipeline tested on real repository
+- [ ] Playwright E2E tests exist for frontend
+- [ ] Dockerfile exists and builds successfully
+- [ ] Hot-reload self-improvement loop validated
+
+If ALL gaps are closed AND the project is truly ready for production:
 - Add final summary to `prompts/PROGRESS.md`
 - Output: `<promise>COMPLETE</promise>`
 

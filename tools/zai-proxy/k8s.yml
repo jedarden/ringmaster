@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zai-proxy
+  namespace: devpod
+  labels:
+    app: zai-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zai-proxy
+  template:
+    metadata:
+      labels:
+        app: zai-proxy
+    spec:
+      containers:
+      - name: proxy
+        image: ttl.sh/zai-proxy-jedarden:24h
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: ZAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: zai-api-key
+              key: api-key
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "100m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zai-proxy
+  namespace: devpod
+  labels:
+    app: zai-proxy
+spec:
+  selector:
+    app: zai-proxy
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http

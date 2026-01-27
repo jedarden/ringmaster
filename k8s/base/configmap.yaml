@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ringmaster-config
+  namespace: ringmaster
+data:
+  RINGMASTER_LOG_LEVEL: "INFO"
+  RINGMASTER_FRONTEND_DIST: "/app/frontend/dist"
+  RINGMASTER_OUTPUT_DIR: "/app/output"

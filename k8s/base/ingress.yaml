@@ -1,0 +1,37 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ringmaster-ingress
+  namespace: ringmaster
+  labels:
+    app: ringmaster
+  annotations:
+    # For NGINX Ingress Controller
+    nginx.ingress.kubernetes.io/websocket-services: "ringmaster-api"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # Optional, for TLS
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - ringmaster.example.com
+    secretName: ringmaster-tls
+  rules:
+  - host: ringmaster.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: ringmaster-api
+            port:
+              number: 8000
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: ringmaster-api
+            port:
+              number: 8001
