@@ -7,6 +7,7 @@ import { useUndo } from "../hooks/useUndo";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsHelp } from "./ShortcutsHelp";
 import { Toast, useToast } from "./Toast";
+import { ActionHistoryPanel } from "./ActionHistoryPanel";
 
 export function Layout() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export function Layout() {
   // Modal states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showActionHistory, setShowActionHistory] = useState(false);
 
   // Undo/Redo
   const undoManager = useUndo({
@@ -61,11 +63,13 @@ export function Layout() {
       setShowCommandPalette(false);
     } else if (showShortcutsHelp) {
       setShowShortcutsHelp(false);
+    } else if (showActionHistory) {
+      setShowActionHistory(false);
     } else if (location.pathname !== "/") {
       // Go back if not on home page
       navigate(-1);
     }
-  }, [showCommandPalette, showShortcutsHelp, location.pathname, navigate]);
+  }, [showCommandPalette, showShortcutsHelp, showActionHistory, location.pathname, navigate]);
 
   // Toggle help modal
   const toggleShortcutsHelp = useCallback(() => {
@@ -112,6 +116,22 @@ export function Layout() {
         </div>
         <div className="header-right">
           <button
+            className="history-btn"
+            onClick={() => setShowActionHistory(true)}
+            title="Action History"
+            style={{
+              padding: "0.25rem 0.5rem",
+              fontSize: "0.8rem",
+              background: "transparent",
+              border: "1px solid var(--color-border)",
+              borderRadius: "4px",
+              cursor: "pointer",
+              marginRight: "0.5rem",
+            }}
+          >
+            History
+          </button>
+          <button
             className="help-btn"
             onClick={toggleShortcutsHelp}
             title="Keyboard shortcuts (?)"
@@ -148,6 +168,15 @@ export function Layout() {
       <ShortcutsHelp
         isOpen={showShortcutsHelp}
         onClose={() => setShowShortcutsHelp(false)}
+      />
+
+      {/* Action History Panel */}
+      <ActionHistoryPanel
+        isOpen={showActionHistory}
+        onClose={() => setShowActionHistory(false)}
+        onActionUndone={(action) => {
+          toast.success(`Undone: ${action.description}`);
+        }}
       />
 
       {/* Pending Shortcut Indicator */}
