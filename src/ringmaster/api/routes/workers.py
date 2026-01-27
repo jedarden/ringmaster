@@ -3,11 +3,13 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
 from ringmaster.db import Database, WorkerRepository
 from ringmaster.domain import Worker, WorkerStatus
+from ringmaster.worker.output_buffer import output_buffer
 
 router = APIRouter()
 
@@ -235,3 +237,126 @@ async def list_capable_workers(
         capable_workers = [w for w in capable_workers if w.status == status]
 
     return capable_workers
+
+
+class OutputLineResponse(BaseModel):
+    """Response for a single output line."""
+
+    line: str
+    line_number: int
+    timestamp: str
+
+
+class OutputResponse(BaseModel):
+    """Response for recent output."""
+
+    worker_id: str
+    lines: list[OutputLineResponse]
+    total_lines: int
+
+
+@router.get("/{worker_id}/output")
+async def get_worker_output(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+    since_line: int = Query(default=0, ge=0),
+) -> OutputResponse:
+    """Get recent output for a worker.
+
+    Args:
+        worker_id: The worker ID.
+        limit: Maximum number of lines to return.
+        since_line: Only return lines after this line number (for polling).
+
+    Returns:
+        Recent output lines with metadata.
+    """
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    lines = await output_buffer.get_recent(worker_id, limit=limit, since_line=since_line)
+    stats = output_buffer.get_buffer_stats().get(worker_id, {"total_lines": 0})
+
+    return OutputResponse(
+        worker_id=worker_id,
+        lines=[
+            OutputLineResponse(
+                line=line.line,
+                line_number=line.line_number,
+                timestamp=line.timestamp.isoformat(),
+            )
+            for line in lines
+        ],
+        total_lines=stats.get("total_lines", 0),
+    )
+
+
+@router.get("/{worker_id}/output/stream")
+async def stream_worker_output(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+) -> StreamingResponse:
+    """Stream output for a worker using Server-Sent Events (SSE).
+
+    This endpoint provides real-time output streaming using SSE format.
+    Connect with EventSource on the frontend.
+
+    Args:
+        worker_id: The worker ID.
+
+    Returns:
+        SSE stream of output lines.
+    """
+    import asyncio
+    import json
+    from uuid import uuid4
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    subscriber_id = f"sse-{uuid4().hex[:8]}"
+
+    async def event_generator():
+        """Generate SSE events."""
+        queue = await output_buffer.subscribe(worker_id, subscriber_id)
+        try:
+            while True:
+                try:
+                    # Wait for new output with timeout
+                    line = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    data = json.dumps({
+                        "line": line.line,
+                        "line_number": line.line_number,
+                        "timestamp": line.timestamp.isoformat(),
+                    })
+                    yield f"data: {data}\n\n"
+                except TimeoutError:
+                    # Send keepalive
+                    yield ": keepalive\n\n"
+        finally:
+            await output_buffer.unsubscribe(worker_id, subscriber_id)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        },
+    )
+
+
+@router.get("/output/stats")
+async def get_output_stats() -> dict:
+    """Get output buffer statistics for all workers.
+
+    Returns:
+        Dict of worker_id -> buffer stats.
+    """
+    return output_buffer.get_buffer_stats()

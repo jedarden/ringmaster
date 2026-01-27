@@ -10,7 +10,9 @@ from pathlib import Path
 from ringmaster.db import Database, ProjectRepository, TaskRepository, WorkerRepository
 from ringmaster.domain import Project, Task, TaskStatus, Worker, WorkerStatus
 from ringmaster.enricher import EnrichmentPipeline
+from ringmaster.events import EventBus, EventType
 from ringmaster.worker.interface import SessionConfig, SessionResult, SessionStatus
+from ringmaster.worker.output_buffer import output_buffer
 from ringmaster.worker.platforms import get_worker
 
 logger = logging.getLogger(__name__)
@@ -32,6 +34,7 @@ class WorkerExecutor:
         db: Database,
         output_dir: Path | None = None,
         project_dir: Path | None = None,
+        event_bus: EventBus | None = None,
     ):
         self.db = db
         self.task_repo = TaskRepository(db)
@@ -39,6 +42,7 @@ class WorkerExecutor:
         self.project_repo = ProjectRepository(db)
         self.output_dir = output_dir or Path.home() / ".ringmaster" / "tasks"
         self.project_dir = project_dir or Path.cwd()
+        self.event_bus = event_bus
         self._active_sessions: dict[str, asyncio.Task] = {}
         self._enrichment_pipeline: EnrichmentPipeline | None = None
 
@@ -135,12 +139,31 @@ class WorkerExecutor:
         self._active_sessions[task.id] = asyncio.current_task()  # type: ignore
 
         try:
-            # Stream output to file and callback
+            # Clear previous output in buffer
+            await output_buffer.clear(worker.id)
+
+            # Stream output to file, buffer, and callback
             output_file = task_output_dir / f"iteration_{task.attempts:03d}.log"
             with open(output_file, "w") as f:
                 async for line in handle.stream_output():
                     f.write(line + "\n")
                     f.flush()
+
+                    # Write to output buffer for streaming
+                    await output_buffer.write(worker.id, line)
+
+                    # Emit output event for real-time WebSocket updates
+                    if self.event_bus:
+                        await self.event_bus.emit(
+                            EventType.WORKER_OUTPUT,
+                            {
+                                "worker_id": worker.id,
+                                "task_id": task.id,
+                                "line": line,
+                            },
+                            project_id=task.project_id,
+                        )
+
                     if on_output:
                         on_output(line)
 

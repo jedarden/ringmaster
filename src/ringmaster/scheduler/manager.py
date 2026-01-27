@@ -51,7 +51,7 @@ class Scheduler:
         self.worker_repo = WorkerRepository(db)
         self.queue_manager = QueueManager(db)
         self.executor = WorkerExecutor(
-            db, output_dir=output_dir, project_dir=project_root
+            db, output_dir=output_dir, project_dir=project_root, event_bus=event_bus
         )
 
         self.poll_interval = poll_interval

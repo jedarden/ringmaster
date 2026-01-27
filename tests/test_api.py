@@ -980,6 +980,145 @@ class TestWorkersAPI:
         assert response.status_code == 404
 
 
+class TestWorkerOutputAPI:
+    """Tests for worker output streaming API."""
+
+    async def test_get_worker_output_empty(self, client: AsyncClient):
+        """Test getting output for a worker with no output."""
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Output Test Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Get output
+        response = await client.get(f"/api/workers/{worker_id}/output")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        assert data["lines"] == []
+        assert data["total_lines"] == 0
+
+    async def test_get_worker_output_not_found(self, client: AsyncClient):
+        """Test getting output for non-existent worker returns 404."""
+        fake_id = "00000000-0000-0000-0000-000000000000"
+        response = await client.get(f"/api/workers/{fake_id}/output")
+        assert response.status_code == 404
+
+    async def test_get_worker_output_with_buffer(self, client: AsyncClient):
+        """Test getting output after writing to buffer."""
+        from ringmaster.worker.output_buffer import output_buffer
+
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Buffer Test Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Write some output to the buffer
+        await output_buffer.write(worker_id, "Line 1: Starting task...")
+        await output_buffer.write(worker_id, "Line 2: Processing data...")
+        await output_buffer.write(worker_id, "Line 3: Task complete!")
+
+        # Get output
+        response = await client.get(f"/api/workers/{worker_id}/output")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        assert len(data["lines"]) == 3
+        assert data["lines"][0]["line"] == "Line 1: Starting task..."
+        assert data["lines"][0]["line_number"] == 1
+        assert data["lines"][2]["line"] == "Line 3: Task complete!"
+        assert data["lines"][2]["line_number"] == 3
+        assert data["total_lines"] == 3
+
+        # Cleanup
+        await output_buffer.clear(worker_id)
+
+    async def test_get_worker_output_since_line(self, client: AsyncClient):
+        """Test getting output after a specific line number."""
+        from ringmaster.worker.output_buffer import output_buffer
+
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Since Line Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Write some output
+        await output_buffer.write(worker_id, "Line 1")
+        await output_buffer.write(worker_id, "Line 2")
+        await output_buffer.write(worker_id, "Line 3")
+        await output_buffer.write(worker_id, "Line 4")
+
+        # Get output since line 2
+        response = await client.get(f"/api/workers/{worker_id}/output?since_line=2")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["lines"]) == 2
+        assert data["lines"][0]["line"] == "Line 3"
+        assert data["lines"][0]["line_number"] == 3
+        assert data["lines"][1]["line"] == "Line 4"
+        assert data["lines"][1]["line_number"] == 4
+
+        # Cleanup
+        await output_buffer.clear(worker_id)
+
+    async def test_get_worker_output_limit(self, client: AsyncClient):
+        """Test limiting output lines."""
+        from ringmaster.worker.output_buffer import output_buffer
+
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Limit Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Write many lines
+        for i in range(10):
+            await output_buffer.write(worker_id, f"Line {i + 1}")
+
+        # Get only last 3 lines
+        response = await client.get(f"/api/workers/{worker_id}/output?limit=3")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["lines"]) == 3
+        assert data["lines"][0]["line"] == "Line 8"
+        assert data["lines"][2]["line"] == "Line 10"
+        assert data["total_lines"] == 10
+
+        # Cleanup
+        await output_buffer.clear(worker_id)
+
+    async def test_get_output_stats(self, client: AsyncClient):
+        """Test getting output buffer statistics."""
+        from ringmaster.worker.output_buffer import output_buffer
+
+        # Create worker and write some output
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Stats Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        await output_buffer.write(worker_id, "Test line")
+
+        # Get stats
+        response = await client.get("/api/workers/output/stats")
+        assert response.status_code == 200
+        stats = response.json()
+        assert worker_id in stats
+        assert stats[worker_id]["line_count"] == 1
+        assert stats[worker_id]["total_lines"] == 1
+
+        # Cleanup
+        await output_buffer.clear(worker_id)
+
+
 class TestQueueAPI:
     """Tests for queue API - testing routes/queue.py."""
 

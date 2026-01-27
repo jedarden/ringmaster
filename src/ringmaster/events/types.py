@@ -25,6 +25,7 @@ class EventType(str, Enum):
     WORKER_DELETED = "worker.deleted"
     WORKER_CONNECTED = "worker.connected"
     WORKER_DISCONNECTED = "worker.disconnected"
+    WORKER_OUTPUT = "worker.output"  # Real-time output streaming
 
     # Project events
     PROJECT_CREATED = "project.created"

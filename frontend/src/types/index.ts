@@ -529,3 +529,26 @@ export interface HistoryResponse {
   can_undo: boolean;
   can_redo: boolean;
 }
+
+// Worker Output types
+
+export interface OutputLine {
+  line: string;
+  line_number: number;
+  timestamp: string;
+}
+
+export interface OutputResponse {
+  worker_id: string;
+  lines: OutputLine[];
+  total_lines: number;
+}
+
+export interface OutputBufferStats {
+  [workerId: string]: {
+    line_count: number;
+    max_lines: number;
+    total_lines: number;
+    subscriber_count: number;
+  };
+}

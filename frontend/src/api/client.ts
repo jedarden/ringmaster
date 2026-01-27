@@ -325,6 +325,34 @@ export async function deactivateWorker(id: string): Promise<Worker> {
   return handleResponse<Worker>(response);
 }
 
+// Worker Output API
+
+import type { OutputResponse, OutputBufferStats } from "../types";
+
+export async function getWorkerOutput(
+  workerId: string,
+  limit = 100,
+  sinceLine = 0
+): Promise<OutputResponse> {
+  const params = new URLSearchParams({
+    limit: limit.toString(),
+    since_line: sinceLine.toString(),
+  });
+  const response = await fetch(`${API_BASE}/workers/${workerId}/output?${params}`);
+  return handleResponse<OutputResponse>(response);
+}
+
+export async function getOutputBufferStats(): Promise<OutputBufferStats> {
+  const response = await fetch(`${API_BASE}/workers/output/stats`);
+  return handleResponse<OutputBufferStats>(response);
+}
+
+export function getWorkerOutputStreamUrl(workerId: string): string {
+  // Returns the SSE stream URL for use with EventSource
+  const baseUrl = import.meta.env.VITE_API_URL || "";
+  return `${baseUrl}/api/workers/${workerId}/output/stream`;
+}
+
 // Queue API
 
 export async function getQueueStats(): Promise<QueueStats> {
