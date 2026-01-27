@@ -383,3 +383,52 @@ export interface FileUploadResponse {
   mime_type: string;
   media_type: "image" | "document" | "code" | "archive" | "file";
 }
+
+// Logs types
+
+export const LogLevel = {
+  DEBUG: "debug",
+  INFO: "info",
+  WARNING: "warning",
+  ERROR: "error",
+  CRITICAL: "critical",
+} as const;
+export type LogLevel = (typeof LogLevel)[keyof typeof LogLevel];
+
+export const LogComponent = {
+  API: "api",
+  QUEUE: "queue",
+  ENRICHER: "enricher",
+  SCHEDULER: "scheduler",
+  WORKER: "worker",
+  RELOAD: "reload",
+  CREATOR: "creator",
+} as const;
+export type LogComponent = (typeof LogComponent)[keyof typeof LogComponent];
+
+export interface LogEntry {
+  id: number;
+  timestamp: string;
+  level: LogLevel;
+  component: LogComponent;
+  message: string;
+  task_id: string | null;
+  worker_id: string | null;
+  project_id: string | null;
+  data: Record<string, unknown> | null;
+}
+
+export interface LogsResponse {
+  logs: LogEntry[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export interface LogStats {
+  period_hours: number;
+  total: number;
+  errors: number;
+  by_level: Record<string, number>;
+  by_component: Record<string, number>;
+}

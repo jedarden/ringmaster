@@ -40,6 +40,9 @@ export function Layout() {
             <NavLink to="/metrics" className={({ isActive }) => isActive ? "active" : ""}>
               Metrics
             </NavLink>
+            <NavLink to="/logs" className={({ isActive }) => isActive ? "active" : ""}>
+              Logs
+            </NavLink>
           </nav>
         </div>
         <div className="header-right">

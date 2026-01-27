@@ -37,6 +37,11 @@ import type {
   SuggestRelatedRequest,
   SuggestRelatedResponse,
   FileUploadResponse,
+  LogEntry,
+  LogsResponse,
+  LogStats,
+  LogLevel,
+  LogComponent,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -547,6 +552,90 @@ export async function suggestRelatedTasks(
     body: JSON.stringify(data),
   });
   return handleResponse<SuggestRelatedResponse>(response);
+}
+
+// Logs API
+
+export interface ListLogsParams {
+  component?: LogComponent;
+  level?: LogLevel;
+  task_id?: string;
+  worker_id?: string;
+  project_id?: string;
+  since?: string;
+  search?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export async function listLogs(params: ListLogsParams = {}): Promise<LogsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.component) searchParams.set("component", params.component);
+  if (params.level) searchParams.set("level", params.level);
+  if (params.task_id) searchParams.set("task_id", params.task_id);
+  if (params.worker_id) searchParams.set("worker_id", params.worker_id);
+  if (params.project_id) searchParams.set("project_id", params.project_id);
+  if (params.since) searchParams.set("since", params.since);
+  if (params.search) searchParams.set("search", params.search);
+  searchParams.set("offset", (params.offset || 0).toString());
+  searchParams.set("limit", (params.limit || 100).toString());
+
+  const response = await fetch(`${API_BASE}/logs?${searchParams}`);
+  return handleResponse<LogsResponse>(response);
+}
+
+export async function getRecentLogs(
+  minutes = 60,
+  limit = 100
+): Promise<LogEntry[]> {
+  const params = new URLSearchParams({
+    minutes: minutes.toString(),
+    limit: limit.toString(),
+  });
+  const response = await fetch(`${API_BASE}/logs/recent?${params}`);
+  return handleResponse<LogEntry[]>(response);
+}
+
+export async function getLogsForTask(
+  taskId: string,
+  limit = 100
+): Promise<LogEntry[]> {
+  const params = new URLSearchParams({ limit: limit.toString() });
+  const response = await fetch(`${API_BASE}/logs/for-task/${taskId}?${params}`);
+  return handleResponse<LogEntry[]>(response);
+}
+
+export async function getLogsForWorker(
+  workerId: string,
+  limit = 100
+): Promise<LogEntry[]> {
+  const params = new URLSearchParams({ limit: limit.toString() });
+  const response = await fetch(`${API_BASE}/logs/for-worker/${workerId}?${params}`);
+  return handleResponse<LogEntry[]>(response);
+}
+
+export async function getLogComponents(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/logs/components`);
+  return handleResponse<string[]>(response);
+}
+
+export async function getLogLevels(): Promise<string[]> {
+  const response = await fetch(`${API_BASE}/logs/levels`);
+  return handleResponse<string[]>(response);
+}
+
+export async function getLogStats(hours = 24): Promise<LogStats> {
+  const params = new URLSearchParams({ hours: hours.toString() });
+  const response = await fetch(`${API_BASE}/logs/stats?${params}`);
+  return handleResponse<LogStats>(response);
+}
+
+export async function clearOldLogs(days = 7): Promise<{ deleted: number; cutoff: string }> {
+  const params = new URLSearchParams({ days: days.toString() });
+  const response = await fetch(`${API_BASE}/logs?${params}`, {
+    method: "DELETE",
+  });
+  return handleResponse<{ deleted: number; cutoff: string }>(response);
 }
 
 export { ApiError };

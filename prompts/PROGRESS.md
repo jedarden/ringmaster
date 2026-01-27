@@ -162,7 +162,7 @@ src/ringmaster/
 
 ### Frontend (`frontend/`)
 - ✅ React + Vite + TypeScript scaffold
-- ✅ React Router with 4 views (Projects, ProjectDetail, Workers, Queue)
+- ✅ React Router with 5 views (Projects, ProjectDetail, Workers, Queue, Logs)
 - ✅ API client with full coverage of backend endpoints
 - ✅ TypeScript types matching backend domain models
 - ✅ Layout component with navigation and API health indicator
@@ -231,6 +231,18 @@ src/ringmaster/
 - ✅ WebSocket integration for real-time updates
 - ✅ Dedicated /metrics route in navigation
 
+### Logs Viewer (`frontend/src/components/LogsViewer.tsx`)
+- ✅ Real-time log viewing with auto-refresh (live mode)
+- ✅ Filter by log level (debug, info, warning, error, critical)
+- ✅ Filter by component (api, queue, enricher, scheduler, worker, reload, creator)
+- ✅ Full-text search in messages (paginated mode)
+- ✅ Task/worker/project scoping via props
+- ✅ Log statistics bar showing 24h totals
+- ✅ Expandable log entries with detailed data view
+- ✅ Pagination for historical log browsing
+- ✅ Dedicated /logs route in navigation
+- ✅ API client functions for all log endpoints
+
 ### Bead Creator Service (`src/ringmaster/creator/`)
 - ✅ Parser module for extracting task candidates from natural language
   - Action type detection (create, fix, update, remove, test, document, investigate)
@@ -284,7 +296,7 @@ src/ringmaster/
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
 2. **File Download**: Add endpoint to download uploaded files
-3. **Logs UI**: Add frontend component for viewing structured logs
+3. **WebSocket Log Streaming**: Add real-time log push via WebSocket events
 
 ## Iteration Log
 
@@ -312,6 +324,7 @@ src/ringmaster/
 | 20 | 2026-01-26 | Add Logs API for observability: structured logging with SQLite storage, FTS5 search, filtering by component/level/task/worker, pagination, statistics endpoint, 17 new tests, total 197 tests passing |
 | 21 | 2026-01-27 | Add voice input to ChatPanel: useSpeechRecognition hook using Web Speech API, voice toggle button with pulse animation, interim transcript display, browser compatibility handling |
 | 22 | 2026-01-27 | Add file attachments to chat: backend upload endpoint with size/type validation, FileUploadResponse type, uploadFile client function, ChatPanel attachment UI with preview, message attachment display with media icons, fixed chat API paths, 7 new tests, total 204 tests passing |
+| 23 | 2026-01-27 | Add Logs UI: LogsViewer component with live mode auto-refresh, level/component filtering, full-text search, log statistics bar, expandable log details, pagination; LogsPage with /logs route; TypeScript types and API client functions for all log endpoints |
 
 ## Blockers
 

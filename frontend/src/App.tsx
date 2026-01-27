@@ -5,6 +5,7 @@ import { ProjectDetailPage } from "./pages/ProjectDetailPage";
 import { WorkersPage } from "./pages/WorkersPage";
 import { QueuePage } from "./pages/QueuePage";
 import { MetricsPage } from "./pages/MetricsPage";
+import { LogsPage } from "./pages/LogsPage";
 import "./App.css";
 
 function App() {
@@ -17,6 +18,7 @@ function App() {
           <Route path="workers" element={<WorkersPage />} />
           <Route path="queue" element={<QueuePage />} />
           <Route path="metrics" element={<MetricsPage />} />
+          <Route path="logs" element={<LogsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
