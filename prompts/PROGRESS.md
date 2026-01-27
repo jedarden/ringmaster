@@ -354,9 +354,9 @@ src/ringmaster/
 
 ## Next Steps
 
-1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
-2. **Graph Editing**: Allow creating dependencies by dragging between nodes
-3. **Bulk Task Operations**: Add select/deselect all and bulk status/assignment updates
+1. **Graph Editing**: Allow creating dependencies by dragging between nodes
+2. **Bulk Task Operations**: Add select/deselect all and bulk status/assignment updates
+3. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
 
 ## Iteration Log
 
@@ -391,6 +391,7 @@ src/ringmaster/
 | 27 | 2026-01-27 | Add task assignment UI: POST /api/tasks/{task_id}/assign endpoint, worker selector dropdown in task cards, validates worker availability (idle/not offline), validates task type (no epics), updates task and worker status atomically, unassign support, 5 new tests, total 222 tests passing |
 | 28 | 2026-01-27 | Fix TypeScript error in DependencyGraph (useRef type), add nested subtask display in task cards: collapsible subtask section with expand/collapse toggle, subtask priority/status/title display, status and worker assignment dropdowns, delete button, color-coded border by status, CSS styles for subtask components |
 | 29 | 2026-01-27 | Add epic child tasks display: tasks grouped by parent epic, progress bar with completion percentage, collapsible child tasks section, expand/collapse toggle with task count, subtask count indicator, status/worker dropdowns, delete button, color-coded border by status, orphan tasks separate in kanban |
+| 30 | 2026-01-27 | Add worker integration tests: MockWorkerInterface/MockSessionHandle for CLI simulation, 14 new tests covering task execution flow, status transitions, output streaming, metrics recording, worker status updates, scheduler integration, unavailable worker handling, enrichment integration, total 236 tests passing |
 
 ## Blockers
 
