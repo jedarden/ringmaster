@@ -180,11 +180,13 @@ export async function getProjectSummary(id: string): Promise<ProjectSummary> {
 
 export async function listProjectsWithSummaries(
   limit = 100,
-  offset = 0
+  offset = 0,
+  sort: "rank" | "recent" | "alphabetical" = "rank"
 ): Promise<ProjectSummary[]> {
   const params = new URLSearchParams({
     limit: limit.toString(),
     offset: offset.toString(),
+    sort,
   });
   const response = await fetch(`${API_BASE}/projects/with-summaries?${params}`);
   return handleResponse<ProjectSummary[]>(response);

@@ -387,7 +387,7 @@ class TestProjectsAPI:
         p2_id = p2_response.json()["id"]
 
         # Add a task to each project for activity
-        t1_response = await client.post(
+        await client.post(
             "/api/tasks", json={"project_id": p1_id, "title": "Task 1"}
         )
         t2_response = await client.post(

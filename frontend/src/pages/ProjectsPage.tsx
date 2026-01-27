@@ -66,6 +66,8 @@ function getStatusIndicator(status: ReturnType<typeof getProjectStatus>): {
   }
 }
 
+type SortOption = "rank" | "recent" | "alphabetical";
+
 export function ProjectsPage() {
   const navigate = useNavigate();
   const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
@@ -74,12 +76,13 @@ export function ProjectsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProject, setNewProject] = useState<ProjectCreate>({ name: "", tech_stack: [] });
   const [techStackInput, setTechStackInput] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("rank");
   const listRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await listProjectsWithSummaries();
+      const data = await listProjectsWithSummaries(100, 0, sortOption);
       setSummaries(data);
       setError(null);
     } catch (err) {
@@ -87,7 +90,7 @@ export function ProjectsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sortOption]);
 
   // Handle WebSocket events for real-time updates
   const handleEvent = useCallback(
@@ -198,9 +201,23 @@ export function ProjectsPage() {
     <div className="projects-page">
       <div className="page-header">
         <h1>Projects</h1>
-        <button onClick={() => setShowCreateForm(!showCreateForm)}>
-          {showCreateForm ? "Cancel" : "+ New Project"}
-        </button>
+        <div className="header-actions">
+          <div className="sort-selector">
+            <label htmlFor="sort-select">Sort by:</label>
+            <select
+              id="sort-select"
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+            >
+              <option value="rank">Priority</option>
+              <option value="recent">Recent Activity</option>
+              <option value="alphabetical">Alphabetical</option>
+            </select>
+          </div>
+          <button onClick={() => setShowCreateForm(!showCreateForm)}>
+            {showCreateForm ? "Cancel" : "+ New Project"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}

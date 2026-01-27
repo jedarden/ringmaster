@@ -121,6 +121,29 @@ body {
   margin: 0;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sort-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sort-selector label {
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+}
+
+.sort-selector select {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.875rem;
+  min-width: 140px;
+}
+
 .back-link {
   color: var(--color-text-muted);
   text-decoration: none;
