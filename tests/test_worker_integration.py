@@ -16,7 +16,7 @@ from ringmaster.db.connection import Database
 from ringmaster.db.repositories import ProjectRepository, TaskRepository, WorkerRepository
 from ringmaster.domain import Priority, Project, Task, TaskStatus, Worker, WorkerStatus
 from ringmaster.scheduler.manager import Scheduler
-from ringmaster.worker.executor import WorkerExecutor
+from ringmaster.worker.executor import WorkerExecutor, calculate_retry_backoff
 from ringmaster.worker.interface import (
     SessionConfig,
     SessionHandle,
@@ -568,3 +568,226 @@ class TestEnrichmentIntegration:
             # Verify prompt contains project info
             prompt = mock_interface._last_config.prompt
             assert project.name in prompt
+
+
+class TestRetryBackoffCalculation:
+    """Tests for the exponential backoff calculation function."""
+
+    def test_backoff_increases_exponentially(self):
+        """Test that backoff increases exponentially with attempts."""
+        delay_1 = calculate_retry_backoff(1)
+        delay_2 = calculate_retry_backoff(2)
+        delay_3 = calculate_retry_backoff(3)
+        delay_4 = calculate_retry_backoff(4)
+
+        # Default base is 30s, so:
+        # attempt 1: 30s, attempt 2: 60s, attempt 3: 120s, attempt 4: 240s
+        assert delay_1.total_seconds() == 30
+        assert delay_2.total_seconds() == 60
+        assert delay_3.total_seconds() == 120
+        assert delay_4.total_seconds() == 240
+
+    def test_backoff_caps_at_max(self):
+        """Test that backoff is capped at max_delay."""
+        # With default max of 3600s, attempt 8 would be 30*128=3840s, capped to 3600
+        delay = calculate_retry_backoff(8)
+        assert delay.total_seconds() == 3600
+
+    def test_custom_base_delay(self):
+        """Test custom base delay configuration."""
+        delay = calculate_retry_backoff(1, base_delay_seconds=60)
+        assert delay.total_seconds() == 60
+
+        delay_2 = calculate_retry_backoff(2, base_delay_seconds=60)
+        assert delay_2.total_seconds() == 120
+
+    def test_custom_max_delay(self):
+        """Test custom max delay cap."""
+        delay = calculate_retry_backoff(5, base_delay_seconds=30, max_delay_seconds=100)
+        # 30 * 2^4 = 480, capped to 100
+        assert delay.total_seconds() == 100
+
+    def test_zero_attempts_uses_base(self):
+        """Test that zero or negative attempts use base delay."""
+        delay = calculate_retry_backoff(0)
+        assert delay.total_seconds() == 30
+
+
+class TestRetryBackoff:
+    """Tests for task retry with exponential backoff."""
+
+    @pytest.mark.asyncio
+    async def test_failed_task_gets_retry_after_set(
+        self, db, project, task, worker, temp_project_dir
+    ):
+        """Test that failed tasks have retry_after set for backoff."""
+        with tempfile.TemporaryDirectory() as output_dir:
+            executor = WorkerExecutor(
+                db,
+                output_dir=Path(output_dir),
+                project_dir=temp_project_dir,
+            )
+
+            # Mock worker that fails
+            mock_interface = MockWorkerInterface(
+                should_succeed=False,
+                include_completion_signal=False,
+                output_lines=["Starting...", "Error: Something went wrong"],
+            )
+
+            with patch("ringmaster.worker.executor.get_worker", return_value=mock_interface):
+                await executor.execute_task(task, worker)
+
+            # Reload task from database
+            task_repo = TaskRepository(db)
+            updated_task = await task_repo.get_task(task.id)
+
+            # Task should be ready for retry with retry_after set
+            assert updated_task.status == TaskStatus.READY
+            assert updated_task.retry_after is not None
+            assert updated_task.retry_after > datetime.now(UTC)
+            assert updated_task.last_failure_reason is not None
+
+    @pytest.mark.asyncio
+    async def test_retry_after_increases_with_attempts(
+        self, db, project, task, worker, temp_project_dir
+    ):
+        """Test that retry backoff increases with each attempt."""
+        with tempfile.TemporaryDirectory() as output_dir:
+            executor = WorkerExecutor(
+                db,
+                output_dir=Path(output_dir),
+                project_dir=temp_project_dir,
+            )
+
+            mock_interface = MockWorkerInterface(
+                should_succeed=False,
+                include_completion_signal=False,
+            )
+
+            # First failure
+            with patch("ringmaster.worker.executor.get_worker", return_value=mock_interface):
+                await executor.execute_task(task, worker)
+
+            task_repo = TaskRepository(db)
+            task_after_first = await task_repo.get_task(task.id)
+            first_retry_delay = (task_after_first.retry_after - datetime.now(UTC)).total_seconds()
+
+            # Reset task status and clear retry_after for next attempt
+            task_after_first.status = TaskStatus.READY
+            task_after_first.retry_after = None
+            await task_repo.update_task(task_after_first)
+
+            # Reset worker status
+            worker_repo = WorkerRepository(db)
+            worker.status = WorkerStatus.IDLE
+            worker.current_task_id = None
+            await worker_repo.update(worker)
+
+            # Second failure (attempts=2 after this)
+            with patch("ringmaster.worker.executor.get_worker", return_value=mock_interface):
+                await executor.execute_task(task_after_first, worker)
+
+            task_after_second = await task_repo.get_task(task.id)
+            second_retry_delay = (task_after_second.retry_after - datetime.now(UTC)).total_seconds()
+
+            # Second backoff should be longer than first
+            # Base is 30s, so first=30s, second=60s (approximately)
+            assert second_retry_delay > first_retry_delay
+
+    @pytest.mark.asyncio
+    async def test_success_clears_retry_tracking(
+        self, db, project, task, worker, temp_project_dir
+    ):
+        """Test that successful task clears retry tracking fields."""
+        # Set up task with retry tracking from previous failure
+        task.attempts = 2
+        task.retry_after = datetime.now(UTC)
+        task.last_failure_reason = "Previous failure"
+        task_repo = TaskRepository(db)
+        await task_repo.update_task(task)
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            executor = WorkerExecutor(
+                db,
+                output_dir=Path(output_dir),
+                project_dir=temp_project_dir,
+            )
+
+            mock_interface = MockWorkerInterface(should_succeed=True)
+
+            with patch("ringmaster.worker.executor.get_worker", return_value=mock_interface):
+                await executor.execute_task(task, worker)
+
+            # Reload task
+            updated_task = await task_repo.get_task(task.id)
+
+            # Retry tracking should be cleared
+            assert updated_task.retry_after is None
+            assert updated_task.last_failure_reason is None
+
+    @pytest.mark.asyncio
+    async def test_max_attempts_reached_no_retry(
+        self, db, project, task, worker, temp_project_dir
+    ):
+        """Test that task is marked FAILED when max attempts reached."""
+        # Set task close to max attempts
+        task.attempts = task.max_attempts - 1
+        task_repo = TaskRepository(db)
+        await task_repo.update_task(task)
+
+        with tempfile.TemporaryDirectory() as output_dir:
+            executor = WorkerExecutor(
+                db,
+                output_dir=Path(output_dir),
+                project_dir=temp_project_dir,
+            )
+
+            mock_interface = MockWorkerInterface(
+                should_succeed=False,
+                include_completion_signal=False,
+            )
+
+            with patch("ringmaster.worker.executor.get_worker", return_value=mock_interface):
+                await executor.execute_task(task, worker)
+
+            # Reload task
+            updated_task = await task_repo.get_task(task.id)
+
+            # Task should be failed, not ready for retry
+            assert updated_task.status == TaskStatus.FAILED
+            assert updated_task.retry_after is None
+
+    @pytest.mark.asyncio
+    async def test_get_ready_tasks_filters_pending_retries(
+        self, db, project, task, temp_project_dir
+    ):
+        """Test that get_ready_tasks filters out tasks with future retry_after."""
+        task_repo = TaskRepository(db)
+
+        # Create a task with retry_after in the future
+        from datetime import timedelta
+        task.status = TaskStatus.READY
+        task.retry_after = datetime.now(UTC) + timedelta(minutes=5)
+        await task_repo.update_task(task)
+
+        # Create another task that's ready immediately
+        from uuid import uuid4
+
+        from ringmaster.domain import Task as TaskModel
+        ready_task = TaskModel(
+            id=f"bd-{uuid4().hex[:8]}",
+            project_id=project.id,
+            title="Ready task",
+            status=TaskStatus.READY,
+            retry_after=None,
+        )
+        await task_repo.create_task(ready_task)
+
+        # Get ready tasks
+        ready_tasks = await task_repo.get_ready_tasks()
+
+        # Should only include the immediately ready task
+        task_ids = [t.id for t in ready_tasks]
+        assert ready_task.id in task_ids
+        assert task.id not in task_ids  # Still in backoff period

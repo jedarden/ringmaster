@@ -215,6 +215,19 @@ class TaskRepository:
     async def update_task(self, task: Task | Epic | Subtask) -> Task | Epic | Subtask:
         """Update an existing task."""
         task.updated_at = datetime.now(UTC)
+
+        # Handle retry_after serialization
+        retry_after = getattr(task, "retry_after", None)
+        retry_after_str = retry_after.isoformat() if retry_after else None
+
+        # Handle started_at serialization
+        started_at = getattr(task, "started_at", None)
+        started_at_str = started_at.isoformat() if started_at else None
+
+        # Handle completed_at serialization
+        completed_at = getattr(task, "completed_at", None)
+        completed_at_str = completed_at.isoformat() if completed_at else None
+
         await self.db.execute(
             """
             UPDATE tasks SET
@@ -223,7 +236,8 @@ class TaskRepository:
                 pagerank_score = ?, betweenness_score = ?, on_critical_path = ?,
                 combined_priority = ?, updated_at = ?, started_at = ?, completed_at = ?,
                 prompt_path = ?, output_path = ?, context_hash = ?,
-                acceptance_criteria = ?, context = ?
+                acceptance_criteria = ?, context = ?,
+                retry_after = ?, last_failure_reason = ?
             WHERE id = ?
             """,
             (
@@ -240,13 +254,15 @@ class TaskRepository:
                 getattr(task, "on_critical_path", False),
                 getattr(task, "combined_priority", 0),
                 task.updated_at.isoformat(),
-                getattr(task, "started_at", None),
-                getattr(task, "completed_at", None),
+                started_at_str,
+                completed_at_str,
                 task.prompt_path,
                 task.output_path,
                 task.context_hash,
                 json.dumps(getattr(task, "acceptance_criteria", [])),
                 getattr(task, "context", None),
+                retry_after_str,
+                getattr(task, "last_failure_reason", None),
                 task.id,
             ),
         )
@@ -309,13 +325,22 @@ class TaskRepository:
         return cursor.rowcount > 0
 
     async def get_ready_tasks(self, project_id: UUID | None = None) -> list[Task]:
-        """Get tasks that are ready to be assigned (all dependencies complete)."""
+        """Get tasks that are ready to be assigned (all dependencies complete).
+
+        Tasks are filtered to exclude:
+        - Tasks with unmet dependencies
+        - Tasks where retry_after is in the future (exponential backoff)
+        """
         conditions = ["t.status = 'ready'", "t.type IN ('task', 'subtask')"]
         params: list[Any] = []
 
         if project_id:
             conditions.append("t.project_id = ?")
             params.append(str(project_id))
+
+        # Filter out tasks that are still in retry backoff period
+        # retry_after IS NULL means no retry delay, or datetime('now') >= retry_after
+        conditions.append("(t.retry_after IS NULL OR datetime('now') >= t.retry_after)")
 
         query = f"""
             SELECT t.* FROM tasks t
@@ -355,6 +380,14 @@ class TaskRepository:
             "context_hash": row["context_hash"],
         }
 
+        # Handle retry tracking columns - may not exist in older DBs before migration 008
+        retry_after = None
+        last_failure_reason = None
+        if "retry_after" in row.keys():  # noqa: SIM118
+            retry_after = datetime.fromisoformat(row["retry_after"]) if row["retry_after"] else None
+        if "last_failure_reason" in row.keys():  # noqa: SIM118
+            last_failure_reason = row["last_failure_reason"]
+
         if task_type == TaskType.EPIC:
             return Epic(
                 **base_kwargs,
@@ -369,6 +402,8 @@ class TaskRepository:
                 attempts=row["attempts"],
                 max_attempts=row["max_attempts"],
                 required_capabilities=required_capabilities,
+                retry_after=retry_after,
+                last_failure_reason=last_failure_reason,
             )
         else:  # TASK
             return Task(
@@ -384,6 +419,8 @@ class TaskRepository:
                 betweenness_score=row["betweenness_score"],
                 on_critical_path=bool(row["on_critical_path"]),
                 combined_priority=row["combined_priority"],
+                retry_after=retry_after,
+                last_failure_reason=last_failure_reason,
             )
 
     # --- Decision methods ---

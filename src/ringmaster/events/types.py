@@ -18,6 +18,7 @@ class EventType(str, Enum):
     TASK_STARTED = "task.started"
     TASK_COMPLETED = "task.completed"
     TASK_FAILED = "task.failed"
+    TASK_RETRY = "task.retry"  # Task scheduled for retry with backoff
 
     # Worker events
     WORKER_CREATED = "worker.created"

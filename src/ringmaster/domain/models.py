@@ -94,6 +94,12 @@ class Task(TaskBase):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    # Retry tracking
+    # retry_after: When task can be retried (for exponential backoff)
+    # last_failure_reason: Why the last attempt failed
+    retry_after: datetime | None = None
+    last_failure_reason: str | None = None
+
     # Blocking reason (when status=BLOCKED due to NEEDS_DECISION outcome)
     blocked_reason: str | None = None
 
@@ -118,6 +124,10 @@ class Subtask(TaskBase):
 
     # Required capabilities for worker matching
     required_capabilities: list[str] = Field(default_factory=list)
+
+    # Retry tracking
+    retry_after: datetime | None = None
+    last_failure_reason: str | None = None
 
 
 class Decision(BaseModel):

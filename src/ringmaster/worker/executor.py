@@ -4,7 +4,7 @@ import asyncio
 import contextlib
 import logging
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ringmaster.db import Database, ProjectRepository, TaskRepository, WorkerRepository
@@ -22,6 +22,30 @@ from ringmaster.worker.output_buffer import output_buffer
 from ringmaster.worker.platforms import get_worker
 
 logger = logging.getLogger(__name__)
+
+
+def calculate_retry_backoff(attempts: int, base_delay_seconds: int = 30, max_delay_seconds: int = 3600) -> timedelta:
+    """Calculate exponential backoff delay for task retry.
+
+    Uses exponential backoff with a cap: delay = base * 2^(attempts-1)
+    - Attempt 1: 30s
+    - Attempt 2: 60s
+    - Attempt 3: 120s
+    - Attempt 4: 240s
+    - Attempt 5: 480s (capped at max_delay)
+
+    Args:
+        attempts: Current number of attempts (1-based)
+        base_delay_seconds: Base delay in seconds (default 30)
+        max_delay_seconds: Maximum delay cap in seconds (default 3600 = 1 hour)
+
+    Returns:
+        Timedelta representing the backoff delay
+    """
+    # Exponential backoff: base * 2^(attempts-1)
+    exponent = max(0, attempts - 1)
+    delay_seconds = min(base_delay_seconds * (2 ** exponent), max_delay_seconds)
+    return timedelta(seconds=delay_seconds)
 
 
 class WorkerExecutor:
@@ -342,12 +366,41 @@ class WorkerExecutor:
             elif outcome_result.is_success:
                 task.status = TaskStatus.REVIEW  # Go to review before done
                 task.completed_at = datetime.now(UTC)
+                # Clear retry tracking on success
+                task.retry_after = None
+                task.last_failure_reason = None
             else:
-                # Failure - retry if attempts remaining
+                # Failure - record reason and schedule retry with backoff
+                task.last_failure_reason = outcome_result.reason or result.error or "Unknown failure"
+
                 if task.attempts >= task.max_attempts:
                     task.status = TaskStatus.FAILED
+                    task.retry_after = None  # No more retries
                 else:
-                    task.status = TaskStatus.READY  # Retry
+                    # Schedule retry with exponential backoff
+                    task.status = TaskStatus.READY
+                    backoff = calculate_retry_backoff(task.attempts)
+                    task.retry_after = datetime.now(UTC) + backoff
+
+                    logger.info(
+                        f"Task {task.id} scheduled for retry in {backoff.total_seconds():.0f}s "
+                        f"(attempt {task.attempts}/{task.max_attempts})"
+                    )
+
+                    # Emit retry event
+                    if self.event_bus:
+                        await self.event_bus.emit(
+                            EventType.TASK_RETRY,
+                            {
+                                "task_id": task.id,
+                                "attempts": task.attempts,
+                                "max_attempts": task.max_attempts,
+                                "retry_after": task.retry_after.isoformat(),
+                                "backoff_seconds": backoff.total_seconds(),
+                                "failure_reason": task.last_failure_reason,
+                            },
+                            project_id=task.project_id,
+                        )
 
             await self.task_repo.update_task(task)
 
