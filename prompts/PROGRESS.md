@@ -638,6 +638,21 @@ Implemented shortcuts:
 - ✅ Migration 009 for NEEDS_DECOMPOSITION status CHECK constraint
 - ✅ 7 new integration tests
 
+### Git Worktree Management (`src/ringmaster/git/worktrees.py`)
+- ✅ Worktree and WorktreeConfig dataclasses for worktree representation
+- ✅ Worktree operations for parallel worker isolation:
+  - list_worktrees(): List all worktrees for a repository
+  - get_or_create_worktree(): Create or reuse worktree for a worker
+  - remove_worktree(): Clean up worker's worktree
+  - get_worktree_status(): Check uncommitted changes and commits ahead
+  - commit_worktree_changes(): Commit changes in a worktree
+  - merge_worktree_to_main(): Merge worker's branch to main
+  - clean_stale_worktrees(): Prune orphaned worktrees
+- ✅ Support for both repos with origin remote and local-only repos
+- ✅ Branch naming convention: `ringmaster/<task-id>`
+- ✅ Layout: `/workspace/project-main.worktrees/worker-<id>/`
+- ✅ 20 new tests covering all worktree operations
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -697,6 +712,7 @@ Implemented shortcuts:
 | 49 | 2026-01-27 | Add task auto-retry with exponential backoff: retry_after and last_failure_reason fields on Task/Subtask models, migration 008_retry_tracking.sql, calculate_retry_backoff() function (30s/60s/120s/...), get_ready_tasks() filters tasks in backoff period, TASK_RETRY event emission, success clears retry tracking, 10 new tests, total 391 tests passing |
 | 50 | 2026-01-27 | Add worker control buttons: POST /api/workers/{id}/cancel and /pause endpoints, WORKER_TASK_CANCELLED and WORKER_PAUSED event types, View Output/Pause/Cancel buttons in WorkersPage for busy workers, WorkerOutputPanel integration, CSS styling for control buttons, 4 new tests, total 395 tests passing |
 | 51 | 2026-01-27 | Add task resubmission for decomposition: NEEDS_DECOMPOSITION status, POST /api/tasks/{id}/resubmit endpoint for workers to mark tasks as too large, immediate decomposition via BeadCreator, TASK_RESUBMITTED event, migration 009, 7 new tests, total 402 tests passing |
+| 52 | 2026-01-27 | Add git worktree support for worker isolation: Worktree/WorktreeConfig dataclasses, list_worktrees(), get_or_create_worktree(), remove_worktree(), get_worktree_status(), commit_worktree_changes(), merge_worktree_to_main(), clean_stale_worktrees(); handles both repos with origin remote and local-only repos; 20 new tests, total 422 tests passing |
 
 ## Blockers
 
