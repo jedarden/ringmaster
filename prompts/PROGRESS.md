@@ -184,7 +184,12 @@ src/ringmaster/
   - Voice toggle button with visual feedback (pulse animation)
   - Interim and final transcript handling
   - Error handling for microphone access and browser support
-- 🔲 File attachments
+- ✅ File attachments
+  - Attachment button to select files for upload
+  - Attachment preview with filename, size, and remove button
+  - Upload progress indication
+  - Media type icons (image, document, code, archive)
+  - Display attachments in message history
 
 ### Chat API (`src/ringmaster/api/routes/chat.py`)
 - ✅ Message CRUD endpoints (create, list, recent, count)
@@ -193,7 +198,13 @@ src/ringmaster/
 - ✅ History context endpoint with RLM compression
 - ✅ Configurable compression parameters
 - ✅ Clear summaries endpoint for re-summarization
-- ✅ 12 integration tests covering all endpoints
+- ✅ File upload endpoint (POST /api/chat/projects/{id}/upload)
+  - Size validation (10MB limit)
+  - MIME type detection
+  - Unique filename generation with content hash
+  - Media type categorization (image, document, code, archive)
+- ✅ File metadata endpoint (GET /api/chat/projects/{id}/uploads/{filename})
+- ✅ 19 integration tests covering all endpoints
 
 ### File Browser API (`src/ringmaster/api/routes/files.py`)
 - ✅ Directory listing endpoint with breadcrumb navigation support
@@ -271,8 +282,9 @@ src/ringmaster/
 
 ## Next Steps
 
-1. **File Attachments**: Add file/image attachment support to chat interface
-2. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
+1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
+2. **File Download**: Add endpoint to download uploaded files
+3. **Logs UI**: Add frontend component for viewing structured logs
 
 ## Iteration Log
 
@@ -299,6 +311,7 @@ src/ringmaster/
 | 19 | 2026-01-26 | Integrate EnrichmentPipeline into WorkerExecutor: 5-layer prompt assembly, project context fetching, context hash tracking, prompt file saving, fallback prompt, 11 new tests, total 180 tests passing |
 | 20 | 2026-01-26 | Add Logs API for observability: structured logging with SQLite storage, FTS5 search, filtering by component/level/task/worker, pagination, statistics endpoint, 17 new tests, total 197 tests passing |
 | 21 | 2026-01-27 | Add voice input to ChatPanel: useSpeechRecognition hook using Web Speech API, voice toggle button with pulse animation, interim transcript display, browser compatibility handling |
+| 22 | 2026-01-27 | Add file attachments to chat: backend upload endpoint with size/type validation, FileUploadResponse type, uploadFile client function, ChatPanel attachment UI with preview, message attachment display with media icons, fixed chat API paths, 7 new tests, total 204 tests passing |
 
 ## Blockers
 
