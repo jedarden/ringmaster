@@ -1187,3 +1187,5 @@ All 6 functional gaps have been addressed:
 - ✅ **Recommended Path**: Use stable static file server (nginx, serve) for E2E testing with production build
 
 The project is **functionally complete** for production use. The E2E test infrastructure has a known limitation with Vite server stability under test load, but this does not affect production deployment.
+
+| 104 | 2026-01-27 | **E2E Test Linting Fixes**: Removed unused imports from E2E test files (deleteTestTask from task-management.spec.ts, deleteTestWorker from worker-management.spec.ts). All linting now passes (backend + frontend). Python tests: 718 passed, 7 skipped, 1 warning. Frontend builds successfully. Project remains functionally complete. |

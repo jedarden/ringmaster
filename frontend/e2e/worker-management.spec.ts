@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
   createTestWorker,
-  deleteTestWorker,
   cleanupTestWorkers,
   waitForBackend,
 } from './helpers/test-api';

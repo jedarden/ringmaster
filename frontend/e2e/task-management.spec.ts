@@ -3,7 +3,6 @@ import {
   createTestProject,
   createTestTask,
   deleteTestProject,
-  deleteTestTask,
   cleanupTestProjects,
   waitForBackend,
 } from './helpers/test-api';
