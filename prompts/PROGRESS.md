@@ -875,6 +875,7 @@ Implemented shortcuts:
 | 66 | 2026-01-27 | Make worktree base branch configurable per project: uses project.settings.get("base_branch", "main") allowing projects to specify their default branch (e.g., "master", "develop"); all 539 tests passing |
 | 67 | 2026-01-27 | Add model routing based on task complexity: deterministic heuristics for complexity estimation (file count, keywords, task type, priority), TaskComplexity/ModelTier enums, select_model_for_task(), GET /api/tasks/{id}/routing endpoint with worker_type param; per docs/08-open-architecture.md section 11; 38 new tests, total 577 tests passing |
 | 68 | 2026-01-27 | Add Reasoning Bank for reflexion-based learning: TaskOutcome model, task_outcomes table (migration 011), ReasoningBankRepository with find_similar() using Jaccard similarity, select_model_with_learning() blending static heuristics with learned experience, executor integration via _record_outcome(), API endpoints for outcomes/model-stats/find-similar; per docs/08-open-architecture.md Reflexion-Based Learning; 25 new tests, total 602 tests passing |
+| 69 | 2026-01-27 | Wire model routing into executor: execute_task() now calls select_model_for_task() and get_model_for_worker_type() to select appropriate model based on task complexity, passes selected model to SessionConfig, tracks actual model used (e.g., "claude-sonnet-4-20250514") in TaskOutcome instead of just worker type; enables accurate learning from model performance; all 602 tests passing |
 
 ## Blockers
 

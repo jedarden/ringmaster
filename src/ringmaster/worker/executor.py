@@ -19,7 +19,12 @@ from ringmaster.git import (
     get_worktree_status,
     is_git_repo,
 )
-from ringmaster.queue.routing import extract_keywords, generate_success_reflection
+from ringmaster.queue.routing import (
+    extract_keywords,
+    generate_success_reflection,
+    get_model_for_worker_type,
+    select_model_for_task,
+)
 from ringmaster.worker.interface import SessionConfig, SessionResult, SessionStatus
 from ringmaster.worker.monitor import (
     RecoveryAction,
@@ -358,10 +363,25 @@ class WorkerExecutor:
         # Build the enriched prompt with context
         prompt = await self._build_enriched_prompt(task, project, task_output_dir)
 
+        # Select model based on task complexity and worker type
+        routing_result = select_model_for_task(task)
+        selected_model = get_model_for_worker_type(routing_result.tier, worker.type)
+        if selected_model:
+            logger.info(
+                f"Model routing for task {task.id}: complexity={routing_result.complexity.value}, "
+                f"tier={routing_result.tier.value}, model={selected_model}"
+            )
+        else:
+            # Fall back to worker's default model
+            logger.debug(
+                f"No model routing for worker type {worker.type}, using default"
+            )
+
         # Create session config
         config = SessionConfig(
             working_dir=working_dir,
             prompt=prompt,
+            model=selected_model,  # Pass selected model to worker
             timeout_seconds=worker.timeout_seconds,
             env_vars=worker.env_vars,
         )
@@ -531,7 +551,7 @@ class WorkerExecutor:
             await self.worker_repo.update(worker)
 
             # Record metrics
-            await self._record_metrics(task, worker, result, outcome_result)
+            await self._record_metrics(task, worker, result, outcome_result, selected_model)
 
             # Report worktree status (for debugging/auditing)
             if project.repo_url and Path(project.repo_url).is_dir():
@@ -633,8 +653,17 @@ class WorkerExecutor:
         worker: Worker,
         result: SessionResult,
         outcome_result: "OutcomeResult | None" = None,
+        model_used: str | None = None,
     ) -> None:
-        """Record session metrics to the database."""
+        """Record session metrics to the database.
+
+        Args:
+            task: The executed task.
+            worker: The worker that executed the task.
+            result: The session result.
+            outcome_result: The outcome detection result.
+            model_used: The actual model used for this execution (from routing).
+        """
         # Use outcome parser result if available
         success = outcome_result.is_success if outcome_result else result.success
         outcome_value = outcome_result.outcome.value if outcome_result else None
@@ -669,7 +698,7 @@ class WorkerExecutor:
 
         # Record outcome to reasoning bank for reflexion-based learning
         if outcome_result:
-            await self._record_outcome(task, worker, result, outcome_result)
+            await self._record_outcome(task, worker, result, outcome_result, model_used)
 
     async def _record_outcome(
         self,
@@ -677,12 +706,20 @@ class WorkerExecutor:
         worker: Worker,
         result: SessionResult,
         outcome_result: OutcomeResult,
+        model_used: str | None = None,
     ) -> None:
         """Record task outcome to the reasoning bank for learning.
 
         Per docs/08-open-architecture.md "Reflexion-Based Learning" section:
         Store task execution results to enable model routing optimization
         based on learned experience.
+
+        Args:
+            task: The executed task.
+            worker: The worker that executed the task.
+            result: The session result.
+            outcome_result: The outcome detection result.
+            model_used: The actual model used (from routing), or fallback to worker type.
         """
         # Check if the task has dependencies
         dependencies = await self.task_repo.get_dependencies(task.id)
@@ -695,11 +732,14 @@ class WorkerExecutor:
         from ringmaster.queue.routing import _count_suggested_files
         file_count = _count_suggested_files(task)
 
+        # Use selected model or fall back to worker type
+        actual_model = model_used or worker.type
+
         # Generate reflection based on outcome
         if outcome_result.is_success:
             reflection = generate_success_reflection(
                 task=task,
-                model_used=worker.type,  # TODO: Track actual model used
+                model_used=actual_model,
                 iterations=task.attempts,
                 file_count=file_count,
             )
@@ -708,7 +748,7 @@ class WorkerExecutor:
             reflection = (
                 f"Failed on {task.type.value if hasattr(task.type, 'value') else task.type} task. "
                 f"Reason: {outcome_result.reason or 'Unknown'}. "
-                f"Model {worker.type} attempted {task.attempts} iterations."
+                f"Model {actual_model} attempted {task.attempts} iterations."
             )
 
         outcome = TaskOutcome(
@@ -718,7 +758,7 @@ class WorkerExecutor:
             keywords=keywords,
             bead_type=task.type.value if hasattr(task.type, "value") else str(task.type),
             has_dependencies=has_dependencies,
-            model_used=worker.type,  # TODO: Track actual model used (e.g., claude-sonnet-4)
+            model_used=actual_model,  # Actual model from routing
             worker_type=worker.type,
             iterations=task.attempts,
             duration_seconds=int(result.duration_seconds or 0),
