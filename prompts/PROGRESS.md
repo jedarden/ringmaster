@@ -57,11 +57,20 @@ The Python-based implementation is now functional with all core components in pl
   - Executor integration: writes to buffer and emits events
 
 ### Enricher (`src/ringmaster/enricher/`)
-- ✅ 5-layer prompt assembly pipeline
+- ✅ 6-layer prompt assembly pipeline
 - ✅ Stage-based architecture
 - ✅ Context hash for deduplication
 - ✅ RLM summarization with hierarchical compression
 - ✅ Code context extraction with intelligent file selection
+- ✅ **Deployment context extraction**
+  - Environment config loading (.env, .env.example, etc.) with secret redaction
+  - Docker Compose file parsing
+  - Kubernetes manifest extraction with YAML parsing and secret redaction
+  - Helm values files
+  - CI/CD workflow configs (GitHub Actions, GitLab CI)
+  - GitHub Actions run status via gh CLI
+  - Task relevance scoring for deployment keywords
+  - Token budgeting with file limits
 
 ### Scheduler (`src/ringmaster/scheduler/`)
 - ✅ Worker lifecycle management
@@ -612,6 +621,7 @@ Implemented shortcuts:
 | 43 | 2026-01-27 | Add Decision & Question frontend UI: DecisionPanel component with option buttons and custom answers, QuestionPanel component with urgency badges and default answer support, TypeScript types and API client functions, CSS styles, integrated in ProjectDetailPage sidebar, fixed unused import in WorkersPage |
 | 44 | 2026-01-27 | Add rich project mailbox view: GET /api/projects/with-summaries endpoint returning task counts, active workers, pending decisions/questions, latest activity; GET /api/projects/{id}/summary endpoint; ProjectSummary type with TaskStatusCounts; ProjectsPage updated with status indicators, activity summaries, progress bars, time-ago display; CSS styles for project cards, 5 new tests, total 342 tests passing |
 | 45 | 2026-01-27 | Add task iteration progress display: shows attempt count (e.g., "2/5") in task cards, epic child tasks, and subtasks when tasks are in-progress; CSS styling for iteration badge; aligns with docs/07-user-experience.md iteration display spec |
+| 46 | 2026-01-27 | Add deployment context source for enrichment pipeline: DeploymentContextExtractor class with env file loading (.env with secret redaction), Docker Compose configs, K8s manifests (with YAML parsing and secret value redaction), Helm values, CI/CD workflow files (GitHub Actions, GitLab CI), GitHub Actions status via gh CLI; task relevance scoring for deployment keywords; token budgeting with file limits; DeploymentContextStage integrated into 6-layer pipeline; 22 new tests, total 364 tests passing |
 
 ## Blockers
 

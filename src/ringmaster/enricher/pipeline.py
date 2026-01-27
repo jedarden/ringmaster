@@ -17,6 +17,10 @@ from ringmaster.enricher.code_context import (
     CodeContextExtractor,
     format_code_context,
 )
+from ringmaster.enricher.deployment_context import (
+    DeploymentContextExtractor,
+    format_deployment_context,
+)
 from ringmaster.enricher.rlm import CompressionConfig, RLMSummarizer
 
 logger = logging.getLogger(__name__)
@@ -48,8 +52,9 @@ class EnrichmentPipeline:
     1. Task Context - Task title, description, state, iteration
     2. Project Context - Repo URL, tech stack, conventions
     3. Code Context - Relevant files, imports, dependencies
-    4. History Context - RLM-summarized conversation history
-    5. Refinement Context - Safety guardrails, constraints
+    4. Deployment Context - Env configs, K8s manifests, CI/CD status
+    5. History Context - RLM-summarized conversation history
+    6. Refinement Context - Safety guardrails, constraints
     """
 
     def __init__(
@@ -102,14 +107,20 @@ class EnrichmentPipeline:
             context_parts.append(code_context)
             metrics.stages_applied.append("code_context")
 
-        # Layer 4: History Context (placeholder)
+        # Layer 4: Deployment Context (for infra-related tasks)
+        deployment_context = await self._build_deployment_context(task, project)
+        if deployment_context:
+            context_parts.append(deployment_context)
+            metrics.stages_applied.append("deployment_context")
+
+        # Layer 5: History Context (placeholder)
         # TODO: Implement RLM summarization
         history_context = await self._build_history_context(task, project)
         if history_context:
             context_parts.append(history_context)
             metrics.stages_applied.append("history_context")
 
-        # Layer 5: Refinement Context
+        # Layer 6: Refinement Context
         refinement_context = self._build_refinement_context(task)
         context_parts.append(refinement_context)
         metrics.stages_applied.append("refinement_context")
@@ -218,6 +229,42 @@ class EnrichmentPipeline:
         )
 
         return format_code_context(result, self.project_dir)
+
+    async def _build_deployment_context(self, task: Task, project: Project) -> str | None:
+        """Build deployment context layer for infrastructure tasks.
+
+        Extracts relevant deployment files based on:
+        - Environment configs (.env files with secret redaction)
+        - Docker Compose configurations
+        - Kubernetes manifests
+        - Helm values
+        - CI/CD workflow definitions and status
+        """
+        if not task.description:
+            return None
+
+        extractor = DeploymentContextExtractor(
+            project_dir=self.project_dir,
+            max_tokens=3000,
+            max_files=8,
+            redact_secrets=True,
+            include_cicd_status=True,
+        )
+
+        result = extractor.extract(task.description)
+
+        if not result.files and not result.cicd_runs:
+            logger.debug("No relevant deployment files found for task %s", task.id)
+            return None
+
+        logger.info(
+            "Found %d deployment files and %d CI/CD runs for task %s",
+            len(result.files),
+            len(result.cicd_runs),
+            task.id,
+        )
+
+        return format_deployment_context(result, self.project_dir)
 
     async def _build_history_context(self, task: Task, project: Project) -> str | None:
         """Build history context layer with RLM summarization.
