@@ -62,6 +62,25 @@ class PriorityCalculator:
         # Find critical path
         critical_path = self._find_critical_path(task_map, dependents, dependencies)
 
+        # Calculate base combined priority for all tasks
+        combined_priorities: dict[str, float] = {}
+        for task_id, task in task_map.items():
+            if not isinstance(task, Task):
+                continue
+
+            base_priority = PRIORITY_WEIGHTS.get(task.priority, 0.5)
+            combined_priorities[task_id] = (
+                base_priority * 0.4
+                + pagerank.get(task_id, 0) * 0.3
+                + betweenness.get(task_id, 0) * 0.2
+                + (0.1 if task_id in critical_path else 0)
+            )
+
+        # Apply priority inheritance: blockers inherit priority from blocked tasks
+        inherited_priorities = self._apply_priority_inheritance(
+            task_map, combined_priorities, dependents, dependencies
+        )
+
         # Update tasks with new scores
         updated = 0
         for task_id, task in task_map.items():
@@ -71,21 +90,91 @@ class PriorityCalculator:
             task.pagerank_score = pagerank.get(task_id, 0)
             task.betweenness_score = betweenness.get(task_id, 0)
             task.on_critical_path = task_id in critical_path
-
-            # Combined priority score
-            base_priority = PRIORITY_WEIGHTS.get(task.priority, 0.5)
-            task.combined_priority = (
-                base_priority * 0.4
-                + task.pagerank_score * 0.3
-                + task.betweenness_score * 0.2
-                + (0.1 if task.on_critical_path else 0)
-            )
+            task.combined_priority = inherited_priorities.get(task_id, combined_priorities.get(task_id, 0))
 
             await self.task_repo.update_task(task)
             updated += 1
 
         logger.info(f"Recalculated priorities for {updated} tasks in project {project_id}")
         return updated
+
+    def _apply_priority_inheritance(
+        self,
+        task_map: dict[str, Task],
+        base_priorities: dict[str, float],
+        dependents: dict[str, list[str]],
+        dependencies: dict[str, list[str]],
+    ) -> dict[str, float]:
+        """Apply priority inheritance: blockers inherit priority from blocked tasks.
+
+        If a high-priority task is blocked by a lower-priority task, the blocker
+        inherits the higher priority. This prevents queue starvation where important
+        tasks get stuck behind their lower-priority dependencies.
+
+        Per docs/09-remaining-decisions.md Section 9.
+
+        Args:
+            task_map: Map of task_id to Task objects.
+            base_priorities: Calculated combined priority scores.
+            dependents: Map of task_id to tasks that depend on it.
+            dependencies: Map of task_id to tasks it depends on.
+
+        Returns:
+            Updated priority scores with inheritance applied.
+        """
+        from ringmaster.domain import TaskStatus
+
+        # Start with base priorities
+        inherited = base_priorities.copy()
+
+        # Find blocked tasks and propagate their priority to blockers
+        # We need to iterate until no more changes (transitive inheritance)
+        changed = True
+        max_iterations = 100  # Prevent infinite loops
+        iteration = 0
+
+        while changed and iteration < max_iterations:
+            changed = False
+            iteration += 1
+
+            for task_id, task in task_map.items():
+                if not isinstance(task, Task):
+                    continue
+
+                # Check if task is blocked (has incomplete dependencies)
+                if task.status != TaskStatus.BLOCKED:
+                    continue
+
+                task_priority = inherited.get(task_id, 0)
+
+                # Propagate priority to all incomplete blockers
+                for blocker_id in dependencies.get(task_id, []):
+                    if blocker_id not in task_map:
+                        continue
+
+                    blocker = task_map[blocker_id]
+                    if not isinstance(blocker, Task):
+                        continue
+
+                    # Only inherit if blocker is not completed
+                    if blocker.status in (TaskStatus.DONE, TaskStatus.FAILED):
+                        continue
+
+                    blocker_priority = inherited.get(blocker_id, 0)
+
+                    # If blocked task has higher priority, blocker inherits it
+                    if task_priority > blocker_priority:
+                        inherited[blocker_id] = task_priority
+                        changed = True
+                        logger.debug(
+                            f"Priority inheritance: {blocker_id} inherits {task_priority:.3f} "
+                            f"from blocked {task_id} (was {blocker_priority:.3f})"
+                        )
+
+        if iteration >= max_iterations:
+            logger.warning("Priority inheritance reached max iterations - possible cycle in dependencies")
+
+        return inherited
 
     def _calculate_pagerank(
         self,
