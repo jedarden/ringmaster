@@ -480,3 +480,52 @@ export interface BulkOperationResponse {
   failed: number;
   errors: string[];
 }
+
+// Undo/Redo types
+
+export const ActionType = {
+  TASK_CREATED: "task_created",
+  TASK_UPDATED: "task_updated",
+  TASK_DELETED: "task_deleted",
+  TASK_STATUS_CHANGED: "task_status_changed",
+  DEPENDENCY_CREATED: "dependency_created",
+  DEPENDENCY_DELETED: "dependency_deleted",
+  WORKER_ASSIGNED: "worker_assigned",
+  WORKER_UNASSIGNED: "worker_unassigned",
+} as const;
+export type ActionType = (typeof ActionType)[keyof typeof ActionType];
+
+export const EntityType = {
+  TASK: "task",
+  EPIC: "epic",
+  SUBTASK: "subtask",
+  WORKER: "worker",
+  PROJECT: "project",
+  DEPENDENCY: "dependency",
+} as const;
+export type EntityType = (typeof EntityType)[keyof typeof EntityType];
+
+export interface ActionResponse {
+  id: number;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  description: string;
+  project_id: string | null;
+  undone: boolean;
+  created_at: string;
+  actor_type: string;
+  actor_id: string | null;
+}
+
+export interface UndoResponse {
+  success: boolean;
+  action: ActionResponse | null;
+  message: string;
+}
+
+export interface HistoryResponse {
+  actions: ActionResponse[];
+  can_undo: boolean;
+  can_redo: boolean;
+}

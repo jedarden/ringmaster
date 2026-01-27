@@ -3,18 +3,41 @@ import { useEffect, useState, useCallback } from "react";
 import { healthCheck } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { useDefaultShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useUndo } from "../hooks/useUndo";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsHelp } from "./ShortcutsHelp";
+import { Toast, useToast } from "./Toast";
 
 export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [apiStatus, setApiStatus] = useState<"connected" | "disconnected" | "checking">("checking");
-  const { connected: wsConnected } = useWebSocket();
+  const { connected: wsConnected, lastEvent } = useWebSocket();
+  const toast = useToast();
 
   // Modal states
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  // Undo/Redo
+  const undoManager = useUndo({
+    onUndoSuccess: (response) => {
+      toast.success(response.message);
+    },
+    onRedoSuccess: (response) => {
+      toast.success(response.message);
+    },
+    onError: (error) => {
+      toast.error(`Undo/Redo failed: ${error.message}`);
+    },
+  });
+
+  // Refresh undo state when undo/redo events come in via WebSocket
+  useEffect(() => {
+    if (lastEvent?.type === "undo.performed" || lastEvent?.type === "redo.performed") {
+      undoManager.refresh();
+    }
+  }, [lastEvent, undoManager]);
 
   // Health check
   useEffect(() => {
@@ -60,9 +83,8 @@ export function Layout() {
     onSearch: () => setShowCommandPalette(true), // "/" also opens command palette
     onShowHelp: toggleShortcutsHelp,
     onEscape: handleEscape,
-    // Note: Undo/Redo would need an undo stack implementation
-    // onUndo: () => {},
-    // onRedo: () => {},
+    onUndo: undoManager.undo,
+    onRedo: undoManager.redo,
   });
 
   return (
@@ -134,6 +156,9 @@ export function Layout() {
           {pendingSequence}...
         </div>
       )}
+
+      {/* Toast Notifications */}
+      <Toast messages={toast.messages} onDismiss={toast.dismissToast} />
     </div>
   );
 }

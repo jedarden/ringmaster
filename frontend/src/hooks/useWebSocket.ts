@@ -24,7 +24,9 @@ export type EventType =
   | "scheduler.stopped"
   | "scheduler.reload"
   | "message.created"
-  | "log.created";
+  | "log.created"
+  | "undo.performed"
+  | "redo.performed";
 
 export interface WebSocketEvent {
   id: string;

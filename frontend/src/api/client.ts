@@ -47,6 +47,9 @@ import type {
   BulkUpdateRequest,
   BulkDeleteRequest,
   BulkOperationResponse,
+  ActionResponse,
+  UndoResponse,
+  HistoryResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -744,6 +747,50 @@ export async function getGraph(
 
   const response = await fetch(`${API_BASE}/graph?${searchParams}`);
   return handleResponse<GraphData>(response);
+}
+
+// Undo/Redo API
+
+export interface GetHistoryParams {
+  project_id?: string;
+  limit?: number;
+  include_undone?: boolean;
+}
+
+export async function getUndoHistory(params: GetHistoryParams = {}): Promise<HistoryResponse> {
+  const searchParams = new URLSearchParams();
+  if (params.project_id) searchParams.set("project_id", params.project_id);
+  if (params.limit) searchParams.set("limit", params.limit.toString());
+  if (params.include_undone !== undefined) {
+    searchParams.set("include_undone", params.include_undone.toString());
+  }
+
+  const response = await fetch(`${API_BASE}/undo/history?${searchParams}`);
+  return handleResponse<HistoryResponse>(response);
+}
+
+export async function getLastUndoableAction(
+  projectId?: string
+): Promise<ActionResponse | null> {
+  const params = projectId ? `?project_id=${projectId}` : "";
+  const response = await fetch(`${API_BASE}/undo/last${params}`);
+  return handleResponse<ActionResponse | null>(response);
+}
+
+export async function performUndo(projectId?: string): Promise<UndoResponse> {
+  const params = projectId ? `?project_id=${projectId}` : "";
+  const response = await fetch(`${API_BASE}/undo${params}`, {
+    method: "POST",
+  });
+  return handleResponse<UndoResponse>(response);
+}
+
+export async function performRedo(projectId?: string): Promise<UndoResponse> {
+  const params = projectId ? `?project_id=${projectId}` : "";
+  const response = await fetch(`${API_BASE}/undo/redo${params}`, {
+    method: "POST",
+  });
+  return handleResponse<UndoResponse>(response);
 }
 
 export { ApiError };
