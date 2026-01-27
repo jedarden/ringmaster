@@ -232,7 +232,7 @@ src/ringmaster/
 - ✅ Dedicated /metrics route in navigation
 
 ### Logs Viewer (`frontend/src/components/LogsViewer.tsx`)
-- ✅ Real-time log viewing with auto-refresh (live mode)
+- ✅ Real-time log viewing with WebSocket streaming (live mode)
 - ✅ Filter by log level (debug, info, warning, error, critical)
 - ✅ Filter by component (api, queue, enricher, scheduler, worker, reload, creator)
 - ✅ Full-text search in messages (paginated mode)
@@ -242,6 +242,8 @@ src/ringmaster/
 - ✅ Pagination for historical log browsing
 - ✅ Dedicated /logs route in navigation
 - ✅ API client functions for all log endpoints
+- ✅ WebSocket connection status indicator (live vs reconnecting)
+- ✅ Duplicate prevention via seen log ID tracking
 
 ### Bead Creator Service (`src/ringmaster/creator/`)
 - ✅ Parser module for extracting task candidates from natural language
@@ -296,7 +298,7 @@ src/ringmaster/
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
 2. **File Download**: Add endpoint to download uploaded files
-3. **WebSocket Log Streaming**: Add real-time log push via WebSocket events
+3. **Graph Visualization**: Add dependency graph visualization for task relationships
 
 ## Iteration Log
 
@@ -325,6 +327,7 @@ src/ringmaster/
 | 21 | 2026-01-27 | Add voice input to ChatPanel: useSpeechRecognition hook using Web Speech API, voice toggle button with pulse animation, interim transcript display, browser compatibility handling |
 | 22 | 2026-01-27 | Add file attachments to chat: backend upload endpoint with size/type validation, FileUploadResponse type, uploadFile client function, ChatPanel attachment UI with preview, message attachment display with media icons, fixed chat API paths, 7 new tests, total 204 tests passing |
 | 23 | 2026-01-27 | Add Logs UI: LogsViewer component with live mode auto-refresh, level/component filtering, full-text search, log statistics bar, expandable log details, pagination; LogsPage with /logs route; TypeScript types and API client functions for all log endpoints |
+| 24 | 2026-01-27 | Add WebSocket log streaming: LOG_CREATED event emission from logs API, LogsViewer WebSocket integration for real-time updates in live mode, connection status indicator, duplicate prevention via seen log IDs, 2 new tests, total 206 tests passing |
 
 ## Blockers
 
