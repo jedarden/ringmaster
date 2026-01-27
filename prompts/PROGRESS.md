@@ -785,6 +785,7 @@ Implemented shortcuts:
 | 56 | 2026-01-27 | Fix test portability: use sys.executable instead of hardcoded 'python' in test_cli_worker.py subprocess calls, fix linting issues in test_spawner.py (combine nested with statements, remove unused imports/variables), all 454 tests passing |
 | 57 | 2026-01-27 | Add worker spawner frontend UI: TypeScript types (SpawnWorkerRequest, SpawnedWorkerResponse, TmuxSessionResponse, WorkerLogResponse), API client functions (spawnWorker, killWorker, getWorkerSession, listWorkerSessions, getWorkerLog), WorkersPage spawn modal with worker type/capabilities/worktree config, tmux session status display, spawn/kill buttons, all 454 tests passing |
 | 58 | 2026-01-27 | Add worker task duration display: GET /api/workers/with-tasks endpoint returns enriched worker info including current task title, started_at, attempts; WorkerWithTask/CurrentTaskInfo TypeScript types; listWorkersWithTasks API client; WorkersPage shows task title and live elapsed time with auto-updating timer; CSS styling for current-task-info section; 3 new tests, total 457 tests passing |
+| 59 | 2026-01-27 | Implement HistoryContextStage with RLM integration: completed the TODO in stages.py to wire HistoryContextStage to RLMSummarizer, provides compressed conversation history as worker context; removed stale TODO comment from pipeline.py; 5 new tests, total 462 tests passing |
 
 ## Blockers
 
