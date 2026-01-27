@@ -338,11 +338,25 @@ src/ringmaster/
 - ✅ Color-coded border based on subtask status (ready/in-progress/blocked/done)
 - ✅ CSS styles for nested subtask components
 
+### Epic Child Tasks Display (`frontend/src/pages/ProjectDetailPage.tsx`)
+- ✅ Tasks grouped by parent epic ID
+- ✅ Progress bar showing completion percentage (done/total tasks)
+- ✅ Collapsible child tasks section under each epic card
+- ✅ Expand/collapse toggle showing task count
+- ✅ Child task priority badge and status badge
+- ✅ Subtask count indicator showing nested subtasks per task
+- ✅ Status dropdown for changing child task status
+- ✅ Worker assignment dropdown for child tasks
+- ✅ Delete button for individual child tasks
+- ✅ Color-coded border based on child task status (ready/in-progress/blocked/done/review)
+- ✅ CSS styles for epic child task components
+- ✅ Non-epic tasks (orphan tasks) displayed separately in kanban board
+
 ## Next Steps
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
 2. **Graph Editing**: Allow creating dependencies by dragging between nodes
-3. **Epic Child Tasks View**: Show child tasks nested under epics (similar to subtasks)
+3. **Bulk Task Operations**: Add select/deselect all and bulk status/assignment updates
 
 ## Iteration Log
 
@@ -376,6 +390,7 @@ src/ringmaster/
 | 26 | 2026-01-27 | Add task dependency graph visualization: /api/graph endpoint for graph data, DependencyGraph React component with force-directed SVG layout, node shapes by type, colors by status, size by priority, critical path highlighting, interactive drag/hover/click, /projects/:projectId/graph route, 8 new tests, total 217 tests passing |
 | 27 | 2026-01-27 | Add task assignment UI: POST /api/tasks/{task_id}/assign endpoint, worker selector dropdown in task cards, validates worker availability (idle/not offline), validates task type (no epics), updates task and worker status atomically, unassign support, 5 new tests, total 222 tests passing |
 | 28 | 2026-01-27 | Fix TypeScript error in DependencyGraph (useRef type), add nested subtask display in task cards: collapsible subtask section with expand/collapse toggle, subtask priority/status/title display, status and worker assignment dropdowns, delete button, color-coded border by status, CSS styles for subtask components |
+| 29 | 2026-01-27 | Add epic child tasks display: tasks grouped by parent epic, progress bar with completion percentage, collapsible child tasks section, expand/collapse toggle with task count, subtask count indicator, status/worker dropdowns, delete button, color-coded border by status, orphan tasks separate in kanban |
 
 ## Blockers
 

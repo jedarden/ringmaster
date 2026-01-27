@@ -2261,3 +2261,168 @@ textarea {
   border-color: var(--color-error);
   color: white;
 }
+
+/* ===========================================
+   Epic Child Tasks Display Styles
+   =========================================== */
+
+.epic-description {
+  margin: 0.5rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.epic-progress {
+  margin: 0.75rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-success);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.epic-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.child-tasks-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.child-tasks-toggle:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.epic-child-tasks {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--color-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.epic-child-task {
+  background: var(--color-bg);
+  border-radius: 4px;
+  padding: 0.6rem;
+  border-left: 3px solid var(--color-primary);
+  transition: all 0.15s;
+}
+
+.epic-child-task:hover {
+  background: var(--color-surface-hover);
+}
+
+.epic-child-task.status-done {
+  opacity: 0.7;
+  border-left-color: var(--color-success);
+}
+
+.epic-child-task.status-in_progress {
+  border-left-color: var(--color-warning);
+}
+
+.epic-child-task.status-blocked {
+  border-left-color: var(--color-error);
+}
+
+.epic-child-task.status-ready {
+  border-left-color: var(--color-info);
+}
+
+.epic-child-task.status-review {
+  border-left-color: #a855f7;
+}
+
+.child-task-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.child-task-header .priority {
+  font-size: 0.65rem;
+  padding: 0.05rem 0.25rem;
+}
+
+.child-task-header .status-badge {
+  font-size: 0.6rem;
+  padding: 0.1rem 0.35rem;
+  text-transform: uppercase;
+}
+
+.child-task-header .subtask-count {
+  font-size: 0.65rem;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.child-task-title {
+  display: block;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  margin-bottom: 0.4rem;
+}
+
+.child-task-actions {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.child-task-status-select,
+.child-task-worker-select {
+  padding: 0.2rem 0.3rem;
+  font-size: 0.7rem;
+  min-width: 70px;
+  flex: 1;
+}
+
+.child-task-delete-btn {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.8rem;
+  background: transparent;
+  border: 1px solid var(--color-text-muted);
+  color: var(--color-text-muted);
+  border-radius: 3px;
+}
+
+.child-task-delete-btn:hover {
+  background: var(--color-error);
+  border-color: var(--color-error);
+  color: white;
+}

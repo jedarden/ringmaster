@@ -128,8 +128,23 @@ export function ProjectDetailPage() {
   }
 
   const epics = tasks.filter((t) => t.type === TaskType.EPIC);
-  const regularTasks = tasks.filter((t) => t.type === TaskType.TASK);
+  const allTasks = tasks.filter((t) => t.type === TaskType.TASK);
   const subtasks = tasks.filter((t) => t.type === TaskType.SUBTASK);
+
+  // Group tasks by parent epic ID
+  const tasksByEpic = new Map<string, typeof allTasks>();
+  for (const task of allTasks) {
+    if ("parent_id" in task && task.parent_id) {
+      const epicId = task.parent_id;
+      if (!tasksByEpic.has(epicId)) {
+        tasksByEpic.set(epicId, []);
+      }
+      tasksByEpic.get(epicId)!.push(task);
+    }
+  }
+
+  // Tasks not belonging to any epic (shown in kanban board)
+  const regularTasks = allTasks.filter((t) => !("parent_id" in t && t.parent_id));
 
   // Group subtasks by parent task ID for nested display
   const subtasksByParent = new Map<string, typeof subtasks>();
@@ -218,21 +233,112 @@ export function ProjectDetailPage() {
             <div className="section">
               <h2>Epics</h2>
               <div className="epics-list">
-                {epics.map((epic) => (
-                  <div key={epic.id} className="epic-card">
-                    <div className="epic-header">
-                      <span className={`priority priority-${epic.priority.toLowerCase()}`}>
-                        {epic.priority}
-                      </span>
-                      <h3>{epic.title}</h3>
-                      <span className={`status status-${epic.status}`}>{epic.status}</span>
+                {epics.map((epic) => {
+                  const epicTasks = tasksByEpic.get(epic.id) || [];
+                  const hasChildTasks = epicTasks.length > 0;
+                  const isExpanded = expandedTasks.has(epic.id);
+                  const doneCount = epicTasks.filter((t) => t.status === TaskStatus.DONE).length;
+                  const progressPercent = hasChildTasks ? Math.round((doneCount / epicTasks.length) * 100) : 0;
+
+                  return (
+                    <div key={epic.id} className="epic-card">
+                      <div className="epic-header">
+                        <span className={`priority priority-${epic.priority.toLowerCase()}`}>
+                          {epic.priority}
+                        </span>
+                        <h3>{epic.title}</h3>
+                        <span className={`status status-${epic.status}`}>{epic.status}</span>
+                      </div>
+                      {epic.description && <p className="epic-description">{epic.description}</p>}
+                      {hasChildTasks && (
+                        <div className="epic-progress">
+                          <div className="progress-bar">
+                            <div
+                              className="progress-fill"
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                          <span className="progress-text">
+                            {doneCount}/{epicTasks.length} tasks ({progressPercent}%)
+                          </span>
+                        </div>
+                      )}
+                      <div className="epic-actions">
+                        {hasChildTasks && (
+                          <button
+                            className="child-tasks-toggle"
+                            onClick={() => toggleExpanded(epic.id)}
+                          >
+                            {isExpanded ? "▼" : "▶"} {epicTasks.length} task{epicTasks.length !== 1 ? "s" : ""}
+                          </button>
+                        )}
+                        <button onClick={() => handleDeleteTask(epic.id)} className="delete-btn">
+                          Delete
+                        </button>
+                      </div>
+                      {hasChildTasks && isExpanded && (
+                        <div className="epic-child-tasks">
+                          {epicTasks.map((task) => {
+                            const taskWorkerId = "worker_id" in task ? task.worker_id : null;
+                            const availableWorkers = workers.filter(
+                              (w) => w.status !== WorkerStatus.OFFLINE && (w.status === WorkerStatus.IDLE || w.current_task_id === task.id)
+                            );
+                            const taskSubtasks = subtasksByParent.get(task.id) || [];
+
+                            return (
+                              <div key={task.id} className={`epic-child-task status-${task.status}`}>
+                                <div className="child-task-header">
+                                  <span className={`priority priority-${task.priority.toLowerCase()}`}>
+                                    {task.priority}
+                                  </span>
+                                  <span className={`status-badge status-${task.status}`}>
+                                    {task.status.replace("_", " ")}
+                                  </span>
+                                  {taskSubtasks.length > 0 && (
+                                    <span className="subtask-count" title="Number of subtasks">
+                                      [{taskSubtasks.length}]
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="child-task-title">{task.title}</span>
+                                <div className="child-task-actions">
+                                  <select
+                                    value={task.status}
+                                    onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
+                                    className="child-task-status-select"
+                                  >
+                                    {Object.values(TaskStatus).map((s) => (
+                                      <option key={s} value={s}>{s}</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={taskWorkerId || ""}
+                                    onChange={(e) => handleAssign(task.id, e.target.value || null)}
+                                    className="child-task-worker-select"
+                                    title="Assign to worker"
+                                  >
+                                    <option value="">-</option>
+                                    {availableWorkers.map((worker) => (
+                                      <option key={worker.id} value={worker.id}>
+                                        {worker.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    onClick={() => handleDeleteTask(task.id)}
+                                    className="child-task-delete-btn"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    {epic.description && <p>{epic.description}</p>}
-                    <button onClick={() => handleDeleteTask(epic.id)} className="delete-btn">
-                      Delete
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
