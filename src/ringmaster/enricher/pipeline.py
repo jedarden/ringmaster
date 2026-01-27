@@ -123,8 +123,7 @@ class EnrichmentPipeline:
         sources_queried.append("project")
         items_included += 1
 
-        # Layer 3: Code Context (simplified for now)
-        # TODO: Implement intelligent file selection based on task
+        # Layer 3: Code Context
         sources_queried.append("code")
         code_context = await self._build_code_context(task, project)
         if code_context:
