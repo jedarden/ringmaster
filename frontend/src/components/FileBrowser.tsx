@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { listDirectory, getFileContent } from "../api/client";
 import type { FileEntry, FileContent, DirectoryListing } from "../types";
+import { GitHistoryModal } from "./GitHistoryModal";
 
 interface FileBrowserProps {
   projectId: string;
@@ -56,6 +57,7 @@ export function FileBrowser({ projectId }: FileBrowserProps) {
   const [loadingFile, setLoadingFile] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [showGitHistory, setShowGitHistory] = useState(false);
 
   const loadDirectory = useCallback(async (path: string) => {
     try {
@@ -196,11 +198,20 @@ export function FileBrowser({ projectId }: FileBrowserProps) {
         {selectedFile && (
           <div className="file-preview">
             <div className="file-preview-header">
-              <span className="file-preview-name">{selectedFile.path.split("/").pop()}</span>
-              <span className="file-preview-meta">
-                {formatFileSize(selectedFile.size)}
-                {selectedFile.mime_type && ` \u2022 ${selectedFile.mime_type}`}
-              </span>
+              <div className="file-preview-info">
+                <span className="file-preview-name">{selectedFile.path.split("/").pop()}</span>
+                <span className="file-preview-meta">
+                  {formatFileSize(selectedFile.size)}
+                  {selectedFile.mime_type && ` \u2022 ${selectedFile.mime_type}`}
+                </span>
+              </div>
+              <button
+                className="file-history-btn"
+                onClick={() => setShowGitHistory(true)}
+                title="View git history"
+              >
+                History
+              </button>
             </div>
             {loadingFile ? (
               <div className="file-preview-loading">Loading...</div>
@@ -218,6 +229,14 @@ export function FileBrowser({ projectId }: FileBrowserProps) {
           </div>
         )}
       </div>
+
+      {showGitHistory && selectedFile && (
+        <GitHistoryModal
+          projectId={projectId}
+          filePath={selectedFile.path}
+          onClose={() => setShowGitHistory(false)}
+        />
+      )}
     </div>
   );
 }

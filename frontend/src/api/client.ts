@@ -59,6 +59,9 @@ import type {
   QuestionCreate,
   QuestionAnswer,
   QuestionStats,
+  FileHistoryResponse,
+  FileDiffResponse,
+  FileAtCommitResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -989,6 +992,51 @@ export async function getQuestionStats(projectId: string): Promise<QuestionStats
     `${API_BASE}/projects/${projectId}/questions/stats`
   );
   return handleResponse<QuestionStats>(response);
+}
+
+// Git History & Diff API
+
+export async function getFileHistory(
+  projectId: string,
+  path: string,
+  maxCommits = 50
+): Promise<FileHistoryResponse> {
+  const params = new URLSearchParams({
+    path,
+    max_commits: maxCommits.toString(),
+  });
+  const response = await fetch(`${API_BASE}/projects/${projectId}/files/history?${params}`);
+  return handleResponse<FileHistoryResponse>(response);
+}
+
+export async function getFileDiff(
+  projectId: string,
+  path: string,
+  commit = "HEAD",
+  against?: string
+): Promise<FileDiffResponse> {
+  const params = new URLSearchParams({
+    path,
+    commit,
+  });
+  if (against) {
+    params.set("against", against);
+  }
+  const response = await fetch(`${API_BASE}/projects/${projectId}/files/diff?${params}`);
+  return handleResponse<FileDiffResponse>(response);
+}
+
+export async function getFileAtCommit(
+  projectId: string,
+  path: string,
+  commit: string
+): Promise<FileAtCommitResponse> {
+  const params = new URLSearchParams({
+    path,
+    commit,
+  });
+  const response = await fetch(`${API_BASE}/projects/${projectId}/files/at-commit?${params}`);
+  return handleResponse<FileAtCommitResponse>(response);
 }
 
 export { ApiError };

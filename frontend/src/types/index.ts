@@ -644,3 +644,51 @@ export interface QuestionStats {
   answered: number;
   by_urgency: Record<string, number>;
 }
+
+// Git History & Diff types
+
+export interface CommitInfo {
+  hash: string;
+  short_hash: string;
+  message: string;
+  author_name: string;
+  author_email: string;
+  date: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface FileHistoryResponse {
+  path: string;
+  commits: CommitInfo[];
+  is_git_repo: boolean;
+}
+
+export interface DiffHunkInfo {
+  old_start: number;
+  old_count: number;
+  new_start: number;
+  new_count: number;
+  header: string;
+  lines: string[];
+}
+
+export interface FileDiffResponse {
+  path: string;
+  old_path: string;
+  new_path: string;
+  is_new: boolean;
+  is_deleted: boolean;
+  is_renamed: boolean;
+  hunks: DiffHunkInfo[];
+  additions: number;
+  deletions: number;
+  raw: string;
+}
+
+export interface FileAtCommitResponse {
+  path: string;
+  commit: string;
+  content: string | null;
+  exists: boolean;
+}

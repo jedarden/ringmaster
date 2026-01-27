@@ -11,9 +11,9 @@ from ringmaster.api.app import create_app
 from ringmaster.db.connection import Database
 from ringmaster.domain import Project
 from ringmaster.git import (
+    get_file_at_commit,
     get_file_diff,
     get_file_history,
-    get_file_at_commit,
     is_git_repo,
 )
 

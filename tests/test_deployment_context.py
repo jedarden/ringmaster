@@ -1,6 +1,5 @@
 """Tests for deployment context extraction."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -228,7 +227,6 @@ class TestDeploymentContextExtractor:
         )
         result = extractor.extract("Fix database password in Kubernetes")
 
-        k8s_files = [f for f in result.files if f.file_type == "k8s"]
         # k8s secret references should be preserved (they're references, not values)
         # but actual secret values in helm values should be redacted
         helm_files = [f for f in result.files if f.file_type == "helm"]
