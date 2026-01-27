@@ -1,5 +1,6 @@
 """Project API routes."""
 
+from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
@@ -72,8 +73,21 @@ async def list_projects_with_summaries(
     db: Annotated[Database, Depends(get_db)],
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
+    sort: str = Query(default="rank", description="Sort order: rank, recent, alphabetical"),
 ) -> list[ProjectSummary]:
-    """List all projects with their summaries for the mailbox view."""
+    """List all projects with their summaries for the mailbox view.
+
+    Projects are ranked by importance (default) with the following factors:
+    - Pinned projects always appear first
+    - Decision needed (highest priority)
+    - Active agents working
+    - Recent activity
+    - Blocked/failed tasks
+
+    Alternative sort options:
+    - "recent": Sort by latest activity timestamp
+    - "alphabetical": Sort by project name
+    """
     project_repo = ProjectRepository(db)
     projects = await project_repo.list(limit=limit, offset=offset)
 
@@ -123,6 +137,23 @@ async def list_projects_with_summaries(
                 pending_questions=pending_questions,
                 latest_activity=latest_activity,
             )
+        )
+
+    # Apply sorting based on sort parameter
+    if sort == "rank":
+        summaries = _rank_projects(summaries)
+    elif sort == "recent":
+        summaries = sorted(
+            summaries,
+            key=lambda s: (
+                not s.project.pinned,  # Pinned first
+                _parse_activity_timestamp(s.latest_activity),  # Most recent first
+            ),
+        )
+    elif sort == "alphabetical":
+        summaries = sorted(
+            summaries,
+            key=lambda s: (not s.project.pinned, s.project.name.lower()),
         )
 
     return summaries
@@ -336,3 +367,74 @@ async def _get_latest_activity(db: Database, project_id: UUID) -> str | None:
         (str(project_id),),
     )
     return row["latest"] if row and row["latest"] else None
+
+
+def _parse_activity_timestamp(timestamp: str | None) -> float:
+    """Parse activity timestamp for sorting. Returns negative for descending sort."""
+    if not timestamp:
+        return float("inf")  # No activity goes last
+    try:
+        # Handle ISO format with optional timezone
+        ts = timestamp.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(ts)
+        return -dt.timestamp()  # Negative for descending (most recent first)
+    except (ValueError, TypeError):
+        return float("inf")
+
+
+def _rank_projects(summaries: list[ProjectSummary]) -> list[ProjectSummary]:
+    """Rank projects by importance for the mailbox view.
+
+    Ranking factors (per docs/07-user-experience.md):
+    1. Pinned projects always first
+    2. Decision needed (highest priority)
+    3. Active agents working
+    4. Blocked/failed tasks (needs attention)
+    5. Recent activity
+    """
+
+    def rank_key(summary: ProjectSummary) -> tuple:
+        """Generate a sorting key tuple. Lower values = higher priority."""
+        # Factor 1: Pinned (pinned first)
+        is_pinned = 0 if summary.project.pinned else 1
+
+        # Factor 2: Decisions needed (more decisions = higher priority)
+        # Invert so more decisions = lower value = higher priority
+        decisions_score = -summary.pending_decisions
+
+        # Factor 3: Active workers (working projects surface)
+        workers_score = -summary.active_workers
+
+        # Factor 4: Blocked or failed tasks (needs attention)
+        blocked_failed = -(
+            summary.task_counts.blocked + summary.task_counts.failed
+        )
+
+        # Factor 5: Questions pending (less urgent than decisions)
+        questions_score = -summary.pending_questions
+
+        # Factor 6: In-progress work (active projects)
+        active_work = -(
+            summary.task_counts.in_progress
+            + summary.task_counts.assigned
+            + summary.task_counts.review
+        )
+
+        # Factor 7: Recent activity (timestamp, more recent = higher)
+        activity_time = _parse_activity_timestamp(summary.latest_activity)
+
+        # Factor 8: Alphabetical as tiebreaker
+        name = summary.project.name.lower()
+
+        return (
+            is_pinned,
+            decisions_score,
+            workers_score,
+            blocked_failed,
+            questions_score,
+            active_work,
+            activity_time,
+            name,
+        )
+
+    return sorted(summaries, key=rank_key)

@@ -373,6 +373,146 @@ class TestProjectsAPI:
         # Pinned project should appear before unpinned
         assert pinned_idx < unpinned_idx
 
+    async def test_project_ranking_by_decisions(self, client: AsyncClient):
+        """Test that projects with pending decisions rank higher."""
+        # Create two projects
+        p1_response = await client.post(
+            "/api/projects", json={"name": "Project Without Decisions"}
+        )
+        p1_id = p1_response.json()["id"]
+
+        p2_response = await client.post(
+            "/api/projects", json={"name": "Project With Decisions"}
+        )
+        p2_id = p2_response.json()["id"]
+
+        # Add a task to each project for activity
+        t1_response = await client.post(
+            "/api/tasks", json={"project_id": p1_id, "title": "Task 1"}
+        )
+        t2_response = await client.post(
+            "/api/tasks", json={"project_id": p2_id, "title": "Task 2"}
+        )
+        t2_id = t2_response.json()["id"]
+
+        # Create a decision for project 2
+        await client.post(
+            "/api/decisions",
+            json={
+                "blocks_id": t2_id,
+                "question": "Which approach?",
+                "options": ["A", "B"],
+            },
+        )
+
+        # Get ranked projects
+        response = await client.get("/api/projects/with-summaries?sort=rank")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Find positions
+        p1_idx = next(
+            i for i, s in enumerate(data) if s["project"]["id"] == p1_id
+        )
+        p2_idx = next(
+            i for i, s in enumerate(data) if s["project"]["id"] == p2_id
+        )
+
+        # Project with decision should rank higher (lower index)
+        assert p2_idx < p1_idx
+
+    async def test_project_ranking_sort_options(self, client: AsyncClient):
+        """Test different sort options for project listing."""
+        import asyncio
+
+        # Create projects with different names
+        p1_response = await client.post(
+            "/api/projects", json={"name": "Zebra Project"}
+        )
+        p1_id = p1_response.json()["id"]
+
+        await asyncio.sleep(0.1)
+
+        p2_response = await client.post(
+            "/api/projects", json={"name": "Alpha Project"}
+        )
+        p2_id = p2_response.json()["id"]
+
+        # Add activity to Alpha (making it more recent)
+        await client.post(
+            "/api/tasks", json={"project_id": p2_id, "title": "Recent Task"}
+        )
+
+        # Test alphabetical sort
+        alpha_response = await client.get(
+            "/api/projects/with-summaries?sort=alphabetical"
+        )
+        assert alpha_response.status_code == 200
+        alpha_data = alpha_response.json()
+
+        alpha_idx = next(
+            i for i, s in enumerate(alpha_data) if s["project"]["id"] == p2_id
+        )
+        zebra_idx = next(
+            i for i, s in enumerate(alpha_data) if s["project"]["id"] == p1_id
+        )
+        # Alpha should come before Zebra
+        assert alpha_idx < zebra_idx
+
+        # Test recent sort
+        recent_response = await client.get(
+            "/api/projects/with-summaries?sort=recent"
+        )
+        assert recent_response.status_code == 200
+        recent_data = recent_response.json()
+
+        # Alpha has more recent activity, should come first
+        alpha_recent_idx = next(
+            i for i, s in enumerate(recent_data) if s["project"]["id"] == p2_id
+        )
+        zebra_recent_idx = next(
+            i for i, s in enumerate(recent_data) if s["project"]["id"] == p1_id
+        )
+        assert alpha_recent_idx < zebra_recent_idx
+
+    async def test_project_ranking_pinned_always_first(self, client: AsyncClient):
+        """Test that pinned projects appear first regardless of other factors."""
+        # Create projects - one with decisions (high priority), one without
+        p1_response = await client.post(
+            "/api/projects", json={"name": "High Priority Project"}
+        )
+        p1_id = p1_response.json()["id"]
+
+        p2_response = await client.post(
+            "/api/projects", json={"name": "Pinned Project"}
+        )
+        p2_id = p2_response.json()["id"]
+
+        # Add a task to p1 and create a decision (high priority signal)
+        t1_response = await client.post(
+            "/api/tasks", json={"project_id": p1_id, "title": "Task with Decision"}
+        )
+        t1_id = t1_response.json()["id"]
+        await client.post(
+            "/api/decisions",
+            json={
+                "blocks_id": t1_id,
+                "question": "Urgent decision?",
+                "options": ["Yes", "No"],
+            },
+        )
+
+        # Pin project 2 (which has no decisions)
+        await client.post(f"/api/projects/{p2_id}/pin")
+
+        # Get ranked projects
+        response = await client.get("/api/projects/with-summaries?sort=rank")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Pinned project should be first despite having no decisions
+        assert data[0]["project"]["id"] == p2_id
+
 
 class TestTasksAPI:
     """Tests for tasks API."""
