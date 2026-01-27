@@ -18,6 +18,7 @@ export function ProjectDetailPage() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [taskType, setTaskType] = useState<"task" | "epic">("task");
   const [newTask, setNewTask] = useState<TaskCreate | EpicCreate>({ project_id: "", title: "" });
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
@@ -106,6 +107,18 @@ export function ProjectDetailPage() {
     loadData();
   }, [loadData]);
 
+  const toggleExpanded = (taskId: string) => {
+    setExpandedTasks((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
+
   if (loading) {
     return <div className="loading">Loading...</div>;
   }
@@ -116,9 +129,19 @@ export function ProjectDetailPage() {
 
   const epics = tasks.filter((t) => t.type === TaskType.EPIC);
   const regularTasks = tasks.filter((t) => t.type === TaskType.TASK);
-  // Subtasks shown in future version under their parent tasks
-  const _subtasks = tasks.filter((t) => t.type === TaskType.SUBTASK);
-  void _subtasks; // suppress unused warning
+  const subtasks = tasks.filter((t) => t.type === TaskType.SUBTASK);
+
+  // Group subtasks by parent task ID for nested display
+  const subtasksByParent = new Map<string, typeof subtasks>();
+  for (const subtask of subtasks) {
+    if (subtask.type === TaskType.SUBTASK) {
+      const parentId = subtask.parent_id;
+      if (!subtasksByParent.has(parentId)) {
+        subtasksByParent.set(parentId, []);
+      }
+      subtasksByParent.get(parentId)!.push(subtask);
+    }
+  }
 
   const groupedTasks = {
     [TaskStatus.READY]: regularTasks.filter((t) => t.status === TaskStatus.READY),
@@ -228,6 +251,9 @@ export function ProjectDetailPage() {
                       const availableWorkers = workers.filter(
                         (w) => w.status !== WorkerStatus.OFFLINE && (w.status === WorkerStatus.IDLE || w.current_task_id === task.id)
                       );
+                      const taskSubtasks = subtasksByParent.get(task.id) || [];
+                      const hasSubtasks = taskSubtasks.length > 0;
+                      const isExpanded = expandedTasks.has(task.id);
 
                       return (
                         <div key={task.id} className="task-card">
@@ -264,6 +290,66 @@ export function ProjectDetailPage() {
                               X
                             </button>
                           </div>
+                          {hasSubtasks && (
+                            <div className="subtasks-section">
+                              <button
+                                className="subtasks-toggle"
+                                onClick={() => toggleExpanded(task.id)}
+                              >
+                                {isExpanded ? "▼" : "▶"} {taskSubtasks.length} subtask{taskSubtasks.length !== 1 ? "s" : ""}
+                              </button>
+                              {isExpanded && (
+                                <div className="subtasks-list">
+                                  {taskSubtasks.map((subtask) => {
+                                    const subtaskWorkerId = "worker_id" in subtask ? subtask.worker_id : null;
+                                    return (
+                                      <div key={subtask.id} className={`subtask-item status-${subtask.status}`}>
+                                        <div className="subtask-header">
+                                          <span className={`priority priority-${subtask.priority.toLowerCase()}`}>
+                                            {subtask.priority}
+                                          </span>
+                                          <span className={`status-badge status-${subtask.status}`}>
+                                            {subtask.status}
+                                          </span>
+                                        </div>
+                                        <span className="subtask-title">{subtask.title}</span>
+                                        <div className="subtask-actions">
+                                          <select
+                                            value={subtask.status}
+                                            onChange={(e) => handleStatusChange(subtask.id, e.target.value as TaskStatus)}
+                                            className="subtask-status-select"
+                                          >
+                                            {Object.values(TaskStatus).map((s) => (
+                                              <option key={s} value={s}>{s}</option>
+                                            ))}
+                                          </select>
+                                          <select
+                                            value={subtaskWorkerId || ""}
+                                            onChange={(e) => handleAssign(subtask.id, e.target.value || null)}
+                                            className="subtask-worker-select"
+                                            title="Assign to worker"
+                                          >
+                                            <option value="">-</option>
+                                            {workers.filter((w) => w.status !== WorkerStatus.OFFLINE).map((worker) => (
+                                              <option key={worker.id} value={worker.id}>
+                                                {worker.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <button
+                                            onClick={() => handleDeleteTask(subtask.id)}
+                                            className="subtask-delete-btn"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
