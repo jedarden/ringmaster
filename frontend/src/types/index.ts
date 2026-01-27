@@ -61,6 +61,7 @@ export interface ProjectUpdate {
   description?: string | null;
   tech_stack?: string[] | null;
   repo_url?: string | null;
+  settings?: Record<string, string | number | boolean | null>;
 }
 
 // Project summary for mailbox view

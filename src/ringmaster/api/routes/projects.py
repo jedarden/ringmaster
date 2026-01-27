@@ -64,6 +64,7 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     tech_stack: list[str] | None = None
     repo_url: str | None = None
+    settings: dict[str, str | int | bool | None] | None = None
 
 
 @router.get("")
@@ -221,6 +222,11 @@ async def update_project(
         project.tech_stack = body.tech_stack
     if body.repo_url is not None:
         project.repo_url = body.repo_url
+    if body.settings is not None:
+        # Merge settings (don't replace entirely, allow partial updates)
+        project.settings.update(body.settings)
+        # Remove any keys explicitly set to None
+        project.settings = {k: v for k, v in project.settings.items() if v is not None}
 
     return await repo.update(project)
 

@@ -11,6 +11,7 @@ import { DecisionPanel } from "../components/DecisionPanel";
 import { QuestionPanel } from "../components/QuestionPanel";
 import { ValidationPanel } from "../components/ValidationPanel";
 import { TaskComplexityBadge } from "../components/TaskComplexityBadge";
+import { ProjectSettingsModal } from "../components/ProjectSettingsModal";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -25,6 +26,7 @@ export function ProjectDetailPage() {
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
@@ -280,14 +282,33 @@ export function ProjectDetailPage() {
     [TaskStatus.BLOCKED]: regularTasks.filter((t) => t.status === TaskStatus.BLOCKED),
   };
 
+  const handleSettingsSaved = (updatedProject: Project) => {
+    setProject(updatedProject);
+  };
+
   return (
     <div className="project-detail-page">
       <div className="page-header">
         <Link to="/" className="back-link">&larr; Back</Link>
         <h1>{project.name}</h1>
+        <button
+          className="settings-btn"
+          onClick={() => setShowSettings(true)}
+          title="Project Settings"
+        >
+          Settings
+        </button>
       </div>
 
       {project.description && <p className="description">{project.description}</p>}
+
+      {showSettings && (
+        <ProjectSettingsModal
+          project={project}
+          onClose={() => setShowSettings(false)}
+          onSave={handleSettingsSaved}
+        />
+      )}
 
       {error && <div className="error">{error}</div>}
 
