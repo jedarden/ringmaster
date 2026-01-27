@@ -456,6 +456,14 @@ src/ringmaster/
 - ✅ Integration with WorkerExecutor for real-time monitoring
 - ✅ Event emission for hung/degraded worker notifications
 
+### Worker Health UI (`frontend/src/pages/WorkersPage.tsx`)
+- ✅ Health status display for busy workers in worker cards
+- ✅ Liveness badge with icons (active, thinking, slow, likely_hung, degraded)
+- ✅ Degradation badge when context drift detected (tooltip with scores)
+- ✅ Recovery action badge with urgency color coding
+- ✅ Output line count display
+- ✅ Auto-refresh health data on worker list load
+
 Implemented shortcuts:
 - g m: Go to mailbox (projects)
 - g a: Go to agents (workers)
@@ -921,6 +929,7 @@ Implemented shortcuts:
 | 70 | 2026-01-27 | Add task validation stage: TaskValidator class with auto-detection of test/lint commands for Python, Node.js, Rust, Go; ValidationResult with check status (passed/failed/skipped/error); sensitive pattern detection triggers human review; POST /api/tasks/{id}/validate, /approve, /reject endpoints; transitions tasks from REVIEW to DONE or back to IN_PROGRESS; per docs/08-open-architecture.md section 3; 23 new tests, total 625 tests passing |
 | 71 | 2026-01-27 | Add Validation Frontend UI: ValidationPanel component for REVIEW status tasks, TypeScript types (ValidationStatus, ValidationCheck, ValidationResponse, ApproveResponse, RejectResponse), API client functions (validateTask, approveTask, rejectTask), CSS styles for validation panel with check result display, integrated in ProjectDetailPage sidebar; all 625 tests passing |
 | 72 | 2026-01-27 | Fix validator Python portability: use sys.executable instead of hardcoded 'python' in _detect_test_command, _detect_lint_command, _detect_type_check_command; ensures validator works on systems where Python is only available as python3 or within virtual environments; all 625 tests passing |
+| 73 | 2026-01-27 | Add worker health status display to WorkersPage: WorkerHealthResponse/DegradationSignals/RecoveryAction types, LivenessStatus/RecoveryUrgency enums, getWorkerHealth() API client, health status badge with liveness icons for busy workers, degradation badge when context drift detected, recovery action badge with urgency colors, CSS styles for health components; all 625 tests passing |
 
 ## Blockers
 
