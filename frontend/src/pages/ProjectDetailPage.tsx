@@ -397,6 +397,11 @@ export function ProjectDetailPage() {
                             );
                             const taskSubtasks = subtasksByParent.get(task.id) || [];
 
+                            // Get iteration info for child tasks
+                            const childAttempts = "attempts" in task ? task.attempts : 0;
+                            const childMaxAttempts = "max_attempts" in task ? task.max_attempts : 5;
+                            const showChildIterations = task.status === TaskStatus.IN_PROGRESS && childMaxAttempts > 0;
+
                             return (
                               <div key={task.id} className={`epic-child-task status-${task.status}`}>
                                 <div className="child-task-header">
@@ -406,6 +411,11 @@ export function ProjectDetailPage() {
                                   <span className={`status-badge status-${task.status}`}>
                                     {task.status.replace("_", " ")}
                                   </span>
+                                  {showChildIterations && (
+                                    <span className="task-iteration" title={`Attempt ${childAttempts + 1} of ${childMaxAttempts}`}>
+                                      {childAttempts + 1}/{childMaxAttempts}
+                                    </span>
+                                  )}
                                   {taskSubtasks.length > 0 && (
                                     <span className="subtask-count" title="Number of subtasks">
                                       [{taskSubtasks.length}]
@@ -545,6 +555,11 @@ export function ProjectDetailPage() {
                       const hasSubtasks = taskSubtasks.length > 0;
                       const isExpanded = expandedTasks.has(task.id);
 
+                      // Get iteration info for Task/Subtask types
+                      const taskAttempts = "attempts" in task ? task.attempts : 0;
+                      const taskMaxAttempts = "max_attempts" in task ? task.max_attempts : 5;
+                      const showIterations = task.status === TaskStatus.IN_PROGRESS && taskMaxAttempts > 0;
+
                       return (
                         <div key={task.id} className={`task-card ${selectedTasks.has(task.id) ? "selected" : ""}`}>
                           <div className="task-header">
@@ -558,6 +573,11 @@ export function ProjectDetailPage() {
                               {task.priority}
                             </span>
                             <span className="task-id">{task.id}</span>
+                            {showIterations && (
+                              <span className="task-iteration" title={`Attempt ${taskAttempts + 1} of ${taskMaxAttempts}`}>
+                                {taskAttempts + 1}/{taskMaxAttempts}
+                              </span>
+                            )}
                           </div>
                           <h4>{task.title}</h4>
                           <div className="task-actions">
@@ -598,6 +618,11 @@ export function ProjectDetailPage() {
                                 <div className="subtasks-list">
                                   {taskSubtasks.map((subtask) => {
                                     const subtaskWorkerId = "worker_id" in subtask ? subtask.worker_id : null;
+                                    // Get iteration info for subtasks
+                                    const subtaskAttempts = "attempts" in subtask ? subtask.attempts : 0;
+                                    const subtaskMaxAttempts = "max_attempts" in subtask ? subtask.max_attempts : 3;
+                                    const showSubtaskIterations = subtask.status === TaskStatus.IN_PROGRESS && subtaskMaxAttempts > 0;
+
                                     return (
                                       <div key={subtask.id} className={`subtask-item status-${subtask.status}`}>
                                         <div className="subtask-header">
@@ -607,6 +632,11 @@ export function ProjectDetailPage() {
                                           <span className={`status-badge status-${subtask.status}`}>
                                             {subtask.status}
                                           </span>
+                                          {showSubtaskIterations && (
+                                            <span className="task-iteration" title={`Attempt ${subtaskAttempts + 1} of ${subtaskMaxAttempts}`}>
+                                              {subtaskAttempts + 1}/{subtaskMaxAttempts}
+                                            </span>
+                                          )}
                                         </div>
                                         <span className="subtask-title">{subtask.title}</span>
                                         <div className="subtask-actions">

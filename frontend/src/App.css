@@ -545,6 +545,17 @@ textarea {
   font-family: monospace;
 }
 
+.task-iteration {
+  font-size: 0.65rem;
+  color: var(--color-info);
+  background: rgba(59, 130, 246, 0.15);
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-weight: 500;
+  margin-left: auto;
+}
+
 .task-card h4 {
   margin: 0;
   font-size: 0.875rem;
