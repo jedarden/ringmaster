@@ -128,6 +128,160 @@ class TestProjectsAPI:
         response = await client.get(f"/api/projects/{project_id}")
         assert response.status_code == 404
 
+    async def test_get_project_summary(self, client: AsyncClient):
+        """Test getting a project summary."""
+        # Create a project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Summary Test Project"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Get summary
+        response = await client.get(f"/api/projects/{project_id}/summary")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check structure
+        assert "project" in data
+        assert data["project"]["name"] == "Summary Test Project"
+        assert "task_counts" in data
+        assert "total_tasks" in data
+        assert "active_workers" in data
+        assert "pending_decisions" in data
+        assert "pending_questions" in data
+        assert "latest_activity" in data
+
+        # No tasks yet
+        assert data["total_tasks"] == 0
+        assert data["active_workers"] == 0
+        assert data["pending_decisions"] == 0
+
+    async def test_get_project_summary_with_tasks(self, client: AsyncClient):
+        """Test getting a project summary with tasks."""
+        # Create a project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Summary With Tasks"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Create some tasks and update their statuses
+        task1_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 1"},
+        )
+        task1_id = task1_response.json()["id"]
+        await client.patch(f"/api/tasks/{task1_id}", json={"status": "ready"})
+
+        task2_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 2"},
+        )
+        task2_id = task2_response.json()["id"]
+        await client.patch(f"/api/tasks/{task2_id}", json={"status": "in_progress"})
+
+        task3_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 3"},
+        )
+        task3_id = task3_response.json()["id"]
+        await client.patch(f"/api/tasks/{task3_id}", json={"status": "done"})
+
+        # Get summary
+        response = await client.get(f"/api/projects/{project_id}/summary")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check task counts
+        assert data["total_tasks"] == 3
+        assert data["task_counts"]["ready"] == 1
+        assert data["task_counts"]["in_progress"] == 1
+        assert data["task_counts"]["done"] == 1
+
+    async def test_get_project_summary_with_decisions(self, client: AsyncClient):
+        """Test getting a project summary with pending decisions."""
+        # Create a project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Summary With Decisions"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Create a task
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task With Decision"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create a decision blocking the task
+        await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "What approach should we use?",
+                "options": ["Option A", "Option B"],
+            },
+        )
+
+        # Get summary
+        response = await client.get(f"/api/projects/{project_id}/summary")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["pending_decisions"] == 1
+
+    async def test_get_project_summary_not_found(self, client: AsyncClient):
+        """Test getting summary for non-existent project."""
+        fake_id = "00000000-0000-0000-0000-000000000000"
+        response = await client.get(f"/api/projects/{fake_id}/summary")
+        assert response.status_code == 404
+
+    async def test_list_projects_with_summaries(self, client: AsyncClient):
+        """Test listing all projects with summaries."""
+        # Create a project with some activity
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Project With Activity"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Add a task and update its status
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Some Task"},
+        )
+        task_id = task_response.json()["id"]
+        await client.patch(f"/api/tasks/{task_id}", json={"status": "ready"})
+
+        # Create another project without activity
+        await client.post(
+            "/api/projects",
+            json={"name": "Empty Project"},
+        )
+
+        # Get projects with summaries
+        response = await client.get("/api/projects/with-summaries")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert len(data) == 2
+
+        # Find the project with activity (most recent first)
+        project_with_activity = next(
+            s for s in data if s["project"]["name"] == "Project With Activity"
+        )
+        assert project_with_activity["total_tasks"] == 1
+        assert project_with_activity["task_counts"]["ready"] == 1
+
+        # Find the empty project
+        empty_project = next(
+            s for s in data if s["project"]["name"] == "Empty Project"
+        )
+        assert empty_project["total_tasks"] == 0
+
 
 class TestTasksAPI:
     """Tests for tasks API."""

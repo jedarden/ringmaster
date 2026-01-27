@@ -1,13 +1,74 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listProjects, createProject, deleteProject } from "../api/client";
-import type { Project, ProjectCreate } from "../types";
+import { listProjectsWithSummaries, createProject, deleteProject } from "../api/client";
+import type { ProjectCreate, ProjectSummary } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { useListNavigation } from "../hooks/useKeyboardShortcuts";
 
+// Helper to format time ago
+function formatTimeAgo(dateString: string | null): string {
+  if (!dateString) return "No activity";
+
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  if (diffDays === 1) return "Yesterday";
+  return `${diffDays} days ago`;
+}
+
+// Determine project status for indicator
+function getProjectStatus(
+  summary: ProjectSummary
+): "needs_attention" | "in_progress" | "complete" | "idle" {
+  const { task_counts, pending_decisions, active_workers, total_tasks } = summary;
+
+  // Needs attention: has pending decisions, blocked tasks, or failed tasks
+  if (pending_decisions > 0 || task_counts.blocked > 0 || task_counts.failed > 0) {
+    return "needs_attention";
+  }
+
+  // In progress: has active workers or tasks in progress
+  if (active_workers > 0 || task_counts.in_progress > 0 || task_counts.assigned > 0) {
+    return "in_progress";
+  }
+
+  // Complete: has tasks and all are done
+  if (total_tasks > 0 && task_counts.done === total_tasks) {
+    return "complete";
+  }
+
+  // Idle: no activity
+  return "idle";
+}
+
+// Get status indicator emoji and color class
+function getStatusIndicator(status: ReturnType<typeof getProjectStatus>): {
+  emoji: string;
+  className: string;
+  label: string;
+} {
+  switch (status) {
+    case "needs_attention":
+      return { emoji: "", className: "status-attention", label: "Needs attention" };
+    case "in_progress":
+      return { emoji: "", className: "status-progress", label: "In progress" };
+    case "complete":
+      return { emoji: "", className: "status-complete", label: "Complete" };
+    case "idle":
+      return { emoji: "", className: "status-idle", label: "Idle" };
+  }
+}
+
 export function ProjectsPage() {
   const navigate = useNavigate();
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [summaries, setSummaries] = useState<ProjectSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -17,8 +78,8 @@ export function ProjectsPage() {
   const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await listProjects();
-      setProjects(data);
+      const data = await listProjectsWithSummaries();
+      setSummaries(data);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load projects");
@@ -28,11 +89,19 @@ export function ProjectsPage() {
   }, []);
 
   // Handle WebSocket events for real-time updates
-  const handleEvent = useCallback((event: WebSocketEvent) => {
-    if (event.type.startsWith("project.")) {
-      loadProjects();
-    }
-  }, [loadProjects]);
+  const handleEvent = useCallback(
+    (event: WebSocketEvent) => {
+      if (
+        event.type.startsWith("project.") ||
+        event.type.startsWith("task.") ||
+        event.type.startsWith("worker.") ||
+        event.type.startsWith("decision.")
+      ) {
+        loadProjects();
+      }
+    },
+    [loadProjects]
+  );
 
   useWebSocket({ onEvent: handleEvent });
 
@@ -42,17 +111,17 @@ export function ProjectsPage() {
 
   // Keyboard navigation for project list
   const { selectedIndex, setSelectedIndex } = useListNavigation({
-    items: projects,
+    items: summaries,
     enabled: !showCreateForm,
-    onSelect: (_project, index) => {
+    onSelect: (_summary, index) => {
       // Scroll selected item into view
       const items = listRef.current?.querySelectorAll(".project-card");
       if (items?.[index]) {
         items[index].scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
     },
-    onOpen: (project) => {
-      navigate(`/projects/${project.id}`);
+    onOpen: (summary) => {
+      navigate(`/projects/${summary.project.id}`);
     },
   });
 
@@ -118,47 +187,110 @@ export function ProjectsPage() {
         </form>
       )}
 
-      {projects.length === 0 ? (
+      {summaries.length === 0 ? (
         <div className="empty-state">
           <p>No projects yet. Create one to get started!</p>
         </div>
       ) : (
         <div className="projects-list" ref={listRef}>
-          {projects.map((project, index) => (
-            <div
-              key={project.id}
-              className={`project-card ${index === selectedIndex ? "keyboard-selected" : ""}`}
-              onClick={() => setSelectedIndex(index)}
-            >
-              <Link to={`/projects/${project.id}`} className="project-link">
-                <h3>{project.name}</h3>
-                {project.description && <p>{project.description}</p>}
-                {project.tech_stack.length > 0 && (
-                  <div className="tech-stack">
-                    {project.tech_stack.map((tech) => (
-                      <span key={tech} className="tech-badge">
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </Link>
-              <button
-                className="delete-btn"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleDelete(project.id);
-                }}
+          {summaries.map((summary, index) => {
+            const { project, task_counts, total_tasks, active_workers, pending_decisions, pending_questions, latest_activity } = summary;
+            const status = getProjectStatus(summary);
+            const { className: statusClass, label: statusLabel } = getStatusIndicator(status);
+            const completedTasks = task_counts.done;
+            const progressPercent = total_tasks > 0 ? Math.round((completedTasks / total_tasks) * 100) : 0;
+
+            return (
+              <div
+                key={project.id}
+                className={`project-card ${statusClass} ${index === selectedIndex ? "keyboard-selected" : ""}`}
+                onClick={() => setSelectedIndex(index)}
               >
-                Delete
-              </button>
-            </div>
-          ))}
+                <Link to={`/projects/${project.id}`} className="project-link">
+                  <div className="project-card-header">
+                    <div className="project-status-indicator" title={statusLabel}>
+                      <span className={`status-dot ${statusClass}`} />
+                    </div>
+                    <h3>{project.name}</h3>
+                    <span className="time-ago">{formatTimeAgo(latest_activity)}</span>
+                  </div>
+
+                  <div className="project-card-body">
+                    {/* Activity summary line */}
+                    <div className="activity-summary">
+                      {active_workers > 0 && (
+                        <span className="activity-item workers">
+                          <span className="icon">&#9889;</span>
+                          {active_workers} agent{active_workers !== 1 ? "s" : ""} working
+                        </span>
+                      )}
+                      {pending_decisions > 0 && (
+                        <span className="activity-item decisions">
+                          <span className="icon">&#10067;</span>
+                          {pending_decisions} decision{pending_decisions !== 1 ? "s" : ""} needed
+                        </span>
+                      )}
+                      {pending_questions > 0 && (
+                        <span className="activity-item questions">
+                          <span className="icon">&#128172;</span>
+                          {pending_questions} question{pending_questions !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {active_workers === 0 && pending_decisions === 0 && pending_questions === 0 && total_tasks === 0 && (
+                        <span className="activity-item idle">No activity yet</span>
+                      )}
+                    </div>
+
+                    {/* Task progress */}
+                    {total_tasks > 0 && (
+                      <div className="task-progress">
+                        <div className="progress-bar">
+                          <div
+                            className="progress-fill"
+                            style={{ width: `${progressPercent}%` }}
+                          />
+                        </div>
+                        <span className="progress-text">
+                          {completedTasks}/{total_tasks} tasks ({progressPercent}%)
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {project.description && (
+                      <p className="project-description">{project.description}</p>
+                    )}
+
+                    {/* Tech stack badges */}
+                    {project.tech_stack.length > 0 && (
+                      <div className="tech-stack">
+                        {project.tech_stack.map((tech) => (
+                          <span key={tech} className="tech-badge">
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+                <button
+                  className="delete-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleDelete(project.id);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Keyboard navigation hint */}
-      {projects.length > 0 && !showCreateForm && (
+      {summaries.length > 0 && !showCreateForm && (
         <div
           style={{
             marginTop: "1rem",
@@ -166,7 +298,37 @@ export function ProjectsPage() {
             color: "var(--color-text-muted)",
           }}
         >
-          Use <kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>j</kbd>/<kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>k</kbd> to navigate, <kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>Enter</kbd> to open
+          Use{" "}
+          <kbd
+            style={{
+              background: "var(--color-surface)",
+              padding: "0.1rem 0.4rem",
+              borderRadius: "3px",
+            }}
+          >
+            j
+          </kbd>
+          /
+          <kbd
+            style={{
+              background: "var(--color-surface)",
+              padding: "0.1rem 0.4rem",
+              borderRadius: "3px",
+            }}
+          >
+            k
+          </kbd>{" "}
+          to navigate,{" "}
+          <kbd
+            style={{
+              background: "var(--color-surface)",
+              padding: "0.1rem 0.4rem",
+              borderRadius: "3px",
+            }}
+          >
+            Enter
+          </kbd>{" "}
+          to open
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@ import type {
   Project,
   ProjectCreate,
   ProjectUpdate,
+  ProjectSummary,
   AnyTask,
   Task,
   Epic,
@@ -142,6 +143,23 @@ export async function deleteProject(id: string): Promise<void> {
     method: "DELETE",
   });
   return handleResponse<void>(response);
+}
+
+export async function getProjectSummary(id: string): Promise<ProjectSummary> {
+  const response = await fetch(`${API_BASE}/projects/${id}/summary`);
+  return handleResponse<ProjectSummary>(response);
+}
+
+export async function listProjectsWithSummaries(
+  limit = 100,
+  offset = 0
+): Promise<ProjectSummary[]> {
+  const params = new URLSearchParams({
+    limit: limit.toString(),
+    offset: offset.toString(),
+  });
+  const response = await fetch(`${API_BASE}/projects/with-summaries?${params}`);
+  return handleResponse<ProjectSummary[]>(response);
 }
 
 // Tasks API

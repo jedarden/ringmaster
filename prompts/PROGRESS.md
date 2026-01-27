@@ -539,6 +539,26 @@ Implemented shortcuts:
 - ✅ CSS styles for decision-panel and question-panel
 - ✅ Integrated in ProjectDetailPage sidebar above ChatPanel
 
+### Project Summary API (`src/ringmaster/api/routes/projects.py`)
+- ✅ GET /api/projects/with-summaries - List projects with activity summaries
+- ✅ GET /api/projects/{id}/summary - Single project summary
+- ✅ TaskStatusCounts model (draft, ready, assigned, in_progress, blocked, review, done, failed)
+- ✅ ProjectSummary model with project, task_counts, total_tasks, active_workers, pending_decisions/questions, latest_activity
+- ✅ Task counts aggregated by status (excludes epics/decisions/questions)
+- ✅ Active workers computed via current_task_id join
+- ✅ 5 new integration tests
+
+### Rich Project Mailbox (`frontend/src/pages/ProjectsPage.tsx`)
+- ✅ Uses listProjectsWithSummaries API for activity data
+- ✅ Status indicators: needs_attention (red), in_progress (yellow), complete (green), idle (gray)
+- ✅ Colored left border based on project status
+- ✅ Activity summary line showing active workers, pending decisions, pending questions
+- ✅ Task progress bar with percentage completion
+- ✅ Time-ago display for latest activity
+- ✅ Real-time refresh via WebSocket on task/worker/decision events
+- ✅ TypeScript types: ProjectSummary, TaskStatusCounts
+- ✅ CSS styles for status dots, progress bars, activity items
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -590,6 +610,7 @@ Implemented shortcuts:
 | 41 | 2026-01-27 | Add priority inheritance for blocked task queues: blockers inherit priority from high-priority blocked tasks, transitive inheritance, completed/failed tasks excluded, only BLOCKED status triggers inheritance, prevents queue starvation, 9 new tests, total 323 tests passing |
 | 42 | 2026-01-27 | Add Decision & Question API for human-in-the-loop workflows: Decision model (blocks task), Question model (non-blocking), repository methods, 12 API endpoints for CRUD/resolve/answer, event types (DECISION_CREATED/RESOLVED, QUESTION_CREATED/ANSWERED), task blocking integration, 14 new tests, total 337 tests passing |
 | 43 | 2026-01-27 | Add Decision & Question frontend UI: DecisionPanel component with option buttons and custom answers, QuestionPanel component with urgency badges and default answer support, TypeScript types and API client functions, CSS styles, integrated in ProjectDetailPage sidebar, fixed unused import in WorkersPage |
+| 44 | 2026-01-27 | Add rich project mailbox view: GET /api/projects/with-summaries endpoint returning task counts, active workers, pending decisions/questions, latest activity; GET /api/projects/{id}/summary endpoint; ProjectSummary type with TaskStatusCounts; ProjectsPage updated with status indicators, activity summaries, progress bars, time-ago display; CSS styles for project cards, 5 new tests, total 342 tests passing |
 
 ## Blockers
 

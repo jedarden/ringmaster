@@ -248,6 +248,150 @@ textarea {
   font-size: 0.75rem;
 }
 
+/* Rich Project Cards (Mailbox View) */
+.project-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.project-card-header h3 {
+  flex: 1;
+  margin: 0;
+}
+
+.time-ago {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.project-status-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+
+.status-dot.status-attention {
+  background: var(--color-error);
+  box-shadow: 0 0 6px var(--color-error);
+}
+
+.status-dot.status-progress {
+  background: var(--color-warning);
+  box-shadow: 0 0 6px var(--color-warning);
+}
+
+.status-dot.status-complete {
+  background: var(--color-success);
+}
+
+.status-dot.status-idle {
+  background: var(--color-text-muted);
+  opacity: 0.5;
+}
+
+.project-card-body {
+  padding-left: 1.5rem; /* Align with title after status dot */
+}
+
+.activity-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.activity-item {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.activity-item .icon {
+  font-size: 1rem;
+}
+
+.activity-item.workers {
+  color: var(--color-warning);
+}
+
+.activity-item.decisions {
+  color: var(--color-error);
+}
+
+.activity-item.questions {
+  color: var(--color-accent);
+}
+
+.activity-item.idle {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.task-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 200px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-success);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.project-description {
+  margin: 0.5rem 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status border indicator for project cards */
+.project-card.status-attention {
+  border-left: 3px solid var(--color-error);
+}
+
+.project-card.status-progress {
+  border-left: 3px solid var(--color-warning);
+}
+
+.project-card.status-complete {
+  border-left: 3px solid var(--color-success);
+}
+
+.project-card.status-idle {
+  border-left: 3px solid transparent;
+}
+
 /* Worker Cards */
 .worker-header {
   display: flex;

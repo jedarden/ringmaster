@@ -7,10 +7,35 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
-from ringmaster.db import Database, ProjectRepository
+from ringmaster.db import Database, ProjectRepository, TaskRepository
 from ringmaster.domain import Project
 
 router = APIRouter()
+
+
+class TaskStatusCounts(BaseModel):
+    """Task counts by status."""
+
+    draft: int = 0
+    ready: int = 0
+    assigned: int = 0
+    in_progress: int = 0
+    blocked: int = 0
+    review: int = 0
+    done: int = 0
+    failed: int = 0
+
+
+class ProjectSummary(BaseModel):
+    """Summary of a project with activity stats."""
+
+    project: Project
+    task_counts: TaskStatusCounts
+    total_tasks: int
+    active_workers: int
+    pending_decisions: int
+    pending_questions: int
+    latest_activity: str | None  # ISO timestamp
 
 
 class ProjectCreate(BaseModel):
@@ -40,6 +65,67 @@ async def list_projects(
     """List all projects."""
     repo = ProjectRepository(db)
     return await repo.list(limit=limit, offset=offset)
+
+
+@router.get("/with-summaries", name="list_projects_with_summaries")
+async def list_projects_with_summaries(
+    db: Annotated[Database, Depends(get_db)],
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> list[ProjectSummary]:
+    """List all projects with their summaries for the mailbox view."""
+    project_repo = ProjectRepository(db)
+    projects = await project_repo.list(limit=limit, offset=offset)
+
+    summaries = []
+    for project in projects:
+        task_repo = TaskRepository(db)
+
+        # Get task counts by status
+        task_counts = await _get_task_counts(db, project.id)
+
+        # Get active workers on this project
+        active_workers = await _count_active_workers(db, project.id)
+
+        # Get pending decisions
+        decisions = await task_repo.list_decisions(
+            project_id=project.id, pending_only=True, limit=1000
+        )
+        pending_decisions = len(decisions)
+
+        # Get pending questions
+        questions = await task_repo.list_questions(
+            project_id=project.id, pending_only=False, limit=1000
+        )
+        pending_questions = len([q for q in questions if q.answer is None])
+
+        # Get latest activity
+        latest_activity = await _get_latest_activity(db, project.id)
+
+        summaries.append(
+            ProjectSummary(
+                project=project,
+                task_counts=task_counts,
+                total_tasks=sum(
+                    [
+                        task_counts.draft,
+                        task_counts.ready,
+                        task_counts.assigned,
+                        task_counts.in_progress,
+                        task_counts.blocked,
+                        task_counts.review,
+                        task_counts.done,
+                        task_counts.failed,
+                    ]
+                ),
+                active_workers=active_workers,
+                pending_decisions=pending_decisions,
+                pending_questions=pending_questions,
+                latest_activity=latest_activity,
+            )
+        )
+
+    return summaries
 
 
 @router.post("", status_code=201)
@@ -105,3 +191,122 @@ async def delete_project(
     deleted = await repo.delete(project_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")
+
+
+@router.get("/{project_id}/summary")
+async def get_project_summary(
+    db: Annotated[Database, Depends(get_db)],
+    project_id: UUID,
+) -> ProjectSummary:
+    """Get project summary with task/worker/decision stats."""
+    project_repo = ProjectRepository(db)
+    project = await project_repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    task_repo = TaskRepository(db)
+
+    # Get task counts by status
+    task_counts = await _get_task_counts(db, project_id)
+
+    # Get active workers on this project
+    active_workers = await _count_active_workers(db, project_id)
+
+    # Get pending decisions
+    decisions = await task_repo.list_decisions(
+        project_id=project_id, pending_only=True, limit=1000
+    )
+    pending_decisions = len(decisions)
+
+    # Get pending questions
+    questions = await task_repo.list_questions(
+        project_id=project_id, pending_only=False, limit=1000
+    )
+    pending_questions = len([q for q in questions if q.answer is None])
+
+    # Get latest activity
+    latest_activity = await _get_latest_activity(db, project_id)
+
+    return ProjectSummary(
+        project=project,
+        task_counts=task_counts,
+        total_tasks=sum(
+            [
+                task_counts.draft,
+                task_counts.ready,
+                task_counts.assigned,
+                task_counts.in_progress,
+                task_counts.blocked,
+                task_counts.review,
+                task_counts.done,
+                task_counts.failed,
+            ]
+        ),
+        active_workers=active_workers,
+        pending_decisions=pending_decisions,
+        pending_questions=pending_questions,
+        latest_activity=latest_activity,
+    )
+
+
+async def _get_task_counts(db: Database, project_id: UUID) -> TaskStatusCounts:
+    """Get task counts by status for a project."""
+    rows = await db.fetchall(
+        """
+        SELECT status, COUNT(*) as count
+        FROM tasks
+        WHERE project_id = ? AND type IN ('task', 'subtask')
+        GROUP BY status
+        """,
+        (str(project_id),),
+    )
+
+    counts = TaskStatusCounts()
+    for row in rows:
+        status = row["status"]
+        count = row["count"]
+        if status == "draft":
+            counts.draft = count
+        elif status == "ready":
+            counts.ready = count
+        elif status == "assigned":
+            counts.assigned = count
+        elif status == "in_progress":
+            counts.in_progress = count
+        elif status == "blocked":
+            counts.blocked = count
+        elif status == "review":
+            counts.review = count
+        elif status == "done":
+            counts.done = count
+        elif status == "failed":
+            counts.failed = count
+
+    return counts
+
+
+async def _count_active_workers(db: Database, project_id: UUID) -> int:
+    """Count workers actively working on this project's tasks."""
+    row = await db.fetchone(
+        """
+        SELECT COUNT(DISTINCT w.id) as count
+        FROM workers w
+        JOIN tasks t ON w.current_task_id = t.id
+        WHERE t.project_id = ? AND w.status IN ('busy', 'idle')
+        """,
+        (str(project_id),),
+    )
+    return row["count"] if row else 0
+
+
+async def _get_latest_activity(db: Database, project_id: UUID) -> str | None:
+    """Get the latest activity timestamp for a project."""
+    row = await db.fetchone(
+        """
+        SELECT MAX(updated_at) as latest
+        FROM tasks
+        WHERE project_id = ?
+        """,
+        (str(project_id),),
+    )
+    return row["latest"] if row and row["latest"] else None

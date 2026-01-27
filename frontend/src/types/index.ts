@@ -62,6 +62,28 @@ export interface ProjectUpdate {
   repo_url?: string | null;
 }
 
+// Project summary for mailbox view
+export interface TaskStatusCounts {
+  draft: number;
+  ready: number;
+  assigned: number;
+  in_progress: number;
+  blocked: number;
+  review: number;
+  done: number;
+  failed: number;
+}
+
+export interface ProjectSummary {
+  project: Project;
+  task_counts: TaskStatusCounts;
+  total_tasks: number;
+  active_workers: number;
+  pending_decisions: number;
+  pending_questions: number;
+  latest_activity: string | null;
+}
+
 export interface TaskBase {
   id: string;
   project_id: string;
