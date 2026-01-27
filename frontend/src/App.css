@@ -201,6 +201,84 @@ textarea {
   resize: vertical;
 }
 
+/* Form Groups */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+/* Tech Stack Input */
+.tech-stack-input-wrapper {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tech-stack-input-wrapper input {
+  flex: 1;
+}
+
+.add-tech-btn {
+  padding: 0.5rem 1rem;
+  white-space: nowrap;
+}
+
+.add-tech-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tech-stack-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.tech-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: var(--color-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.remove-tech-btn {
+  background: none;
+  border: none;
+  padding: 0 0.25rem;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--color-text);
+  opacity: 0.7;
+  line-height: 1;
+}
+
+.remove-tech-btn:hover {
+  opacity: 1;
+}
+
+/* Cancel button in forms */
+.cancel-btn {
+  background: transparent;
+  border: 1px solid var(--color-text-muted);
+  color: var(--color-text-muted);
+}
+
+.cancel-btn:hover {
+  background: var(--color-surface);
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+
 /* Cards */
 .project-card,
 .worker-card,

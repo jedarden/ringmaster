@@ -72,7 +72,8 @@ export function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newProject, setNewProject] = useState<ProjectCreate>({ name: "" });
+  const [newProject, setNewProject] = useState<ProjectCreate>({ name: "", tech_stack: [] });
+  const [techStackInput, setTechStackInput] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
@@ -131,11 +132,37 @@ export function ProjectsPage() {
 
     try {
       await createProject(newProject);
-      setNewProject({ name: "" });
+      setNewProject({ name: "", tech_stack: [] });
+      setTechStackInput("");
       setShowCreateForm(false);
       await loadProjects();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project");
+    }
+  };
+
+  const handleAddTechStack = () => {
+    const tech = techStackInput.trim();
+    if (tech && !(newProject.tech_stack || []).includes(tech)) {
+      setNewProject({
+        ...newProject,
+        tech_stack: [...(newProject.tech_stack || []), tech],
+      });
+      setTechStackInput("");
+    }
+  };
+
+  const handleRemoveTechStack = (tech: string) => {
+    setNewProject({
+      ...newProject,
+      tech_stack: (newProject.tech_stack || []).filter((t) => t !== tech),
+    });
+  };
+
+  const handleTechStackKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddTechStack();
     }
   };
 
@@ -167,23 +194,98 @@ export function ProjectsPage() {
 
       {showCreateForm && (
         <form onSubmit={handleCreate} className="create-form">
-          <input
-            type="text"
-            placeholder="Project name"
-            value={newProject.name}
-            onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-            required
-            autoFocus
-          />
-          <input
-            type="text"
-            placeholder="Description (optional)"
-            value={newProject.description || ""}
-            onChange={(e) =>
-              setNewProject({ ...newProject, description: e.target.value || null })
-            }
-          />
-          <button type="submit">Create Project</button>
+          <div className="form-group">
+            <label htmlFor="project-name">Project Name *</label>
+            <input
+              id="project-name"
+              type="text"
+              placeholder="My Awesome Project"
+              value={newProject.name}
+              onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="project-description">Description</label>
+            <input
+              id="project-description"
+              type="text"
+              placeholder="A brief description of the project"
+              value={newProject.description || ""}
+              onChange={(e) =>
+                setNewProject({ ...newProject, description: e.target.value || null })
+              }
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="project-repo">Repository URL</label>
+            <input
+              id="project-repo"
+              type="text"
+              placeholder="https://github.com/org/repo or /path/to/local/repo"
+              value={newProject.repo_url || ""}
+              onChange={(e) =>
+                setNewProject({ ...newProject, repo_url: e.target.value || null })
+              }
+            />
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="project-tech">Tech Stack</label>
+            <div className="tech-stack-input-wrapper">
+              <input
+                id="project-tech"
+                type="text"
+                placeholder="Add technology (e.g., Python, React)"
+                value={techStackInput}
+                onChange={(e) => setTechStackInput(e.target.value)}
+                onKeyDown={handleTechStackKeyDown}
+              />
+              <button
+                type="button"
+                onClick={handleAddTechStack}
+                className="add-tech-btn"
+                disabled={!techStackInput.trim()}
+              >
+                Add
+              </button>
+            </div>
+            {(newProject.tech_stack || []).length > 0 && (
+              <div className="tech-stack-tags">
+                {(newProject.tech_stack || []).map((tech) => (
+                  <span key={tech} className="tech-tag">
+                    {tech}
+                    <button
+                      type="button"
+                      className="remove-tech-btn"
+                      onClick={() => handleRemoveTechStack(tech)}
+                      aria-label={`Remove ${tech}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="form-actions">
+            <button type="submit">Create Project</button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateForm(false);
+                setNewProject({ name: "", tech_stack: [] });
+                setTechStackInput("");
+              }}
+              className="cancel-btn"
+            >
+              Cancel
+            </button>
+          </div>
         </form>
       )}
 
