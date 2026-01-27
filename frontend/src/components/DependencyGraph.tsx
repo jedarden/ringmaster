@@ -259,25 +259,8 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
     [dragConnection]
   );
 
-  const handleMouseUp = useCallback(() => {
-    isDragging.current = false;
-    dragNode.current = null;
-
-    // Handle connection drop
-    if (dragConnection && hoveredNode && hoveredNode !== dragConnection.sourceId) {
-      // Create dependency: source depends on target (source is child, hovered is parent)
-      handleCreateDependency(dragConnection.sourceId, hoveredNode);
-    }
-    setDragConnection(null);
-  }, [dragConnection, hoveredNode]);
-
-  const handleNodeClick = (nodeId: string) => {
-    setSelectedNode(nodeId);
-    onNodeClick?.(nodeId);
-  };
-
   // Create dependency
-  const handleCreateDependency = async (childId: string, parentId: string) => {
+  const handleCreateDependency = useCallback(async (childId: string, parentId: string) => {
     try {
       setOperationError(null);
       await addTaskDependency(childId, { parent_id: parentId });
@@ -288,6 +271,23 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
       setOperationError(message);
       setTimeout(() => setOperationError(null), 3000);
     }
+  }, [loadGraph]);
+
+  const handleMouseUp = useCallback(() => {
+    isDragging.current = false;
+    dragNode.current = null;
+
+    // Handle connection drop
+    if (dragConnection && hoveredNode && hoveredNode !== dragConnection.sourceId) {
+      // Create dependency: source depends on target (source is child, hovered is parent)
+      handleCreateDependency(dragConnection.sourceId, hoveredNode);
+    }
+    setDragConnection(null);
+  }, [dragConnection, hoveredNode, handleCreateDependency]);
+
+  const handleNodeClick = (nodeId: string) => {
+    setSelectedNode(nodeId);
+    onNodeClick?.(nodeId);
   };
 
   // Delete dependency

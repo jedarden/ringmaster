@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { getTaskRouting } from "../api/client";
 import type { RoutingRecommendation, TaskComplexity, ModelTier } from "../types";
 
@@ -32,7 +32,7 @@ export function TaskComplexityBadge({ taskId }: TaskComplexityBadgeProps) {
   const [loading, setLoading] = useState(false);
   const [showTooltip, setShowTooltip] = useState(false);
 
-  const loadRouting = async () => {
+  const loadRouting = useCallback(async () => {
     // Check cache first
     if (routingCache.has(taskId)) {
       setRouting(routingCache.get(taskId)!);
@@ -49,12 +49,12 @@ export function TaskComplexityBadge({ taskId }: TaskComplexityBadgeProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [taskId]);
 
   useEffect(() => {
     // Load immediately (don't wait for hover)
     loadRouting();
-  }, [taskId]);
+  }, [loadRouting]);
 
   if (loading) {
     return (

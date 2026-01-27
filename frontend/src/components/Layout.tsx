@@ -6,7 +6,8 @@ import { useDefaultShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useUndo } from "../hooks/useUndo";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsHelp } from "./ShortcutsHelp";
-import { Toast, useToast } from "./Toast";
+import { Toast } from "./Toast";
+import { useToast } from "../hooks/useToast";
 import { ActionHistoryPanel } from "./ActionHistoryPanel";
 
 export function Layout() {

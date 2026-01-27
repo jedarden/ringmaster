@@ -195,7 +195,20 @@ export function useListNavigation<T>(
   options: UseListNavigationOptions<T>
 ): UseListNavigationReturn {
   const { items, enabled = true, onSelect, onOpen } = options;
-  const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [rawSelectedIndex, setRawSelectedIndex] = useState(-1);
+
+  // Derive the actual selected index, clamping it to valid bounds
+  // This avoids calling setState inside useEffect
+  const selectedIndex = items.length === 0
+    ? -1
+    : rawSelectedIndex >= items.length
+      ? items.length > 0 ? 0 : -1
+      : rawSelectedIndex;
+
+  // Keep the raw index in sync if we had to clamp it
+  const setSelectedIndex = useCallback((indexOrFn: number | ((prev: number) => number)) => {
+    setRawSelectedIndex(indexOrFn);
+  }, []);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!enabled || items.length === 0) return;
@@ -213,8 +226,9 @@ export function useListNavigation<T>(
     switch (e.key) {
       case "j":
         e.preventDefault();
-        setSelectedIndex(prev => {
-          const next = prev < items.length - 1 ? prev + 1 : prev;
+        setRawSelectedIndex(prev => {
+          const effectivePrev = prev >= items.length ? 0 : prev;
+          const next = effectivePrev < items.length - 1 ? effectivePrev + 1 : effectivePrev;
           onSelect?.(items[next], next);
           return next;
         });
@@ -222,8 +236,9 @@ export function useListNavigation<T>(
 
       case "k":
         e.preventDefault();
-        setSelectedIndex(prev => {
-          const next = prev > 0 ? prev - 1 : 0;
+        setRawSelectedIndex(prev => {
+          const effectivePrev = prev >= items.length ? 0 : prev;
+          const next = effectivePrev > 0 ? effectivePrev - 1 : 0;
           onSelect?.(items[next], next);
           return next;
         });
@@ -242,13 +257,6 @@ export function useListNavigation<T>(
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
-
-  // Reset selection when items change
-  useEffect(() => {
-    if (selectedIndex >= items.length) {
-      setSelectedIndex(items.length > 0 ? 0 : -1);
-    }
-  }, [items.length, selectedIndex]);
 
   return { selectedIndex, setSelectedIndex };
 }
