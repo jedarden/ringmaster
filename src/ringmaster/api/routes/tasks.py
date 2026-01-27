@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
-from ringmaster.db import Database, TaskRepository
+from ringmaster.db import Database, TaskRepository, WorkerRepository
 from ringmaster.domain import (
     Dependency,
     Epic,
@@ -16,6 +16,7 @@ from ringmaster.domain import (
     Task,
     TaskStatus,
     TaskType,
+    WorkerStatus,
 )
 from ringmaster.events import EventType, event_bus
 
@@ -56,6 +57,12 @@ class DependencyCreate(BaseModel):
     """Request body for creating a dependency."""
 
     parent_id: str  # Task that must complete first
+
+
+class TaskAssign(BaseModel):
+    """Request body for assigning a task to a worker."""
+
+    worker_id: str | None = None  # None to unassign
 
 
 @router.get("")
@@ -185,6 +192,80 @@ async def update_task(
     await event_bus.emit(
         EventType.TASK_UPDATED,
         data={"task_id": updated.id, "status": updated.status.value},
+        project_id=str(updated.project_id),
+    )
+
+    return updated
+
+
+@router.post("/{task_id}/assign")
+async def assign_task(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+    body: TaskAssign,
+) -> Task | Subtask:
+    """Assign a task to a worker or unassign it."""
+    task_repo = TaskRepository(db)
+    worker_repo = WorkerRepository(db)
+
+    task = await task_repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Only tasks and subtasks can be assigned (not epics)
+    if task.type == TaskType.EPIC:
+        raise HTTPException(status_code=400, detail="Epics cannot be assigned to workers")
+
+    if body.worker_id:
+        # Assigning to a worker
+        worker = await worker_repo.get(body.worker_id)
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker not found")
+
+        # Check if worker is available
+        if worker.status == WorkerStatus.OFFLINE:
+            raise HTTPException(status_code=400, detail="Worker is offline")
+
+        # If worker is already busy with another task, don't allow
+        if worker.status == WorkerStatus.BUSY and worker.current_task_id != task_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Worker is busy with task {worker.current_task_id}",
+            )
+
+        # Update task
+        task.worker_id = body.worker_id
+        task.status = TaskStatus.ASSIGNED
+
+        # Update worker to busy
+        worker.status = WorkerStatus.BUSY
+        worker.current_task_id = task_id
+        await worker_repo.update(worker)
+    else:
+        # Unassigning from worker
+        old_worker_id = task.worker_id
+        task.worker_id = None
+        task.status = TaskStatus.READY
+
+        # If there was a worker, mark them idle
+        if old_worker_id:
+            worker = await worker_repo.get(old_worker_id)
+            if worker and worker.current_task_id == task_id:
+                worker.status = WorkerStatus.IDLE
+                worker.current_task_id = None
+                await worker_repo.update(worker)
+
+    updated = await task_repo.update_task(task)
+
+    # Emit event
+    await event_bus.emit(
+        EventType.TASK_UPDATED,
+        data={
+            "task_id": updated.id,
+            "worker_id": body.worker_id,
+            "status": updated.status.value,
+            "action": "assigned" if body.worker_id else "unassigned",
+        },
         project_id=str(updated.project_id),
     )
 

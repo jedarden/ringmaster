@@ -132,6 +132,10 @@ export interface TaskUpdate {
   status?: TaskStatus | null;
 }
 
+export interface TaskAssign {
+  worker_id: string | null;
+}
+
 export interface Dependency {
   child_id: string;
   parent_id: string;

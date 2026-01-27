@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getProject, listTasks, createTask, createEpic, updateTask, deleteTask } from "../api/client";
-import type { Project, AnyTask, TaskCreate, EpicCreate } from "../types";
-import { TaskStatus, TaskType, Priority } from "../types";
+import { getProject, listTasks, listWorkers, createTask, createEpic, updateTask, deleteTask, assignTask } from "../api/client";
+import type { Project, AnyTask, Worker, TaskCreate, EpicCreate } from "../types";
+import { TaskStatus, TaskType, Priority, WorkerStatus } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { ChatPanel } from "../components/ChatPanel";
 import { FileBrowser } from "../components/FileBrowser";
@@ -12,6 +12,7 @@ export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<AnyTask[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -23,12 +24,14 @@ export function ProjectDetailPage() {
 
     try {
       setLoading(true);
-      const [projectData, tasksData] = await Promise.all([
+      const [projectData, tasksData, workersData] = await Promise.all([
         getProject(projectId),
         listTasks({ project_id: projectId }),
+        listWorkers(),
       ]);
       setProject(projectData);
       setTasks(tasksData);
+      setWorkers(workersData);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
@@ -86,6 +89,15 @@ export function ProjectDetailPage() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete task");
+    }
+  };
+
+  const handleAssign = async (taskId: string, workerId: string | null) => {
+    try {
+      await assignTask(taskId, { worker_id: workerId || null });
+      await loadData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to assign task");
     }
   };
 
@@ -211,30 +223,50 @@ export function ProjectDetailPage() {
                     {status.replace("_", " ")} ({statusTasks.length})
                   </h3>
                   <div className="column-tasks">
-                    {statusTasks.map((task) => (
-                      <div key={task.id} className="task-card">
-                        <div className="task-header">
-                          <span className={`priority priority-${task.priority.toLowerCase()}`}>
-                            {task.priority}
-                          </span>
-                          <span className="task-id">{task.id}</span>
+                    {statusTasks.map((task) => {
+                      const taskWorkerId = "worker_id" in task ? task.worker_id : null;
+                      const availableWorkers = workers.filter(
+                        (w) => w.status !== WorkerStatus.OFFLINE && (w.status === WorkerStatus.IDLE || w.current_task_id === task.id)
+                      );
+
+                      return (
+                        <div key={task.id} className="task-card">
+                          <div className="task-header">
+                            <span className={`priority priority-${task.priority.toLowerCase()}`}>
+                              {task.priority}
+                            </span>
+                            <span className="task-id">{task.id}</span>
+                          </div>
+                          <h4>{task.title}</h4>
+                          <div className="task-actions">
+                            <select
+                              value={task.status}
+                              onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
+                            >
+                              {Object.values(TaskStatus).map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={taskWorkerId || ""}
+                              onChange={(e) => handleAssign(task.id, e.target.value || null)}
+                              className="worker-select"
+                              title="Assign to worker"
+                            >
+                              <option value="">Unassigned</option>
+                              {availableWorkers.map((worker) => (
+                                <option key={worker.id} value={worker.id}>
+                                  {worker.name} ({worker.type})
+                                </option>
+                              ))}
+                            </select>
+                            <button onClick={() => handleDeleteTask(task.id)} className="delete-btn">
+                              X
+                            </button>
+                          </div>
                         </div>
-                        <h4>{task.title}</h4>
-                        <div className="task-actions">
-                          <select
-                            value={task.status}
-                            onChange={(e) => handleStatusChange(task.id, e.target.value as TaskStatus)}
-                          >
-                            {Object.values(TaskStatus).map((s) => (
-                              <option key={s} value={s}>{s}</option>
-                            ))}
-                          </select>
-                          <button onClick={() => handleDeleteTask(task.id)} className="delete-btn">
-                            X
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}

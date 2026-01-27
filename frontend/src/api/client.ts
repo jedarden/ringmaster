@@ -8,6 +8,7 @@ import type {
   TaskCreate,
   EpicCreate,
   TaskUpdate,
+  TaskAssign,
   Dependency,
   DependencyCreate,
   Worker,
@@ -212,6 +213,15 @@ export async function addTaskDependency(
 export async function getTaskDependents(taskId: string): Promise<Dependency[]> {
   const response = await fetch(`${API_BASE}/tasks/${taskId}/dependents`);
   return handleResponse<Dependency[]>(response);
+}
+
+export async function assignTask(taskId: string, data: TaskAssign): Promise<AnyTask> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<AnyTask>(response);
 }
 
 // Workers API

@@ -365,6 +365,193 @@ class TestTasksAPI:
         assert len(tasks) == 1
         assert tasks[0]["title"] == "Open Task"
 
+    async def test_assign_task_to_worker(self, client: AsyncClient):
+        """Test assigning a task to an idle worker."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Assign Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task to Assign"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Test Worker",
+                "type": "test",
+                "command": "echo",
+            },
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Activate worker (make it idle)
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Assign task to worker
+        response = await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        assert data["status"] == "assigned"
+
+        # Verify worker is now busy
+        worker_response = await client.get(f"/api/workers/{worker_id}")
+        worker = worker_response.json()
+        assert worker["status"] == "busy"
+        assert worker["current_task_id"] == task_id
+
+    async def test_unassign_task_from_worker(self, client: AsyncClient):
+        """Test unassigning a task from a worker."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Unassign Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task to Unassign"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create and activate worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Test Worker", "type": "test", "command": "echo"},
+        )
+        worker_id = worker_response.json()["id"]
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Assign then unassign
+        await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+        response = await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": None},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["worker_id"] is None
+        assert data["status"] == "ready"
+
+        # Verify worker is idle
+        worker_response = await client.get(f"/api/workers/{worker_id}")
+        worker = worker_response.json()
+        assert worker["status"] == "idle"
+        assert worker["current_task_id"] is None
+
+    async def test_assign_task_to_offline_worker_fails(self, client: AsyncClient):
+        """Test that assigning to an offline worker fails."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Offline Worker Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task for Offline"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create worker (offline by default)
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Offline Worker", "type": "test", "command": "echo"},
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Try to assign - should fail
+        response = await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+        assert response.status_code == 400
+        assert "offline" in response.json()["detail"].lower()
+
+    async def test_assign_task_to_busy_worker_fails(self, client: AsyncClient):
+        """Test that assigning to a busy worker fails."""
+        # Create project and tasks
+        project_response = await client.post(
+            "/api/projects", json={"name": "Busy Worker Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task1_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 1"},
+        )
+        task1_id = task1_response.json()["id"]
+
+        task2_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 2"},
+        )
+        task2_id = task2_response.json()["id"]
+
+        # Create and activate worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Busy Worker", "type": "test", "command": "echo"},
+        )
+        worker_id = worker_response.json()["id"]
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Assign first task
+        await client.post(
+            f"/api/tasks/{task1_id}/assign",
+            json={"worker_id": worker_id},
+        )
+
+        # Try to assign second task - should fail
+        response = await client.post(
+            f"/api/tasks/{task2_id}/assign",
+            json={"worker_id": worker_id},
+        )
+        assert response.status_code == 400
+        assert "busy" in response.json()["detail"].lower()
+
+    async def test_assign_epic_fails(self, client: AsyncClient):
+        """Test that epics cannot be assigned to workers."""
+        # Create project and epic
+        project_response = await client.post(
+            "/api/projects", json={"name": "Epic Assign Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        epic_response = await client.post(
+            "/api/tasks/epics",
+            json={"project_id": project_id, "title": "Test Epic"},
+        )
+        epic_id = epic_response.json()["id"]
+
+        # Create and activate worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Epic Worker", "type": "test", "command": "echo"},
+        )
+        worker_id = worker_response.json()["id"]
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Try to assign epic - should fail
+        response = await client.post(
+            f"/api/tasks/{epic_id}/assign",
+            json={"worker_id": worker_id},
+        )
+        assert response.status_code == 400
+        assert "epic" in response.json()["detail"].lower()
+
 
 class TestWorkersAPI:
     """Tests for workers API - testing routes/workers.py."""
