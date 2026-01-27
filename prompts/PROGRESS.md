@@ -251,6 +251,19 @@ src/ringmaster/
   - Fallback prompt when enrichment fails
 - ✅ 11 new tests covering executor enrichment
 
+### Logs API (`src/ringmaster/api/routes/logs.py`)
+- ✅ Create log endpoint (POST /api/logs)
+- ✅ List logs with filtering (component, level, task, worker, project, since)
+- ✅ Full-text search in log messages via FTS5
+- ✅ Pagination (offset/limit)
+- ✅ Recent logs endpoint (last N minutes)
+- ✅ Task-scoped logs endpoint (GET /api/logs/for-task/{task_id})
+- ✅ Worker-scoped logs endpoint (GET /api/logs/for-worker/{worker_id})
+- ✅ Log statistics endpoint (counts by level/component)
+- ✅ Clear old logs endpoint (DELETE /api/logs)
+- ✅ Components and levels listing endpoints
+- ✅ 17 integration tests covering all endpoints
+
 ## Next Steps
 
 1. **Voice Input**: Add voice input to chat interface
@@ -279,6 +292,7 @@ src/ringmaster/
 | 17 | 2026-01-26 | Add bead creator service: Parser with action detection and ordering, Decomposer for large task breakdown, Matcher for duplicate detection, BeadCreator service, Input API endpoints, 32 new tests, total 169 tests passing |
 | 18 | 2026-01-26 | Add frontend TaskInput component: natural language task creation UI, Input API types and client functions, priority selector, auto-decompose toggle, related task search with debouncing, result display with type badges |
 | 19 | 2026-01-26 | Integrate EnrichmentPipeline into WorkerExecutor: 5-layer prompt assembly, project context fetching, context hash tracking, prompt file saving, fallback prompt, 11 new tests, total 180 tests passing |
+| 20 | 2026-01-26 | Add Logs API for observability: structured logging with SQLite storage, FTS5 search, filtering by component/level/task/worker, pagination, statistics endpoint, 17 new tests, total 197 tests passing |
 
 ## Blockers
 

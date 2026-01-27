@@ -14,7 +14,14 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
-from ringmaster.domain.enums import Priority, TaskStatus, TaskType, WorkerStatus
+from ringmaster.domain.enums import (
+    LogComponent,
+    LogLevel,
+    Priority,
+    TaskStatus,
+    TaskType,
+    WorkerStatus,
+)
 
 
 def generate_bead_id() -> str:
@@ -188,3 +195,17 @@ class Summary(BaseModel):
     key_decisions: list[str] = Field(default_factory=list)
     token_count: int | None = None
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class LogEntry(BaseModel):
+    """A structured log entry for observability."""
+
+    id: int | None = None  # Set by database
+    timestamp: datetime = Field(default_factory=utc_now)
+    level: LogLevel = LogLevel.INFO
+    component: LogComponent
+    message: str
+    task_id: str | None = None
+    worker_id: str | None = None
+    project_id: UUID | None = None
+    data: dict[str, Any] | None = None  # Additional context

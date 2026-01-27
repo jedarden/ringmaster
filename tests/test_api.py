@@ -1281,3 +1281,316 @@ class TestInputAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
+
+
+class TestLogsAPI:
+    """Tests for logs API."""
+
+    async def test_create_log(self, client: AsyncClient):
+        """Test creating a log entry."""
+        response = await client.post(
+            "/api/logs",
+            json={
+                "level": "info",
+                "component": "api",
+                "message": "Test log message",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["level"] == "info"
+        assert data["component"] == "api"
+        assert data["message"] == "Test log message"
+        assert "id" in data
+        assert "timestamp" in data
+
+    async def test_create_log_with_context(self, client: AsyncClient):
+        """Test creating a log entry with task and worker context."""
+        # Create project, task, and worker
+        project_response = await client.post(
+            "/api/projects", json={"name": "Log Context Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Log Test Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Log Test Worker", "type": "test", "command": "echo"},
+        )
+        worker_id = worker_response.json()["id"]
+
+        response = await client.post(
+            "/api/logs",
+            json={
+                "level": "warning",
+                "component": "scheduler",
+                "message": "Task taking longer than expected",
+                "task_id": task_id,
+                "worker_id": worker_id,
+                "project_id": project_id,
+                "data": {"elapsed_seconds": 120},
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["task_id"] == task_id
+        assert data["worker_id"] == worker_id
+        assert data["project_id"] == project_id
+        assert data["data"]["elapsed_seconds"] == 120
+
+    async def test_list_logs_empty(self, client: AsyncClient):
+        """Test listing logs when none exist."""
+        response = await client.get("/api/logs")
+        assert response.status_code == 200
+        data = response.json()
+        assert "logs" in data
+        assert "total" in data
+        assert "offset" in data
+        assert "limit" in data
+
+    async def test_list_logs_with_data(self, client: AsyncClient):
+        """Test listing logs with existing data."""
+        # Create some logs
+        for i in range(5):
+            await client.post(
+                "/api/logs",
+                json={
+                    "level": "info",
+                    "component": "api",
+                    "message": f"Test log {i}",
+                },
+            )
+
+        response = await client.get("/api/logs")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] >= 5
+        assert len(data["logs"]) >= 5
+
+    async def test_list_logs_filter_by_component(self, client: AsyncClient):
+        """Test filtering logs by component."""
+        # Create logs for different components
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "api", "message": "API log"},
+        )
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "scheduler", "message": "Scheduler log"},
+        )
+
+        response = await client.get("/api/logs", params={"component": "api"})
+        assert response.status_code == 200
+        data = response.json()
+        for log in data["logs"]:
+            assert log["component"] == "api"
+
+    async def test_list_logs_filter_by_level(self, client: AsyncClient):
+        """Test filtering logs by level."""
+        # Create logs with different levels
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "api", "message": "Info log"},
+        )
+        await client.post(
+            "/api/logs",
+            json={"level": "error", "component": "api", "message": "Error log"},
+        )
+
+        response = await client.get("/api/logs", params={"level": "error"})
+        assert response.status_code == 200
+        data = response.json()
+        for log in data["logs"]:
+            assert log["level"] == "error"
+
+    async def test_list_logs_pagination(self, client: AsyncClient):
+        """Test log pagination."""
+        # Create 10 logs
+        for i in range(10):
+            await client.post(
+                "/api/logs",
+                json={"level": "info", "component": "api", "message": f"Paginated log {i}"},
+            )
+
+        # Get first page
+        response = await client.get("/api/logs", params={"limit": 5, "offset": 0})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["logs"]) == 5
+        assert data["offset"] == 0
+        assert data["limit"] == 5
+
+        # Get second page
+        response = await client.get("/api/logs", params={"limit": 5, "offset": 5})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["offset"] == 5
+
+    async def test_list_logs_search(self, client: AsyncClient):
+        """Test full-text search in logs."""
+        # Create logs with different messages
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "api", "message": "Database connection established"},
+        )
+        await client.post(
+            "/api/logs",
+            json={"level": "error", "component": "api", "message": "Authentication failed"},
+        )
+
+        response = await client.get("/api/logs", params={"search": "Database"})
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["logs"]) >= 1
+        assert any("Database" in log["message"] for log in data["logs"])
+
+    async def test_get_recent_logs(self, client: AsyncClient):
+        """Test getting recent logs."""
+        # Create a log
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "api", "message": "Recent log"},
+        )
+
+        response = await client.get("/api/logs/recent", params={"minutes": 60})
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    async def test_get_logs_for_task(self, client: AsyncClient):
+        """Test getting logs for a specific task."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Task Log Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Logged Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create logs for this task
+        await client.post(
+            "/api/logs",
+            json={
+                "level": "info",
+                "component": "worker",
+                "message": "Task started",
+                "task_id": task_id,
+            },
+        )
+        await client.post(
+            "/api/logs",
+            json={
+                "level": "info",
+                "component": "worker",
+                "message": "Task completed",
+                "task_id": task_id,
+            },
+        )
+
+        response = await client.get(f"/api/logs/for-task/{task_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) >= 2
+        for log in data:
+            assert log["task_id"] == task_id
+
+    async def test_get_logs_for_task_not_found(self, client: AsyncClient):
+        """Test getting logs for non-existent task."""
+        response = await client.get("/api/logs/for-task/bd-nonexistent")
+        assert response.status_code == 404
+
+    async def test_get_logs_for_worker(self, client: AsyncClient):
+        """Test getting logs for a specific worker."""
+        # Create worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Logged Worker", "type": "test", "command": "echo"},
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Create logs for this worker
+        await client.post(
+            "/api/logs",
+            json={
+                "level": "info",
+                "component": "scheduler",
+                "message": "Worker assigned task",
+                "worker_id": worker_id,
+            },
+        )
+
+        response = await client.get(f"/api/logs/for-worker/{worker_id}")
+        assert response.status_code == 200
+        data = response.json()
+        for log in data:
+            assert log["worker_id"] == worker_id
+
+    async def test_get_logs_for_worker_not_found(self, client: AsyncClient):
+        """Test getting logs for non-existent worker."""
+        response = await client.get("/api/logs/for-worker/worker-nonexistent")
+        assert response.status_code == 404
+
+    async def test_get_log_components(self, client: AsyncClient):
+        """Test getting list of log components."""
+        response = await client.get("/api/logs/components")
+        assert response.status_code == 200
+        data = response.json()
+        assert "api" in data
+        assert "scheduler" in data
+        assert "worker" in data
+
+    async def test_get_log_levels(self, client: AsyncClient):
+        """Test getting list of log levels."""
+        response = await client.get("/api/logs/levels")
+        assert response.status_code == 200
+        data = response.json()
+        assert "debug" in data
+        assert "info" in data
+        assert "warning" in data
+        assert "error" in data
+        assert "critical" in data
+
+    async def test_get_log_stats(self, client: AsyncClient):
+        """Test getting log statistics."""
+        # Create logs with different levels and components
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "api", "message": "Info 1"},
+        )
+        await client.post(
+            "/api/logs",
+            json={"level": "error", "component": "scheduler", "message": "Error 1"},
+        )
+
+        response = await client.get("/api/logs/stats", params={"hours": 24})
+        assert response.status_code == 200
+        data = response.json()
+        assert "period_hours" in data
+        assert "total" in data
+        assert "errors" in data
+        assert "by_level" in data
+        assert "by_component" in data
+
+    async def test_clear_old_logs(self, client: AsyncClient):
+        """Test clearing old logs."""
+        # Create a log
+        await client.post(
+            "/api/logs",
+            json={"level": "info", "component": "api", "message": "Log to keep"},
+        )
+
+        # Try to clear logs older than 7 days (should delete nothing recent)
+        response = await client.delete("/api/logs", params={"days": 7})
+        assert response.status_code == 200
+        data = response.json()
+        assert "deleted" in data
+        assert "cutoff" in data

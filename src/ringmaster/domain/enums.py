@@ -42,3 +42,25 @@ class WorkerStatus(str, Enum):
     IDLE = "idle"
     BUSY = "busy"
     OFFLINE = "offline"
+
+
+class LogLevel(str, Enum):
+    """Log severity levels."""
+
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+class LogComponent(str, Enum):
+    """System components that can emit logs."""
+
+    API = "api"
+    QUEUE = "queue"
+    ENRICHER = "enricher"
+    SCHEDULER = "scheduler"
+    WORKER = "worker"
+    RELOAD = "reload"
+    CREATOR = "creator"

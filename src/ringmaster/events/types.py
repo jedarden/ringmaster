@@ -50,6 +50,9 @@ class EventType(str, Enum):
     # Chat/Message events
     MESSAGE_CREATED = "message.created"
 
+    # Log events
+    LOG_CREATED = "log.created"
+
 
 class Event(BaseModel):
     """A broadcast event."""
