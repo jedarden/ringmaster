@@ -53,6 +53,10 @@ class EventType(str, Enum):
     # Log events
     LOG_CREATED = "log.created"
 
+    # Undo/Redo events
+    UNDO_PERFORMED = "undo.performed"
+    REDO_PERFORMED = "redo.performed"
+
 
 class Event(BaseModel):
     """A broadcast event."""

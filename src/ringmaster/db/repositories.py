@@ -9,8 +9,12 @@ from uuid import UUID
 
 from ringmaster.db.connection import Database
 from ringmaster.domain import (
+    Action,
+    ActionType,
+    ActorType,
     ChatMessage,
     Dependency,
+    EntityType,
     Epic,
     Priority,
     Project,
@@ -761,5 +765,224 @@ class ChatRepository:
             summary=row["summary"],
             key_decisions=json.loads(row["key_decisions"]) if row["key_decisions"] else [],
             token_count=row["token_count"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+
+class ActionRepository:
+    """Repository for Action history for undo/redo functionality.
+
+    Records all reversible actions with their previous/new state
+    to enable the Undo/Redo UX pattern from docs/07-user-experience.md.
+    """
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    async def record(self, action: Action) -> Action:
+        """Record a new action in the history."""
+        cursor = await self.db.execute(
+            """
+            INSERT INTO action_history (
+                action_type, entity_type, entity_id, previous_state, new_state,
+                project_id, undone, undone_at, actor_type, actor_id, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                action.action_type.value,
+                action.entity_type.value,
+                action.entity_id,
+                json.dumps(action.previous_state) if action.previous_state else None,
+                json.dumps(action.new_state) if action.new_state else None,
+                str(action.project_id) if action.project_id else None,
+                1 if action.undone else 0,
+                action.undone_at.isoformat() if action.undone_at else None,
+                action.actor_type.value,
+                action.actor_id,
+                action.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        action.id = cursor.lastrowid
+        return action
+
+    async def get(self, action_id: int) -> Action | None:
+        """Get an action by ID."""
+        row = await self.db.fetchone(
+            "SELECT * FROM action_history WHERE id = ?", (action_id,)
+        )
+        if not row:
+            return None
+        return self._row_to_action(row)
+
+    async def get_recent(
+        self,
+        project_id: UUID | None = None,
+        limit: int = 50,
+        include_undone: bool = False,
+    ) -> list[Action]:
+        """Get recent actions, optionally filtered by project."""
+        conditions = []
+        params: list[Any] = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+
+        if not include_undone:
+            conditions.append("undone = 0")
+
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        query = f"""
+            SELECT * FROM action_history
+            WHERE {where_clause}
+            ORDER BY created_at DESC
+            LIMIT ?
+        """
+        params.append(limit)
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self._row_to_action(row) for row in rows]
+
+    async def get_last_undoable(
+        self,
+        project_id: UUID | None = None,
+    ) -> Action | None:
+        """Get the most recent action that can be undone."""
+        conditions = ["undone = 0"]
+        params: list[Any] = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+
+        query = f"""
+            SELECT * FROM action_history
+            WHERE {" AND ".join(conditions)}
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+
+        row = await self.db.fetchone(query, tuple(params))
+        return self._row_to_action(row) if row else None
+
+    async def get_last_redoable(
+        self,
+        project_id: UUID | None = None,
+    ) -> Action | None:
+        """Get the most recent undone action that can be redone."""
+        conditions = ["undone = 1"]
+        params: list[Any] = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+
+        query = f"""
+            SELECT * FROM action_history
+            WHERE {" AND ".join(conditions)}
+            ORDER BY undone_at DESC
+            LIMIT 1
+        """
+
+        row = await self.db.fetchone(query, tuple(params))
+        return self._row_to_action(row) if row else None
+
+    async def mark_undone(self, action_id: int) -> bool:
+        """Mark an action as undone."""
+        cursor = await self.db.execute(
+            """
+            UPDATE action_history
+            SET undone = 1, undone_at = ?
+            WHERE id = ? AND undone = 0
+            """,
+            (datetime.now(UTC).isoformat(), action_id),
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    async def mark_redone(self, action_id: int) -> bool:
+        """Mark an action as redone (undo the undo)."""
+        cursor = await self.db.execute(
+            """
+            UPDATE action_history
+            SET undone = 0, undone_at = NULL
+            WHERE id = ? AND undone = 1
+            """,
+            (action_id,),
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    async def clear_redo_stack(self, project_id: UUID | None = None) -> int:
+        """Clear all undone actions (invalidates redo stack).
+
+        Called when a new action is performed after an undo,
+        making the redo stack invalid.
+        """
+        conditions = ["undone = 1"]
+        params: list[Any] = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+
+        query = f"""
+            DELETE FROM action_history
+            WHERE {" AND ".join(conditions)}
+        """
+
+        cursor = await self.db.execute(query, tuple(params))
+        await self.db.commit()
+        return cursor.rowcount
+
+    async def get_for_entity(
+        self,
+        entity_type: EntityType,
+        entity_id: str,
+        limit: int = 50,
+    ) -> list[Action]:
+        """Get action history for a specific entity."""
+        rows = await self.db.fetchall(
+            """
+            SELECT * FROM action_history
+            WHERE entity_type = ? AND entity_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (entity_type.value, entity_id, limit),
+        )
+        return [self._row_to_action(row) for row in rows]
+
+    async def cleanup_old(self, days: int = 7) -> int:
+        """Delete actions older than the specified number of days."""
+        cutoff = datetime.now(UTC).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        # Subtract days manually since timedelta is not available
+        cutoff = cutoff.replace(day=cutoff.day - days)
+
+        cursor = await self.db.execute(
+            "DELETE FROM action_history WHERE created_at < ?",
+            (cutoff.isoformat(),),
+        )
+        await self.db.commit()
+        return cursor.rowcount
+
+    def _row_to_action(self, row: Any) -> Action:
+        """Convert a database row to an Action."""
+        return Action(
+            id=row["id"],
+            action_type=ActionType(row["action_type"]),
+            entity_type=EntityType(row["entity_type"]),
+            entity_id=row["entity_id"],
+            previous_state=json.loads(row["previous_state"]) if row["previous_state"] else None,
+            new_state=json.loads(row["new_state"]) if row["new_state"] else None,
+            project_id=UUID(row["project_id"]) if row["project_id"] else None,
+            undone=bool(row["undone"]),
+            undone_at=datetime.fromisoformat(row["undone_at"]) if row["undone_at"] else None,
+            actor_type=ActorType(row["actor_type"]),
+            actor_id=row["actor_id"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )

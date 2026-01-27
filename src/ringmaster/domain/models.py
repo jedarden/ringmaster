@@ -15,6 +15,9 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 from ringmaster.domain.enums import (
+    ActionType,
+    ActorType,
+    EntityType,
     LogComponent,
     LogLevel,
     Priority,
@@ -209,3 +212,56 @@ class LogEntry(BaseModel):
     worker_id: str | None = None
     project_id: UUID | None = None
     data: dict[str, Any] | None = None  # Additional context
+
+
+class Action(BaseModel):
+    """A reversible action for undo/redo functionality.
+
+    Records the before/after state to enable reverting changes.
+    See docs/07-user-experience.md for the reversibility UX principle.
+    """
+
+    id: int | None = None  # Set by database
+    action_type: ActionType
+    entity_type: EntityType
+    entity_id: str
+
+    # State snapshots (JSON) for undo/redo
+    previous_state: dict[str, Any] | None = None  # State before action (null for creates)
+    new_state: dict[str, Any] | None = None  # State after action (null for deletes)
+
+    # Scope
+    project_id: UUID | None = None
+
+    # Undo tracking
+    undone: bool = False
+    undone_at: datetime | None = None
+
+    # Attribution
+    actor_type: ActorType = ActorType.USER
+    actor_id: str | None = None  # Worker ID if actor_type='worker'
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=utc_now)
+
+    def description(self) -> str:
+        """Generate a human-readable description of the action."""
+        action_descriptions = {
+            ActionType.TASK_CREATED: "Task created",
+            ActionType.TASK_UPDATED: "Task updated",
+            ActionType.TASK_DELETED: "Task deleted",
+            ActionType.TASK_STATUS_CHANGED: "Task status changed",
+            ActionType.WORKER_ASSIGNED: "Worker assigned",
+            ActionType.WORKER_UNASSIGNED: "Worker unassigned",
+            ActionType.WORKER_CREATED: "Worker created",
+            ActionType.WORKER_UPDATED: "Worker updated",
+            ActionType.WORKER_DELETED: "Worker deleted",
+            ActionType.DEPENDENCY_CREATED: "Dependency created",
+            ActionType.DEPENDENCY_DELETED: "Dependency deleted",
+            ActionType.PROJECT_CREATED: "Project created",
+            ActionType.PROJECT_UPDATED: "Project updated",
+            ActionType.PROJECT_DELETED: "Project deleted",
+            ActionType.BULK_STATUS_CHANGED: "Bulk status change",
+            ActionType.BULK_DELETED: "Bulk delete",
+        }
+        return action_descriptions.get(self.action_type, str(self.action_type))

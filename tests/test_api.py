@@ -2621,3 +2621,214 @@ class TestGraphAPI:
 
         assert data["stats"]["total_nodes"] == 2
         assert data["stats"]["status_draft"] >= 1 or data["stats"]["status_ready"] >= 1
+
+
+class TestUndoAPI:
+    """Tests for undo/redo API."""
+
+    async def test_get_history_empty(self, client: AsyncClient):
+        """Test getting history when no actions exist."""
+        response = await client.get("/api/undo/history")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["actions"] == []
+        assert data["can_undo"] is False
+        assert data["can_redo"] is False
+
+    async def test_get_last_undoable_empty(self, client: AsyncClient):
+        """Test getting last undoable when nothing to undo."""
+        response = await client.get("/api/undo/last")
+        assert response.status_code == 200
+        assert response.json() is None
+
+    async def test_undo_nothing(self, client: AsyncClient):
+        """Test undo when nothing to undo."""
+        response = await client.post("/api/undo")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert data["message"] == "Nothing to undo"
+
+    async def test_redo_nothing(self, client: AsyncClient):
+        """Test redo when nothing to redo."""
+        response = await client.post("/api/undo/redo")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is False
+        assert data["message"] == "Nothing to redo"
+
+    async def test_record_and_undo_task_create(self, client: AsyncClient, app_with_db):
+        """Test recording a task creation action and undoing it."""
+        from ringmaster.db.repositories import ActionRepository
+        from ringmaster.domain import Action, ActionType, EntityType
+
+        app, db = app_with_db
+
+        # Create a project first
+        project_response = await client.post(
+            "/api/projects", json={"name": "Undo Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create a task
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task to Undo"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Manually record the action (in real usage, the task API would do this)
+        action_repo = ActionRepository(db)
+        action = Action(
+            action_type=ActionType.TASK_CREATED,
+            entity_type=EntityType.TASK,
+            entity_id=task_id,
+            previous_state=None,
+            new_state={
+                "id": task_id,
+                "project_id": project_id,
+                "title": "Task to Undo",
+                "type": "task",
+                "priority": "P2",
+                "status": "draft",
+            },
+            project_id=project_id,
+        )
+        await action_repo.record(action)
+
+        # Verify action is in history
+        response = await client.get("/api/undo/history")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["actions"]) == 1
+        assert data["can_undo"] is True
+        assert data["actions"][0]["action_type"] == "task_created"
+
+        # Undo the task creation
+        response = await client.post("/api/undo")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["message"] == "Undone: Task created"
+
+        # Verify task is deleted
+        response = await client.get(f"/api/tasks/{task_id}")
+        assert response.status_code == 404
+
+        # Verify history shows action is undone
+        response = await client.get("/api/undo/history?include_undone=true")
+        data = response.json()
+        assert data["actions"][0]["undone"] is True
+
+    async def test_undo_and_redo_task_update(self, client: AsyncClient, app_with_db):
+        """Test undoing and redoing a task status update."""
+        from ringmaster.db.repositories import ActionRepository
+        from ringmaster.domain import Action, ActionType, EntityType
+
+        app, db = app_with_db
+
+        # Create a project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Undo Update Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create a task
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task for Status Change"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Change task status to ready
+        await client.post("/api/queue/enqueue", json={"task_id": task_id})
+
+        # Record the status change action
+        action_repo = ActionRepository(db)
+        action = Action(
+            action_type=ActionType.TASK_STATUS_CHANGED,
+            entity_type=EntityType.TASK,
+            entity_id=task_id,
+            previous_state={"status": "draft"},
+            new_state={"status": "ready"},
+            project_id=project_id,
+        )
+        await action_repo.record(action)
+
+        # Undo the status change
+        response = await client.post("/api/undo")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify task is back to draft
+        response = await client.get(f"/api/tasks/{task_id}")
+        assert response.json()["status"] == "draft"
+
+        # Now redo the change
+        response = await client.post("/api/undo/redo")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+
+        # Verify task is ready again
+        response = await client.get(f"/api/tasks/{task_id}")
+        assert response.json()["status"] == "ready"
+
+    async def test_history_filtered_by_project(self, client: AsyncClient, app_with_db):
+        """Test that history can be filtered by project."""
+        from ringmaster.db.repositories import ActionRepository
+        from ringmaster.domain import Action, ActionType, EntityType
+
+        app, db = app_with_db
+
+        # Create two projects
+        project1_response = await client.post(
+            "/api/projects", json={"name": "Project 1"}
+        )
+        project1_id = project1_response.json()["id"]
+
+        project2_response = await client.post(
+            "/api/projects", json={"name": "Project 2"}
+        )
+        project2_id = project2_response.json()["id"]
+
+        # Record actions for both projects
+        action_repo = ActionRepository(db)
+
+        action1 = Action(
+            action_type=ActionType.TASK_CREATED,
+            entity_type=EntityType.TASK,
+            entity_id="task-1",
+            new_state={"id": "task-1", "project_id": project1_id, "title": "Task 1", "type": "task"},
+            project_id=project1_id,
+        )
+        await action_repo.record(action1)
+
+        action2 = Action(
+            action_type=ActionType.TASK_CREATED,
+            entity_type=EntityType.TASK,
+            entity_id="task-2",
+            new_state={"id": "task-2", "project_id": project2_id, "title": "Task 2", "type": "task"},
+            project_id=project2_id,
+        )
+        await action_repo.record(action2)
+
+        # Get history for project 1 only
+        response = await client.get(f"/api/undo/history?project_id={project1_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["actions"]) == 1
+        assert data["actions"][0]["entity_id"] == "task-1"
+
+        # Get history for project 2 only
+        response = await client.get(f"/api/undo/history?project_id={project2_id}")
+        data = response.json()
+        assert len(data["actions"]) == 1
+        assert data["actions"][0]["entity_id"] == "task-2"
+
+        # Get all history (no project filter)
+        response = await client.get("/api/undo/history")
+        data = response.json()
+        assert len(data["actions"]) == 2

@@ -17,6 +17,7 @@ from ringmaster.api.routes import (
     projects,
     queue,
     tasks,
+    undo,
     workers,
     ws,
 )
@@ -71,6 +72,7 @@ def create_app() -> FastAPI:
     app.include_router(input.router, prefix="/api/input", tags=["input"])
     app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
     app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
+    app.include_router(undo.router, tags=["undo"])  # Already has /api/undo prefix
     app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/health")
