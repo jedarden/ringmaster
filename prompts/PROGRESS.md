@@ -966,6 +966,7 @@ Implemented shortcuts:
 | 78 | 2026-01-27 | Add task search to command palette: fetch up to 50 recent tasks when palette opens, add task commands (filtered to exclude epics, limited to 30 results), clicking a task navigates to its project with task query param; populates the previously unused "task" category in command palette; all 638 tests passing |
 | 79 | 2026-01-27 | Add j/k keyboard navigation to QueuePage: j/k keys navigate ready tasks list, Enter opens selected task's project, keyboard-selected class for visual highlight, keyboard hint explaining shortcuts; aligns with ProjectsPage and WorkersPage navigation patterns; all 638 tests passing |
 | 80 | 2026-01-27 | Enhance project creation form: add repository URL field, add tech stack field with interactive tag input (Enter key adds, × removes), add Cancel button, form labels and better placeholder text, CSS styles for form groups/tech tags/cancel button; all 638 tests passing |
+| 81 | 2026-01-27 | Add project pinning to mailbox: pinned field on Project model, migration 012_project_pinned.sql, POST /pin and /unpin endpoints, pinned projects sort to top of list, frontend pin toggle button with visual indicator, 5 new tests, total 643 tests passing |
 
 ## Blockers
 
