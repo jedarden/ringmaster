@@ -91,6 +91,13 @@ The Python-based implementation is now functional with all core components in pl
   - Fallback to task description when no summary
   - Configurable relevance threshold and max results
   - Token budgeting with truncation
+- ✅ **Context assembly observability** (per docs/04-context-enrichment.md Observability section)
+  - ContextAssemblyLog domain model for tracking assembly metrics
+  - Database table (migration 010) for storing logs
+  - ContextAssemblyLogRepository for CRUD and aggregation queries
+  - EnrichmentPipeline logs assembly events with timing and token usage
+  - API endpoints for querying logs, stats, and budget utilization alerts
+  - Cleanup endpoint for old log pruning
 
 ### Scheduler (`src/ringmaster/scheduler/`)
 - ✅ Worker lifecycle management
@@ -819,6 +826,7 @@ Implemented shortcuts:
 | 61 | 2026-01-27 | Add LogsContextStage for debugging task context: per docs/04-context-enrichment.md section 6, enrichment pipeline now includes relevant logs for debugging-related tasks; keyword-based task detection (error, bug, fix, crash, etc.); fetches task-specific logs and project-level error/critical logs from last 24h; includes stack traces and error details; token budgeting with truncation; 14 new tests, total 481 tests passing |
 | 62 | 2026-01-27 | Add ResearchContextStage for prior agent outputs: per docs/04-context-enrichment.md section 2, enrichment pipeline now includes related completed task summaries; keyword-based relevance scoring with Jaccard similarity; queries session_metrics for output_summary from completed tasks; falls back to task description; token budgeting with truncation; 8-layer pipeline (task, project, code, deployment, history, logs, research, refinement); 17 new tests, total 498 tests passing |
 | 63 | 2026-01-27 | Add DocumentationContextStage for project documentation: per docs/04-context-enrichment.md section 3, enrichment pipeline now includes README, coding conventions, ADRs (filtered by relevance), API specs (for API tasks), and architecture docs; keyword-based ADR filtering; 9-layer pipeline; 19 new tests, total 517 tests passing |
+| 64 | 2026-01-27 | Add Context Assembly observability: ContextAssemblyLog domain model, migration 010, ContextAssemblyLogRepository with CRUD and stats queries, EnrichmentPipeline logs assembly metrics (timing, tokens, stages), /api/enricher routes for logs/stats/budget-alerts, cleanup endpoint; enables debugging and analysis of enrichment pipeline per docs/04-context-enrichment.md; 22 new tests, total 539 tests passing |
 
 ## Blockers
 
