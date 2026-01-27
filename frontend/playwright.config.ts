@@ -10,8 +10,14 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * To speed up tests, optimize individual test execution time rather than parallelization.
  *
- * NOTE: These tests require BOTH the frontend (Vite) and backend (Ringmaster API) to be running.
+ * NOTE: These tests require BOTH the frontend and backend (Ringmaster API) to be running.
  * The webServer config starts both servers automatically.
+ *
+ * E2E TEST SERVER STRATEGY (Iteration 104):
+ * - Uses PRODUCTION BUILD served via 'serve' package (port 4173) instead of Vite dev server
+ * - This addresses Vite dev server instability under Playwright test load (iteration 103 finding)
+ * - The 'serve' package provides a stable static file server that doesn't crash under test load
+ * - Frontend is built with VITE_API_URL=http://localhost:8000 for API connectivity
  */
 export default defineConfig({
   testDir: './e2e',
@@ -24,7 +30,7 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:4173',
     trace: 'on-first-retry',
     // Increase timeout for API interactions
     actionTimeout: 10000,
@@ -38,7 +44,7 @@ export default defineConfig({
     },
   ],
 
-  // Start both backend API and frontend dev server
+  // Start both backend API and frontend (production build served via 'serve')
   // Skip webServer if USE_EXISTING_SERVERS env var is set
   ...(!process.env.USE_EXISTING_SERVERS ? {
     webServer: [
@@ -50,10 +56,12 @@ export default defineConfig({
         timeout: 120000,
       },
       {
-        command: 'npm run dev',
-        url: 'http://localhost:5173',
+        // Use production build served by 'serve' package for stability
+        // This avoids Vite dev server crashes under test load (iteration 103 finding)
+        command: './serve-frontend-for-e2e.sh',
+        url: 'http://localhost:4173',
         reuseExistingServer: !process.env.CI,
-        timeout: 120000,
+        timeout: 180000, // Increased timeout for build + serve startup
       },
     ],
   } : {}),
