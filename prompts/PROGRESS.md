@@ -352,11 +352,31 @@ src/ringmaster/
 - ✅ CSS styles for epic child task components
 - ✅ Non-epic tasks (orphan tasks) displayed separately in kanban board
 
+### Bulk Task Operations (`frontend/src/pages/ProjectDetailPage.tsx`)
+- ✅ Task selection with checkboxes in kanban board
+- ✅ Select All / Deselect All buttons
+- ✅ Bulk operations toolbar (appears when tasks selected)
+- ✅ Bulk status change dropdown
+- ✅ Bulk priority change dropdown
+- ✅ Bulk worker assignment dropdown with unassign option
+- ✅ Bulk delete with confirmation
+- ✅ Loading state during bulk operations
+- ✅ Error handling with partial success reporting
+- ✅ Visual highlighting of selected tasks
+- ✅ CSS styles for bulk operations UI
+
+### Bulk Operations API (`src/ringmaster/api/routes/tasks.py`)
+- ✅ POST /api/tasks/bulk-update endpoint for bulk status/priority/assignment
+- ✅ POST /api/tasks/bulk-delete endpoint for bulk deletion
+- ✅ Validation: worker availability, epic assignment prevention
+- ✅ Graceful handling of invalid task IDs
+- ✅ Partial success reporting (updated, failed, errors)
+- ✅ 4 new integration tests
+
 ## Next Steps
 
 1. **Graph Editing**: Allow creating dependencies by dragging between nodes
-2. **Bulk Task Operations**: Add select/deselect all and bulk status/assignment updates
-3. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+2. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
 
 ## Iteration Log
 
@@ -392,6 +412,7 @@ src/ringmaster/
 | 28 | 2026-01-27 | Fix TypeScript error in DependencyGraph (useRef type), add nested subtask display in task cards: collapsible subtask section with expand/collapse toggle, subtask priority/status/title display, status and worker assignment dropdowns, delete button, color-coded border by status, CSS styles for subtask components |
 | 29 | 2026-01-27 | Add epic child tasks display: tasks grouped by parent epic, progress bar with completion percentage, collapsible child tasks section, expand/collapse toggle with task count, subtask count indicator, status/worker dropdowns, delete button, color-coded border by status, orphan tasks separate in kanban |
 | 30 | 2026-01-27 | Add worker integration tests: MockWorkerInterface/MockSessionHandle for CLI simulation, 14 new tests covering task execution flow, status transitions, output streaming, metrics recording, worker status updates, scheduler integration, unavailable worker handling, enrichment integration, total 236 tests passing |
+| 31 | 2026-01-27 | Add bulk task operations: POST /api/tasks/bulk-update and /bulk-delete endpoints, task selection checkboxes in kanban board, select all/deselect all buttons, bulk toolbar with status/priority/assignment dropdowns, bulk delete with confirmation, 4 new tests, total 240 tests passing |
 
 ## Blockers
 
