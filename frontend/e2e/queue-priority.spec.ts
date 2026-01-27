@@ -67,7 +67,7 @@ test.describe('Queue & Priority', () => {
     await createTestTask(project.id, {
       title: `Queue Test Task ${Date.now()}`,
       status: 'ready',
-      priority: 'p2',
+      priority: 'P2',
     });
 
     // Reload page to see the task
@@ -89,7 +89,7 @@ test.describe('Queue & Priority', () => {
     await createTestTask(project.id, {
       title: `Priority Task ${Date.now()}`,
       status: 'ready',
-      priority: 'p1',
+      priority: 'P1',
     });
 
     // Reload page
