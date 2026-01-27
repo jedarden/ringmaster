@@ -610,6 +610,20 @@ Implemented shortcuts:
 - ✅ Success clears retry tracking fields
 - ✅ 10 new tests covering backoff calculation and retry behavior
 
+### Worker Control Buttons (`frontend/src/pages/WorkersPage.tsx`)
+- ✅ POST /api/workers/{id}/cancel endpoint to cancel running task
+  - Cancels task, marks worker as idle, marks task as failed
+  - Emits WORKER_TASK_CANCELLED event
+- ✅ POST /api/workers/{id}/pause endpoint to pause worker gracefully
+  - Worker finishes current task then becomes offline
+  - Emits WORKER_PAUSED event
+- ✅ View Output button opens WorkerOutputPanel for busy workers
+- ✅ Pause button to gracefully stop worker after current iteration
+- ✅ Cancel button to immediately abort current task
+- ✅ cancelWorkerTask() and pauseWorker() API client functions
+- ✅ CSS styles for control buttons (view-output-btn, pause-btn, cancel-btn)
+- ✅ 4 new tests for cancel/pause endpoints
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -667,6 +681,7 @@ Implemented shortcuts:
 | 47 | 2026-01-27 | Add Git file history and diff API: Git operations module (get_file_history, get_file_diff, get_file_at_commit, is_git_repo), 3 new API endpoints for file git operations with path traversal protection, response models for commit info and diff hunks, 17 new tests, total 381 tests passing |
 | 48 | 2026-01-27 | Add Git History Frontend UI: GitHistoryModal component with commit list and time-ago formatting, FileDiffViewer with unified diff display and color-coded lines, TypeScript types for git API responses, API client functions (getFileHistory, getFileDiff, getFileAtCommit), History button integrated into FileBrowser file preview, CSS styles for modal and diff viewer |
 | 49 | 2026-01-27 | Add task auto-retry with exponential backoff: retry_after and last_failure_reason fields on Task/Subtask models, migration 008_retry_tracking.sql, calculate_retry_backoff() function (30s/60s/120s/...), get_ready_tasks() filters tasks in backoff period, TASK_RETRY event emission, success clears retry tracking, 10 new tests, total 391 tests passing |
+| 50 | 2026-01-27 | Add worker control buttons: POST /api/workers/{id}/cancel and /pause endpoints, WORKER_TASK_CANCELLED and WORKER_PAUSED event types, View Output/Pause/Cancel buttons in WorkersPage for busy workers, WorkerOutputPanel integration, CSS styling for control buttons, 4 new tests, total 395 tests passing |
 
 ## Blockers
 
