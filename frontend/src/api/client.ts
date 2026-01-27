@@ -36,6 +36,7 @@ import type {
   UserInputResponse,
   SuggestRelatedRequest,
   SuggestRelatedResponse,
+  FileUploadResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -362,7 +363,7 @@ export async function listMessages(
   searchParams.set("offset", (params.offset || 0).toString());
   if (params.since_id) searchParams.set("since_id", params.since_id.toString());
 
-  const response = await fetch(`${API_BASE}/projects/${projectId}/messages?${searchParams}`);
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/messages?${searchParams}`);
   return handleResponse<ChatMessage[]>(response);
 }
 
@@ -370,7 +371,7 @@ export async function createMessage(
   projectId: string,
   data: MessageCreate
 ): Promise<ChatMessage> {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/messages`, {
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -386,7 +387,7 @@ export async function getRecentMessages(
   const params = new URLSearchParams({ count: count.toString() });
   if (taskId) params.set("task_id", taskId);
 
-  const response = await fetch(`${API_BASE}/projects/${projectId}/messages/recent?${params}`);
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/messages/recent?${params}`);
   return handleResponse<ChatMessage[]>(response);
 }
 
@@ -395,7 +396,7 @@ export async function getMessageCount(
   taskId?: string
 ): Promise<{ count: number }> {
   const params = taskId ? `?task_id=${taskId}` : "";
-  const response = await fetch(`${API_BASE}/projects/${projectId}/messages/count${params}`);
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/messages/count${params}`);
   return handleResponse<{ count: number }>(response);
 }
 
@@ -404,7 +405,7 @@ export async function listSummaries(
   taskId?: string
 ): Promise<Summary[]> {
   const params = taskId ? `?task_id=${taskId}` : "";
-  const response = await fetch(`${API_BASE}/projects/${projectId}/summaries${params}`);
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/summaries${params}`);
   return handleResponse<Summary[]>(response);
 }
 
@@ -413,7 +414,7 @@ export async function getLatestSummary(
   taskId?: string
 ): Promise<Summary> {
   const params = taskId ? `?task_id=${taskId}` : "";
-  const response = await fetch(`${API_BASE}/projects/${projectId}/summaries/latest${params}`);
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/summaries/latest${params}`);
   return handleResponse<Summary>(response);
 }
 
@@ -421,7 +422,7 @@ export async function getHistoryContext(
   projectId: string,
   request?: HistoryContextRequest
 ): Promise<HistoryContextResponse> {
-  const response = await fetch(`${API_BASE}/projects/${projectId}/context`, {
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/context`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(request || {}),
@@ -434,10 +435,34 @@ export async function clearSummaries(
   afterId = 0
 ): Promise<{ deleted: number }> {
   const params = new URLSearchParams({ after_id: afterId.toString() });
-  const response = await fetch(`${API_BASE}/projects/${projectId}/summaries?${params}`, {
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/summaries?${params}`, {
     method: "DELETE",
   });
   return handleResponse<{ deleted: number }>(response);
+}
+
+// File Upload API
+
+export async function uploadFile(
+  projectId: string,
+  file: File
+): Promise<FileUploadResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse<FileUploadResponse>(response);
+}
+
+export async function getUploadedFileMetadata(
+  projectId: string,
+  filename: string
+): Promise<FileUploadResponse> {
+  const response = await fetch(`${API_BASE}/chat/projects/${projectId}/uploads/${encodeURIComponent(filename)}`);
+  return handleResponse<FileUploadResponse>(response);
 }
 
 // File Browser API

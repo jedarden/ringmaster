@@ -1,9 +1,13 @@
 """Chat API routes for message storage and RLM context enrichment."""
 
+import hashlib
+import mimetypes
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
@@ -16,6 +20,21 @@ from ringmaster.enricher.rlm import (
 from ringmaster.events import EventType, event_bus
 
 router = APIRouter()
+
+# File upload configuration
+UPLOAD_DIR = Path("uploads")
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_MIME_TYPES = {
+    # Images
+    "image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml",
+    # Documents
+    "application/pdf", "text/plain", "text/markdown",
+    # Code
+    "text/x-python", "application/javascript", "text/javascript",
+    "application/json", "text/html", "text/css",
+    # Archives
+    "application/zip", "application/gzip",
+}
 
 
 class MessageCreate(BaseModel):
@@ -220,3 +239,117 @@ async def clear_summaries(
     repo = ChatRepository(db)
     deleted = await repo.delete_summaries_after(project_id=project_id, start_id=after_id)
     return {"deleted": deleted}
+
+
+class FileUploadResponse(BaseModel):
+    """Response for successful file upload."""
+
+    path: str  # Relative path to uploaded file
+    filename: str  # Original filename
+    size: int
+    mime_type: str
+    media_type: str  # Simplified type: image, document, code, archive
+
+
+def get_media_type(mime_type: str) -> str:
+    """Convert MIME type to simplified media type."""
+    if mime_type.startswith("image/"):
+        return "image"
+    if mime_type in {"application/pdf", "text/plain", "text/markdown"}:
+        return "document"
+    if mime_type in {"text/x-python", "application/javascript", "text/javascript",
+                     "application/json", "text/html", "text/css"}:
+        return "code"
+    if mime_type in {"application/zip", "application/gzip"}:
+        return "archive"
+    return "file"
+
+
+@router.post("/projects/{project_id}/upload", status_code=201)
+async def upload_file(
+    project_id: UUID,
+    file: UploadFile,
+) -> FileUploadResponse:
+    """Upload a file for attachment to chat messages.
+
+    Files are stored in uploads/{project_id}/{timestamp}_{hash}_{filename}.
+    Returns the path to use as media_path when creating a message.
+    """
+    # Validate file size (read to check, then seek back)
+    contents = await file.read()
+    size = len(contents)
+
+    if size > MAX_UPLOAD_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)}MB.",
+        )
+
+    if size == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    # Determine MIME type
+    mime_type = file.content_type
+    if not mime_type or mime_type == "application/octet-stream":
+        # Try to guess from filename
+        guessed, _ = mimetypes.guess_type(file.filename or "")
+        mime_type = guessed or "application/octet-stream"
+
+    # Validate MIME type (allow any for now, but categorize)
+    # In production, you might want to restrict to ALLOWED_MIME_TYPES
+    media_type = get_media_type(mime_type)
+
+    # Create upload directory
+    project_upload_dir = UPLOAD_DIR / str(project_id)
+    project_upload_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate unique filename
+    content_hash = hashlib.sha256(contents).hexdigest()[:12]
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    safe_filename = "".join(c if c.isalnum() or c in ".-_" else "_" for c in (file.filename or "file"))
+    unique_filename = f"{timestamp}_{content_hash}_{safe_filename}"
+
+    # Write file
+    file_path = project_upload_dir / unique_filename
+    file_path.write_bytes(contents)
+
+    # Return relative path
+    relative_path = str(file_path)
+
+    return FileUploadResponse(
+        path=relative_path,
+        filename=file.filename or "file",
+        size=size,
+        mime_type=mime_type,
+        media_type=media_type,
+    )
+
+
+@router.get("/projects/{project_id}/uploads/{filename}")
+async def get_uploaded_file(
+    project_id: UUID,
+    filename: str,
+) -> FileUploadResponse:
+    """Get metadata for an uploaded file."""
+    file_path = UPLOAD_DIR / str(project_id) / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Security: ensure path is within upload directory
+    try:
+        file_path.resolve().relative_to((UPLOAD_DIR / str(project_id)).resolve())
+    except ValueError as err:
+        raise HTTPException(status_code=403, detail="Access denied") from err
+
+    stat = file_path.stat()
+    mime_type, _ = mimetypes.guess_type(str(file_path))
+    mime_type = mime_type or "application/octet-stream"
+
+    return FileUploadResponse(
+        path=str(file_path),
+        filename=filename,
+        size=stat.st_size,
+        mime_type=mime_type,
+        media_type=get_media_type(mime_type),
+    )

@@ -373,3 +373,13 @@ export interface SuggestRelatedRequest {
 export interface SuggestRelatedResponse {
   related_tasks: RelatedTaskInfo[];
 }
+
+// File upload types
+
+export interface FileUploadResponse {
+  path: string;
+  filename: string;
+  size: number;
+  mime_type: string;
+  media_type: "image" | "document" | "code" | "archive" | "file";
+}

@@ -858,6 +858,215 @@ class TestChatAPI:
         assert "deleted" in response.json()
 
 
+class TestFileUploadAPI:
+    """Tests for file upload API."""
+
+    async def test_upload_text_file(self, client: AsyncClient):
+        """Test uploading a text file."""
+        import contextlib
+        import io
+        from pathlib import Path
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Upload Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create file content
+        content = b"print('Hello, World!')"
+        files = {"file": ("test.py", io.BytesIO(content), "text/x-python")}
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["filename"] == "test.py"
+        assert data["size"] == len(content)
+        assert data["media_type"] == "code"
+        assert "path" in data
+
+        # Clean up uploaded file
+        with contextlib.suppress(FileNotFoundError):
+            Path(data["path"]).unlink()
+
+    async def test_upload_image_file(self, client: AsyncClient):
+        """Test uploading an image file."""
+        import contextlib
+        import io
+        from pathlib import Path
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Image Upload Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Minimal PNG (1x1 transparent pixel)
+        png_data = bytes([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,  # IDAT chunk
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,  # IEND chunk
+            0x42, 0x60, 0x82,
+        ])
+        files = {"file": ("test.png", io.BytesIO(png_data), "image/png")}
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["filename"] == "test.png"
+        assert data["media_type"] == "image"
+        assert data["mime_type"] == "image/png"
+
+        # Clean up
+        with contextlib.suppress(FileNotFoundError):
+            Path(data["path"]).unlink()
+
+    async def test_upload_empty_file_rejected(self, client: AsyncClient):
+        """Test that empty files are rejected."""
+        import io
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Empty File Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        files = {"file": ("empty.txt", io.BytesIO(b""), "text/plain")}
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert response.status_code == 400
+        assert "empty" in response.json()["detail"].lower()
+
+    async def test_upload_file_too_large_rejected(self, client: AsyncClient):
+        """Test that files exceeding size limit are rejected."""
+        import io
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Large File Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create 11MB file (limit is 10MB)
+        large_content = b"x" * (11 * 1024 * 1024)
+        files = {"file": ("large.bin", io.BytesIO(large_content), "application/octet-stream")}
+
+        response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert response.status_code == 413
+        assert "too large" in response.json()["detail"].lower()
+
+    async def test_upload_creates_message_with_attachment(self, client: AsyncClient):
+        """Test creating a message with an uploaded file attachment."""
+        import contextlib
+        import io
+        from pathlib import Path
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Attachment Message Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Upload a file
+        content = b"Configuration data"
+        files = {"file": ("config.json", io.BytesIO(content), "application/json")}
+
+        upload_response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert upload_response.status_code == 201
+        upload_data = upload_response.json()
+
+        # Create message with attachment
+        message_response = await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "role": "user",
+                "content": "Here's the config file",
+                "media_type": upload_data["media_type"],
+                "media_path": upload_data["path"],
+            },
+        )
+        assert message_response.status_code == 201
+        message_data = message_response.json()
+        assert message_data["media_type"] == "code"
+        assert message_data["media_path"] == upload_data["path"]
+
+        # Clean up
+        with contextlib.suppress(FileNotFoundError):
+            Path(upload_data["path"]).unlink()
+
+    async def test_get_uploaded_file_metadata(self, client: AsyncClient):
+        """Test getting metadata for an uploaded file."""
+        import contextlib
+        import io
+        from pathlib import Path
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "File Metadata Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Upload a file
+        content = b"Test document content"
+        files = {"file": ("doc.txt", io.BytesIO(content), "text/plain")}
+
+        upload_response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert upload_response.status_code == 201
+        upload_data = upload_response.json()
+
+        # Extract filename from path
+        filename = Path(upload_data["path"]).name
+
+        # Get file metadata
+        metadata_response = await client.get(
+            f"/api/chat/projects/{project_id}/uploads/{filename}"
+        )
+        assert metadata_response.status_code == 200
+        metadata = metadata_response.json()
+        assert metadata["size"] == len(content)
+
+        # Clean up
+        with contextlib.suppress(FileNotFoundError):
+            Path(upload_data["path"]).unlink()
+
+    async def test_get_uploaded_file_not_found(self, client: AsyncClient):
+        """Test getting metadata for non-existent file."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Not Found Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(
+            f"/api/chat/projects/{project_id}/uploads/nonexistent.txt"
+        )
+        assert response.status_code == 404
+
+
 class TestFileBrowserAPI:
     """Tests for file browser API."""
 

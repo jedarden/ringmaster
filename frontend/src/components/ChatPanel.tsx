@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { listMessages, createMessage, getMessageCount } from "../api/client";
+import { listMessages, createMessage, getMessageCount, uploadFile } from "../api/client";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
-import type { ChatMessage, MessageCreate } from "../types";
+import type { ChatMessage, MessageCreate, FileUploadResponse } from "../types";
 
 interface ChatPanelProps {
   projectId: string;
   taskId?: string | null;
+}
+
+interface PendingAttachment {
+  file: File;
+  uploadResponse: FileUploadResponse | null;
+  uploading: boolean;
+  error: string | null;
 }
 
 export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
@@ -16,8 +23,10 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageCount, setMessageCount] = useState(0);
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Speech recognition for voice input
   const {
@@ -52,8 +61,8 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
           task_id: eventTaskId,
           role: data.role as "user" | "assistant" | "system",
           content: data.content as string,
-          media_type: null,
-          media_path: null,
+          media_type: (data.media_type as string) || null,
+          media_path: (data.media_path as string) || null,
           token_count: null,
           created_at: (data.created_at as string) || new Date().toISOString(),
         };
@@ -100,20 +109,67 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File too large. Maximum size is 10MB.");
+      return;
+    }
+
+    setPendingAttachment({
+      file,
+      uploadResponse: null,
+      uploading: true,
+      error: null,
+    });
+
+    try {
+      const response = await uploadFile(projectId, file);
+      setPendingAttachment((prev) =>
+        prev ? { ...prev, uploadResponse: response, uploading: false } : null
+      );
+    } catch (err) {
+      setPendingAttachment((prev) =>
+        prev
+          ? { ...prev, uploading: false, error: err instanceof Error ? err.message : "Upload failed" }
+          : null
+      );
+    }
+
+    // Clear the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAttachment = () => {
+    setPendingAttachment(null);
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || sending) return;
+    const hasContent = newMessage.trim();
+    const hasAttachment = pendingAttachment?.uploadResponse;
+
+    if ((!hasContent && !hasAttachment) || sending) return;
 
     try {
       setSending(true);
+      const uploadResponse = pendingAttachment?.uploadResponse;
       const messageData: MessageCreate = {
         project_id: projectId,
         task_id: taskId ?? null,
         role: "user",
-        content: newMessage.trim(),
+        content: newMessage.trim() || (uploadResponse ? `[Attached: ${pendingAttachment.file.name}]` : ""),
+        media_type: uploadResponse ? uploadResponse.media_type : undefined,
+        media_path: uploadResponse ? uploadResponse.path : undefined,
       };
       await createMessage(projectId, messageData);
       setNewMessage("");
+      setPendingAttachment(null);
       // Note: The new message will appear via WebSocket event
       // No need to reload all messages
     } catch (err) {
@@ -126,6 +182,12 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
   const formatTime = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const getRoleIcon = (role: string) => {
@@ -141,6 +203,21 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
     }
   };
 
+  const getMediaIcon = (mediaType: string) => {
+    switch (mediaType) {
+      case "image":
+        return "\uD83D\uDDBC\uFE0F"; // framed picture
+      case "document":
+        return "\uD83D\uDCC4"; // document
+      case "code":
+        return "\uD83D\uDCDD"; // memo
+      case "archive":
+        return "\uD83D\uDCE6"; // package
+      default:
+        return "\uD83D\uDCC1"; // folder
+    }
+  };
+
   const handleVoiceToggle = () => {
     if (isListening) {
       stopListening();
@@ -149,8 +226,14 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
     }
   };
 
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
   // Display value: show interim transcript while listening, otherwise the composed message
   const displayValue = isListening && transcript ? newMessage + (newMessage ? " " : "") + transcript : newMessage;
+
+  const canSend = (displayValue.trim() || pendingAttachment?.uploadResponse) && !sending;
 
   return (
     <div className="chat-panel">
@@ -183,9 +266,13 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
                   <span className="message-time">{formatTime(msg.created_at)}</span>
                 </div>
                 <div className="message-text">{msg.content}</div>
-                {msg.media_type && (
-                  <div className="message-media">
-                    <span className="media-badge">{msg.media_type}</span>
+                {msg.media_type && msg.media_path && (
+                  <div className="message-attachment">
+                    <span className="attachment-icon">{getMediaIcon(msg.media_type)}</span>
+                    <span className="attachment-info">
+                      <span className="attachment-type">{msg.media_type}</span>
+                      <span className="attachment-name">{msg.media_path.split("/").pop()}</span>
+                    </span>
                   </div>
                 )}
               </div>
@@ -195,7 +282,60 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
         <div ref={messagesEndRef} />
       </div>
 
+      {pendingAttachment && (
+        <div className="chat-attachment-preview">
+          {pendingAttachment.uploading ? (
+            <span className="attachment-uploading">Uploading {pendingAttachment.file.name}...</span>
+          ) : pendingAttachment.error ? (
+            <span className="attachment-error">
+              Failed to upload: {pendingAttachment.error}
+              <button
+                type="button"
+                onClick={handleRemoveAttachment}
+                className="attachment-remove"
+                aria-label="Remove attachment"
+              >
+                x
+              </button>
+            </span>
+          ) : pendingAttachment.uploadResponse ? (
+            <span className="attachment-ready">
+              <span className="attachment-icon">{getMediaIcon(pendingAttachment.uploadResponse.media_type)}</span>
+              <span className="attachment-details">
+                <span className="attachment-filename">{pendingAttachment.file.name}</span>
+                <span className="attachment-size">{formatFileSize(pendingAttachment.uploadResponse.size)}</span>
+              </span>
+              <button
+                type="button"
+                onClick={handleRemoveAttachment}
+                className="attachment-remove"
+                aria-label="Remove attachment"
+              >
+                x
+              </button>
+            </span>
+          ) : null}
+        </div>
+      )}
+
       <form onSubmit={handleSend} className="chat-input-form">
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          style={{ display: "none" }}
+          accept="image/*,.pdf,.txt,.md,.py,.js,.ts,.tsx,.json,.html,.css,.zip,.gz"
+        />
+        <button
+          type="button"
+          onClick={handleAttachClick}
+          disabled={sending || pendingAttachment?.uploading}
+          className="chat-attach-btn"
+          title="Attach file"
+          aria-label="Attach file"
+        >
+          {"\uD83D\uDCCE"}
+        </button>
         <input
           ref={inputRef}
           type="text"
@@ -217,7 +357,7 @@ export function ChatPanel({ projectId, taskId }: ChatPanelProps) {
             {isListening ? "..." : "\uD83C\uDFA4"}
           </button>
         )}
-        <button type="submit" disabled={sending || !displayValue.trim()} className="chat-send-btn">
+        <button type="submit" disabled={!canSend} className="chat-send-btn">
           {sending ? "..." : "Send"}
         </button>
       </form>
