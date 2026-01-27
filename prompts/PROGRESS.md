@@ -373,10 +373,21 @@ src/ringmaster/
 - ✅ Partial success reporting (updated, failed, errors)
 - ✅ 4 new integration tests
 
+### Interactive Graph Editing (`frontend/src/components/DependencyGraph.tsx`)
+- ✅ Drag-to-create dependencies: click connector (+) on node and drag to target
+- ✅ Visual feedback during drag with dashed line preview
+- ✅ Right-click context menu on edges to delete dependencies
+- ✅ DELETE /api/tasks/{task_id}/dependencies/{parent_id} endpoint
+- ✅ removeTaskDependency function in frontend API client
+- ✅ remove_dependency method in TaskRepository
+- ✅ Instructions bar explaining interactions
+- ✅ Error notification for failed operations
+- ✅ 2 new integration tests
+
 ## Next Steps
 
-1. **Graph Editing**: Allow creating dependencies by dragging between nodes
-2. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+2. **Keyboard shortcuts**: Implement vim-style navigation per UX spec (g m, g a, j/k, etc.)
 
 ## Iteration Log
 
@@ -413,6 +424,7 @@ src/ringmaster/
 | 29 | 2026-01-27 | Add epic child tasks display: tasks grouped by parent epic, progress bar with completion percentage, collapsible child tasks section, expand/collapse toggle with task count, subtask count indicator, status/worker dropdowns, delete button, color-coded border by status, orphan tasks separate in kanban |
 | 30 | 2026-01-27 | Add worker integration tests: MockWorkerInterface/MockSessionHandle for CLI simulation, 14 new tests covering task execution flow, status transitions, output streaming, metrics recording, worker status updates, scheduler integration, unavailable worker handling, enrichment integration, total 236 tests passing |
 | 31 | 2026-01-27 | Add bulk task operations: POST /api/tasks/bulk-update and /bulk-delete endpoints, task selection checkboxes in kanban board, select all/deselect all buttons, bulk toolbar with status/priority/assignment dropdowns, bulk delete with confirmation, 4 new tests, total 240 tests passing |
+| 32 | 2026-01-27 | Add interactive graph editing: drag-to-create dependencies via connector (+) points, right-click context menu to delete edges, DELETE dependency endpoint, visual feedback during drag, instructions bar, error notifications, 2 new tests, total 242 tests passing |
 
 ## Blockers
 
