@@ -755,9 +755,27 @@ Implemented shortcuts:
   - Integrates with WorkerMonitor from worker/monitor.py
 - ✅ 5 new integration tests for health endpoint
 
+### Model Routing (`src/ringmaster/queue/routing.py`)
+- ✅ Task complexity estimation with deterministic heuristics (no LLM calls)
+  - File count detection from task description
+  - Keyword analysis (simple vs complex signals)
+  - Task type scoring (epic +2, subtask -1)
+  - Priority scoring (P0 +1)
+  - Description length scoring
+- ✅ TaskComplexity enum (simple, moderate, complex)
+- ✅ ModelTier enum (fast, balanced, powerful)
+- ✅ ComplexitySignals dataclass with transparent scoring breakdown
+- ✅ Model suggestions per tier for different worker types (claude-code, aider, codex, goose)
+- ✅ GET /api/tasks/{id}/routing endpoint
+  - Returns complexity, tier, reasoning, suggested models
+  - Optional worker_type param for specific model recommendations
+  - Signals breakdown for transparency
+- ✅ 33 unit tests + 5 API integration tests
+
 ## Next Steps
 
-1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+1. **Reasoning Bank**: Add task_outcomes database table for reflexion-based learning from task results
+2. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
 
 ## Iteration Log
 
@@ -829,6 +847,7 @@ Implemented shortcuts:
 | 64 | 2026-01-27 | Add Context Assembly observability: ContextAssemblyLog domain model, migration 010, ContextAssemblyLogRepository with CRUD and stats queries, EnrichmentPipeline logs assembly metrics (timing, tokens, stages), /api/enricher routes for logs/stats/budget-alerts, cleanup endpoint; enables debugging and analysis of enrichment pipeline per docs/04-context-enrichment.md; 22 new tests, total 539 tests passing |
 | 65 | 2026-01-27 | Code cleanup: fix linting errors in test_documentation_context.py (remove unused tempfile import and unused variable), remove stale TODO comment from enricher pipeline (code context already implemented via CodeContextExtractor); all 539 tests passing |
 | 66 | 2026-01-27 | Make worktree base branch configurable per project: uses project.settings.get("base_branch", "main") allowing projects to specify their default branch (e.g., "master", "develop"); all 539 tests passing |
+| 67 | 2026-01-27 | Add model routing based on task complexity: deterministic heuristics for complexity estimation (file count, keywords, task type, priority), TaskComplexity/ModelTier enums, select_model_for_task(), GET /api/tasks/{id}/routing endpoint with worker_type param; per docs/08-open-architecture.md section 11; 38 new tests, total 577 tests passing |
 
 ## Blockers
 
