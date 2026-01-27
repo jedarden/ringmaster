@@ -682,3 +682,94 @@ async def resubmit_task(
         decomposed=decomposed,
         subtasks_created=subtasks_created,
     )
+
+
+class RoutingSignals(BaseModel):
+    """Signals used to determine task complexity."""
+
+    file_count: int
+    dependency_count: int
+    description_length: int
+    simple_keyword_matches: int
+    complex_keyword_matches: int
+    is_epic: bool
+    is_subtask: bool
+    is_critical: bool
+    raw_score: int
+
+
+class RoutingRecommendation(BaseModel):
+    """Model routing recommendation for a task."""
+
+    task_id: str
+    complexity: str  # simple, moderate, complex
+    tier: str  # fast, balanced, powerful
+    reasoning: str
+    suggested_models: list[str]
+    signals: RoutingSignals
+
+
+@router.get("/{task_id}/routing")
+async def get_routing_recommendation(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+    worker_type: str | None = Query(
+        None, description="Worker type for specific model recommendation"
+    ),
+) -> RoutingRecommendation:
+    """Get model routing recommendation for a task.
+
+    Analyzes task complexity and suggests appropriate model tier.
+    Uses deterministic heuristics based on file count, keywords,
+    task type, and priority.
+
+    Args:
+        task_id: The task ID to analyze.
+        worker_type: Optional worker type (claude-code, aider, codex, goose)
+            for specific model recommendations.
+
+    Returns:
+        RoutingRecommendation with complexity analysis and model suggestions.
+    """
+    from ringmaster.queue.routing import (
+        get_model_for_worker_type,
+        select_model_for_task,
+    )
+
+    task_repo = TaskRepository(db)
+
+    task = await task_repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Get routing decision
+    result = select_model_for_task(task)
+
+    # If worker type specified, get specific model
+    suggested_models = result.suggested_models.copy()
+    if worker_type:
+        specific_model = get_model_for_worker_type(result.tier, worker_type)
+        if specific_model:
+            # Put the specific model first
+            suggested_models = [specific_model] + [
+                m for m in suggested_models if m != specific_model
+            ]
+
+    return RoutingRecommendation(
+        task_id=task_id,
+        complexity=result.complexity.value,
+        tier=result.tier.value,
+        reasoning=result.reasoning,
+        suggested_models=suggested_models,
+        signals=RoutingSignals(
+            file_count=result.signals.file_count,
+            dependency_count=result.signals.dependency_count,
+            description_length=result.signals.description_length,
+            simple_keyword_matches=result.signals.simple_keyword_matches,
+            complex_keyword_matches=result.signals.complex_keyword_matches,
+            is_epic=result.signals.is_epic,
+            is_subtask=result.signals.is_subtask,
+            is_critical=result.signals.is_critical,
+            raw_score=result.signals.raw_score,
+        ),
+    )

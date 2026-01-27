@@ -886,6 +886,121 @@ class TestTasksAPI:
         assert len(data["errors"]) == 1
 
 
+class TestRoutingAPI:
+    """Tests for model routing API endpoint."""
+
+    async def test_routing_simple_task(self, client: AsyncClient):
+        """Test routing recommendation for a simple task."""
+        # Create project and simple task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Routing Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Fix typo",
+                "description": "Fix a typo in the README file",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        # Get routing recommendation
+        response = await client.get(f"/api/tasks/{task_id}/routing")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["task_id"] == task_id
+        assert data["complexity"] == "simple"
+        assert data["tier"] == "fast"
+        assert len(data["suggested_models"]) > 0
+        assert "signals" in data
+        assert data["signals"]["simple_keyword_matches"] >= 1  # "typo"
+
+    async def test_routing_complex_task(self, client: AsyncClient):
+        """Test routing recommendation for a complex task."""
+        project_response = await client.post(
+            "/api/projects", json={"name": "Complex Routing Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Architect new authentication system",
+                "description": "Migrate the auth module to use JWT. Refactor security layer. "
+                "Update database schema for new token storage.",
+                "priority": "P0",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        response = await client.get(f"/api/tasks/{task_id}/routing")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["complexity"] == "complex"
+        assert data["tier"] == "powerful"
+        assert data["signals"]["complex_keyword_matches"] >= 3
+        assert data["signals"]["is_critical"]
+
+    async def test_routing_with_worker_type(self, client: AsyncClient):
+        """Test routing with specific worker type returns appropriate model."""
+        project_response = await client.post(
+            "/api/projects", json={"name": "Worker Type Routing Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Moderate complexity task",
+                "description": "Implement a new feature",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        # Request with specific worker type
+        response = await client.get(
+            f"/api/tasks/{task_id}/routing", params={"worker_type": "claude-code"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should have claude-specific model as first suggestion
+        assert len(data["suggested_models"]) > 0
+        assert "claude" in data["suggested_models"][0].lower()
+
+    async def test_routing_not_found(self, client: AsyncClient):
+        """Test routing for non-existent task returns 404."""
+        response = await client.get("/api/tasks/bd-nonexistent/routing")
+        assert response.status_code == 404
+
+    async def test_routing_includes_reasoning(self, client: AsyncClient):
+        """Test that routing includes reasoning explanation."""
+        project_response = await client.post(
+            "/api/projects", json={"name": "Reasoning Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Test task"},
+        )
+        task_id = task_response.json()["id"]
+
+        response = await client.get(f"/api/tasks/{task_id}/routing")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert "reasoning" in data
+        assert "Score" in data["reasoning"]
+
+
 class TestWorkersAPI:
     """Tests for workers API - testing routes/workers.py."""
 
