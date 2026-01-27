@@ -1048,16 +1048,19 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
 | 91 | 2026-01-27 | **Container/Deployment**: Add production deployment artifacts - Dockerfile with multi-stage build, docker-compose.yml for local development, Kubernetes manifests (namespace, configmap, deployments, services, ingress, PVCs, kustomization), .dockerignore, k8s/README.md with deployment documentation. Addresses functional gap #6. 650 tests passing, linting clean. |
 | 92 | 2026-01-27 | **Live Worker Validation**: Ran live worker tests with actual Claude Code CLI. 5/6 tests passed, validating end-to-end worker execution (task execution, output streaming, status updates, worker availability). Fixed timeout test to be more realistic. Identified known issue: timeout enforcement bug in stream_output loop. Core functionality validated. |
 | 93 | 2026-01-27 | **E2E Scheduler Integration Tests**: Added comprehensive end-to-end integration tests for scheduler and worker execution flow. 8 new tests validating: task assignment to workers, multiple task handling, concurrent task limits, capability-based matching, health check detection, event emission, full task lifecycle transitions, and failure handling. All 658 tests passing (including 6 skipped live tests). Addresses functional gap #5 (Scheduler Task Assignment). |
+| 94 | 2026-01-27 | **Frontend-Backend Integration Validation**: Ran E2E Playwright tests against running backend. Identified that Playwright requires GUI libraries (libcairo, libgtk, etc.) for headless Chromium on Linux. Verified backend API health endpoints work correctly (/health returns 200, /api/projects returns empty list). Frontend builds successfully (364KB bundle) and passes ESLint with 0 errors. Documented E2E test requirements in README. |
 
 ## Current Status
 
 **Status**: ⚠️ FUNCTIONAL GAPS REMAIN (6/6 partially addressed)
 
-**Iteration 93 completed**: E2E scheduler integration tests added.
+**Iteration 94 completed**: Frontend-backend integration validation attempted.
 
 **Test Status**: 658 passed, 6 skipped (live tests), 1 warning (asyncio cleanup)
 
-**Linting**: All checks passed
+**Linting**: All checks passed (backend + frontend)
+
+**Frontend Build**: ✅ Production build successful (364KB bundle)
 
 ## Remaining Functional Gaps
 
@@ -1067,19 +1070,25 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
    - ✅ Core functionality proven: Workers can execute tasks, stream output, and report results
 2. **Enrichment Pipeline Real-World Testing** (OPEN): Not tested with actual project repositories
 3. **Hot-Reload Self-Improvement Loop** (OPEN): Theoretical only, not proven to work
-4. **Frontend-Backend Integration** (PARTIAL): E2E Playwright tests exist (35 tests) but need running backend to validate
+4. **Frontend-Backend Integration** (PARTIAL):
+   - ✅ Backend API verified working (health check, projects endpoint)
+   - ✅ Frontend builds successfully
+   - ✅ Frontend linting clean (0 errors)
+   - ✅ 35 Playwright E2E tests exist covering all major user flows
+   - ⚠️ Playwright tests require GUI libraries for headless Chromium (libcairo, libgtk, libnss, etc.)
+   - ⚠️ Tests cannot run in current devpod environment without additional dependencies
 5. **Scheduler Task Assignment** (COMPLETED): 8 new E2E integration tests validate full scheduler → worker → task execution flow
 6. **Container/Deployment** (COMPLETED): Dockerfile and K8s manifests added
 
 ## Recommended Next Steps
 
-1. **Create E2E frontend tests with backend**: Run Playwright tests against running backend server
-2. **Test enrichment on real repo**: Point enrichment pipeline at an actual codebase and validate output quality
-3. **Test hot-reload**: Have ringmaster modify and reload its own code (self-improvement flywheel)
-4. **Fix timeout enforcement bug**: The stream_output loop in SessionHandle doesn't properly enforce the overall timeout
+1. **Test enrichment on real repo**: Point enrichment pipeline at an actual codebase and validate output quality
+2. **Test hot-reload**: Have ringmaster modify and reload its own code (self-improvement flywheel)
+3. **Fix timeout enforcement bug**: The stream_output loop in SessionHandle doesn't properly enforce the overall timeout
+4. **Run Playwright E2E tests**: Requires installing GUI libraries or running in an environment with display server (Xvfb, VNC, or headed mode)
 
 ## Blockers
 
 **The project is NOT complete.** See "CRITICAL FUNCTIONAL GAPS" section above.
 
-Primary blocker: End-to-end validation with actual AI coding agents has not been fully verified.
+Primary blocker: Full E2E validation requires GUI libraries for Playwright tests or running tests in environment with display server.
