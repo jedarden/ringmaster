@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import type { Project, Worker } from "../types";
-import { listProjects, listWorkers } from "../api/client";
+import type { Project, Worker, AnyTask } from "../types";
+import { listProjects, listWorkers, listTasks } from "../api/client";
 
 interface Command {
   id: string;
@@ -28,9 +28,10 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const loadDynamicCommands = useCallback(async () => {
     setLoading(true);
     try {
-      const [projects, workers] = await Promise.all([
+      const [projects, workers, tasks] = await Promise.all([
         listProjects(),
         listWorkers(),
+        listTasks({ limit: 50 }), // Get recent tasks across all projects
       ]);
 
       const dynamicCommands: Command[] = [
@@ -92,6 +93,17 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
           category: "worker" as const,
           action: () => navigate(`/workers?highlight=${worker.id}`),
         })),
+
+        // Task commands - navigate to project with task highlighted
+        ...tasks
+          .filter((task: AnyTask) => task.type !== "epic") // Skip epics, show individual tasks
+          .slice(0, 30) // Limit to prevent overwhelming the palette
+          .map((task: AnyTask) => ({
+            id: `task-${task.id}`,
+            label: `Task: ${task.title}`,
+            category: "task" as const,
+            action: () => navigate(`/projects/${task.project_id}?task=${task.id}`),
+          })),
       ];
 
       setCommands(dynamicCommands);
