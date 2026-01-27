@@ -384,10 +384,32 @@ src/ringmaster/
 - ✅ Error notification for failed operations
 - ✅ 2 new integration tests
 
+### Keyboard Shortcuts (`frontend/src/hooks/useKeyboardShortcuts.ts`)
+- ✅ useKeyboardShortcuts hook for global keyboard handling
+- ✅ Support for key sequences (e.g., "g m" for go to mailbox)
+- ✅ useListNavigation hook for j/k navigation in lists
+- ✅ useDefaultShortcuts hook with standard shortcuts
+- ✅ CommandPalette component (Cmd+K or /) for quick navigation
+- ✅ ShortcutsHelp modal (?) showing all keyboard shortcuts
+- ✅ Pending sequence indicator during multi-key shortcuts
+- ✅ ProjectsPage with j/k navigation and Enter to open
+- ✅ WorkersPage with j/k navigation and Enter to toggle
+
+Implemented shortcuts:
+- g m: Go to mailbox (projects)
+- g a: Go to agents (workers)
+- g q: Go to queue
+- g d: Go to dashboard (metrics)
+- g l: Go to logs
+- j/k: Navigate up/down in lists
+- Enter: Open selected item
+- Cmd+K or /: Open command palette
+- ?: Show shortcuts help
+- Escape: Close modal or go back
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
-2. **Keyboard shortcuts**: Implement vim-style navigation per UX spec (g m, g a, j/k, etc.)
 
 ## Iteration Log
 
@@ -425,6 +447,7 @@ src/ringmaster/
 | 30 | 2026-01-27 | Add worker integration tests: MockWorkerInterface/MockSessionHandle for CLI simulation, 14 new tests covering task execution flow, status transitions, output streaming, metrics recording, worker status updates, scheduler integration, unavailable worker handling, enrichment integration, total 236 tests passing |
 | 31 | 2026-01-27 | Add bulk task operations: POST /api/tasks/bulk-update and /bulk-delete endpoints, task selection checkboxes in kanban board, select all/deselect all buttons, bulk toolbar with status/priority/assignment dropdowns, bulk delete with confirmation, 4 new tests, total 240 tests passing |
 | 32 | 2026-01-27 | Add interactive graph editing: drag-to-create dependencies via connector (+) points, right-click context menu to delete edges, DELETE dependency endpoint, visual feedback during drag, instructions bar, error notifications, 2 new tests, total 242 tests passing |
+| 33 | 2026-01-27 | Add keyboard shortcuts: useKeyboardShortcuts hook with sequence support (g m, g a), useListNavigation for j/k, CommandPalette (Cmd+K), ShortcutsHelp modal (?), pending sequence indicator, ProjectsPage/WorkersPage with j/k navigation |
 
 ## Blockers
 
