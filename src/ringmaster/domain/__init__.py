@@ -12,6 +12,7 @@ from ringmaster.domain.enums import (
 from ringmaster.domain.models import (
     Action,
     ChatMessage,
+    ContextAssemblyLog,
     Decision,
     Dependency,
     Epic,
@@ -32,6 +33,7 @@ __all__ = [
     "TaskType",
     "WorkerStatus",
     "Action",
+    "ContextAssemblyLog",
     "Project",
     "Epic",
     "Task",

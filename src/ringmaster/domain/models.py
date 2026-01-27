@@ -289,3 +289,41 @@ class Action(BaseModel):
             ActionType.BULK_DELETED: "Bulk delete",
         }
         return action_descriptions.get(self.action_type, str(self.action_type))
+
+
+class ContextAssemblyLog(BaseModel):
+    """Log entry for context assembly observability.
+
+    Per docs/04-context-enrichment.md "Observability" section:
+    Tracks what context is being assembled for each task to enable
+    debugging, analysis, and improvement of the enrichment pipeline.
+    """
+
+    id: int | None = None
+
+    # Task and project reference
+    task_id: str
+    project_id: UUID
+
+    # Assembly metrics
+    sources_queried: list[str] = Field(default_factory=list)  # Source names queried
+    candidates_found: int = 0  # Total candidate items found
+    items_included: int = 0  # Items that made it into final context
+    tokens_used: int = 0  # Actual tokens used
+    tokens_budget: int = 0  # Token budget for this assembly
+
+    # Compression tracking
+    compression_applied: list[str] = Field(default_factory=list)  # Sources that were compressed
+    compression_ratio: float = 1.0  # Overall compression ratio (0-1, 1 = no compression)
+
+    # Stage tracking
+    stages_applied: list[str] = Field(default_factory=list)  # Stages that contributed content
+
+    # Performance
+    assembly_time_ms: int = 0  # Time to assemble context in milliseconds
+
+    # Context hash for deduplication detection
+    context_hash: str | None = None  # SHA256 prefix of assembled context
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=utc_now)

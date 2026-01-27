@@ -13,6 +13,7 @@ from ringmaster.domain import (
     ActionType,
     ActorType,
     ChatMessage,
+    ContextAssemblyLog,
     Decision,
     Dependency,
     EntityType,
@@ -1314,5 +1315,191 @@ class ActionRepository:
             undone_at=datetime.fromisoformat(row["undone_at"]) if row["undone_at"] else None,
             actor_type=ActorType(row["actor_type"]),
             actor_id=row["actor_id"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+
+class ContextAssemblyLogRepository:
+    """Repository for ContextAssemblyLog entities.
+
+    Tracks context assembly events for enrichment pipeline observability.
+    Per docs/04-context-enrichment.md "Observability" section.
+    """
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    async def create(self, log: ContextAssemblyLog) -> ContextAssemblyLog:
+        """Create a new context assembly log entry."""
+        cursor = await self.db.execute(
+            """
+            INSERT INTO context_assembly_logs (
+                task_id, project_id, sources_queried, candidates_found,
+                items_included, tokens_used, tokens_budget, compression_applied,
+                compression_ratio, stages_applied, assembly_time_ms,
+                context_hash, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                log.task_id,
+                str(log.project_id),
+                json.dumps(log.sources_queried),
+                log.candidates_found,
+                log.items_included,
+                log.tokens_used,
+                log.tokens_budget,
+                json.dumps(log.compression_applied),
+                log.compression_ratio,
+                json.dumps(log.stages_applied),
+                log.assembly_time_ms,
+                log.context_hash,
+                log.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        log.id = cursor.lastrowid
+        return log
+
+    async def get(self, log_id: int) -> ContextAssemblyLog | None:
+        """Get a context assembly log by ID."""
+        row = await self.db.fetchone(
+            "SELECT * FROM context_assembly_logs WHERE id = ?",
+            (log_id,),
+        )
+        if not row:
+            return None
+        return self._row_to_log(row)
+
+    async def list_for_task(
+        self,
+        task_id: str,
+        limit: int = 50,
+    ) -> list[ContextAssemblyLog]:
+        """List context assembly logs for a specific task."""
+        rows = await self.db.fetchall(
+            """
+            SELECT * FROM context_assembly_logs
+            WHERE task_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (task_id, limit),
+        )
+        return [self._row_to_log(row) for row in rows]
+
+    async def list_for_project(
+        self,
+        project_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[ContextAssemblyLog]:
+        """List context assembly logs for a specific project."""
+        rows = await self.db.fetchall(
+            """
+            SELECT * FROM context_assembly_logs
+            WHERE project_id = ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (str(project_id), limit, offset),
+        )
+        return [self._row_to_log(row) for row in rows]
+
+    async def get_stats(self, project_id: UUID) -> dict[str, Any]:
+        """Get aggregated statistics for context assembly in a project.
+
+        Returns:
+            Dictionary with stats like avg_tokens, avg_assembly_time, etc.
+        """
+        row = await self.db.fetchone(
+            """
+            SELECT
+                COUNT(*) as total_assemblies,
+                AVG(tokens_used) as avg_tokens_used,
+                AVG(tokens_budget) as avg_tokens_budget,
+                AVG(assembly_time_ms) as avg_assembly_time_ms,
+                AVG(items_included) as avg_items_included,
+                AVG(compression_ratio) as avg_compression_ratio,
+                MAX(tokens_used) as max_tokens_used,
+                MIN(tokens_used) as min_tokens_used
+            FROM context_assembly_logs
+            WHERE project_id = ?
+            """,
+            (str(project_id),),
+        )
+        if not row:
+            return {
+                "total_assemblies": 0,
+                "avg_tokens_used": 0,
+                "avg_tokens_budget": 0,
+                "avg_assembly_time_ms": 0,
+                "avg_items_included": 0,
+                "avg_compression_ratio": 1.0,
+                "max_tokens_used": 0,
+                "min_tokens_used": 0,
+            }
+        return {
+            "total_assemblies": row["total_assemblies"] or 0,
+            "avg_tokens_used": round(row["avg_tokens_used"] or 0, 1),
+            "avg_tokens_budget": round(row["avg_tokens_budget"] or 0, 1),
+            "avg_assembly_time_ms": round(row["avg_assembly_time_ms"] or 0, 1),
+            "avg_items_included": round(row["avg_items_included"] or 0, 1),
+            "avg_compression_ratio": round(row["avg_compression_ratio"] or 1.0, 3),
+            "max_tokens_used": row["max_tokens_used"] or 0,
+            "min_tokens_used": row["min_tokens_used"] or 0,
+        }
+
+    async def get_budget_utilization(
+        self,
+        project_id: UUID,
+        threshold: float = 0.95,
+    ) -> list[ContextAssemblyLog]:
+        """Get logs where token usage exceeded threshold of budget.
+
+        Useful for identifying when context assembly is hitting limits.
+        """
+        rows = await self.db.fetchall(
+            """
+            SELECT * FROM context_assembly_logs
+            WHERE project_id = ?
+              AND tokens_budget > 0
+              AND CAST(tokens_used AS REAL) / tokens_budget >= ?
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (str(project_id), threshold),
+        )
+        return [self._row_to_log(row) for row in rows]
+
+    async def cleanup_old(self, days: int = 30) -> int:
+        """Delete context assembly logs older than the specified number of days."""
+        from datetime import timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+
+        cursor = await self.db.execute(
+            "DELETE FROM context_assembly_logs WHERE created_at < ?",
+            (cutoff.isoformat(),),
+        )
+        await self.db.commit()
+        return cursor.rowcount
+
+    def _row_to_log(self, row: Any) -> ContextAssemblyLog:
+        """Convert a database row to a ContextAssemblyLog."""
+        return ContextAssemblyLog(
+            id=row["id"],
+            task_id=row["task_id"],
+            project_id=UUID(row["project_id"]),
+            sources_queried=json.loads(row["sources_queried"]) if row["sources_queried"] else [],
+            candidates_found=row["candidates_found"] or 0,
+            items_included=row["items_included"] or 0,
+            tokens_used=row["tokens_used"] or 0,
+            tokens_budget=row["tokens_budget"] or 0,
+            compression_applied=json.loads(row["compression_applied"]) if row["compression_applied"] else [],
+            compression_ratio=row["compression_ratio"] or 1.0,
+            stages_applied=json.loads(row["stages_applied"]) if row["stages_applied"] else [],
+            assembly_time_ms=row["assembly_time_ms"] or 0,
+            context_hash=row["context_hash"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )

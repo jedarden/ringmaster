@@ -4,16 +4,18 @@ Based on docs/04-context-enrichment.md:
 - 5-layer recursive summarization
 - RLM-based chat history compression
 - Project and code context assembly
+- Context assembly observability
 """
 
 import hashlib
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ringmaster.db import Database
-from ringmaster.domain import Project, Task
+from ringmaster.domain import ContextAssemblyLog, Project, Task
 from ringmaster.enricher.code_context import (
     CodeContextExtractor,
     format_code_context,
@@ -85,70 +87,97 @@ class EnrichmentPipeline:
             self._rlm_summarizer = RLMSummarizer(self.db, self.rlm_config)
         return self._rlm_summarizer
 
-    async def enrich(self, task: Task, project: Project) -> AssembledPrompt:
+    async def enrich(
+        self,
+        task: Task,
+        project: Project,
+        log_assembly: bool = True,
+    ) -> AssembledPrompt:
         """Assemble an enriched prompt for a task.
 
         Args:
             task: The task to create a prompt for.
             project: The project the task belongs to.
+            log_assembly: Whether to log assembly metrics for observability.
 
         Returns:
             AssembledPrompt with full context.
         """
+        start_time = time.monotonic()
         metrics = PromptMetrics()
         context_parts: list[str] = []
+        sources_queried: list[str] = []
+        items_included = 0
 
         # Layer 1: Task Context
         task_context = self._build_task_context(task)
         context_parts.append(task_context)
         metrics.stages_applied.append("task_context")
+        sources_queried.append("task")
+        items_included += 1
 
         # Layer 2: Project Context
         project_context = self._build_project_context(project)
         context_parts.append(project_context)
         metrics.stages_applied.append("project_context")
+        sources_queried.append("project")
+        items_included += 1
 
         # Layer 3: Code Context (simplified for now)
         # TODO: Implement intelligent file selection based on task
+        sources_queried.append("code")
         code_context = await self._build_code_context(task, project)
         if code_context:
             context_parts.append(code_context)
             metrics.stages_applied.append("code_context")
+            items_included += 1
 
         # Layer 4: Deployment Context (for infra-related tasks)
+        sources_queried.append("deployment")
         deployment_context = await self._build_deployment_context(task, project)
         if deployment_context:
             context_parts.append(deployment_context)
             metrics.stages_applied.append("deployment_context")
+            items_included += 1
 
         # Layer 5: Documentation Context (README, ADRs, conventions)
+        sources_queried.append("documentation")
         documentation_context = await self._build_documentation_context(task, project)
         if documentation_context:
             context_parts.append(documentation_context)
             metrics.stages_applied.append("documentation_context")
+            items_included += 1
 
         # Layer 6: History Context (RLM-summarized conversation history)
+        sources_queried.append("history")
         history_context = await self._build_history_context(task, project)
         if history_context:
             context_parts.append(history_context)
             metrics.stages_applied.append("history_context")
+            items_included += 1
 
         # Layer 7: Logs Context (for debugging tasks)
+        sources_queried.append("logs")
         logs_context = await self._build_logs_context(task, project)
         if logs_context:
             context_parts.append(logs_context)
             metrics.stages_applied.append("logs_context")
+            items_included += 1
 
         # Layer 8: Research Context (prior agent outputs)
+        sources_queried.append("research")
         research_context = await self._build_research_context(task, project)
         if research_context:
             context_parts.append(research_context)
             metrics.stages_applied.append("research_context")
+            items_included += 1
 
         # Layer 9: Refinement Context
         refinement_context = self._build_refinement_context(task)
         context_parts.append(refinement_context)
         metrics.stages_applied.append("refinement_context")
+        sources_queried.append("refinement")
+        items_included += 1
 
         # Assemble prompts
         system_prompt = self._build_system_prompt(project)
@@ -160,12 +189,73 @@ class EnrichmentPipeline:
         # Estimate tokens (rough: ~4 chars per token)
         metrics.estimated_tokens = len(user_prompt) // 4
 
+        # Calculate assembly time
+        assembly_time_ms = int((time.monotonic() - start_time) * 1000)
+
+        # Log assembly metrics for observability
+        if log_assembly and self.db is not None:
+            await self._log_context_assembly(
+                task=task,
+                project=project,
+                sources_queried=sources_queried,
+                items_included=items_included,
+                tokens_used=metrics.estimated_tokens,
+                stages_applied=metrics.stages_applied,
+                context_hash=context_hash,
+                assembly_time_ms=assembly_time_ms,
+            )
+
         return AssembledPrompt(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             context_hash=context_hash,
             metrics=metrics,
         )
+
+    async def _log_context_assembly(
+        self,
+        task: Task,
+        project: Project,
+        sources_queried: list[str],
+        items_included: int,
+        tokens_used: int,
+        stages_applied: list[str],
+        context_hash: str,
+        assembly_time_ms: int,
+    ) -> None:
+        """Log context assembly event for observability.
+
+        Per docs/04-context-enrichment.md "Observability" section.
+        """
+        try:
+            from ringmaster.db.repositories import ContextAssemblyLogRepository
+
+            repo = ContextAssemblyLogRepository(self.db)
+            log = ContextAssemblyLog(
+                task_id=task.id,
+                project_id=project.id,
+                sources_queried=sources_queried,
+                candidates_found=len(sources_queried),
+                items_included=items_included,
+                tokens_used=tokens_used,
+                tokens_budget=self.max_context_tokens,
+                compression_applied=[],  # Track if any compression was applied
+                compression_ratio=1.0,  # Will be < 1.0 if compression applied
+                stages_applied=stages_applied,
+                assembly_time_ms=assembly_time_ms,
+                context_hash=context_hash,
+            )
+            await repo.create(log)
+            logger.debug(
+                "Logged context assembly: %d tokens, %d items, %dms for task %s",
+                tokens_used,
+                items_included,
+                assembly_time_ms,
+                task.id,
+            )
+        except Exception as e:
+            # Don't fail enrichment if logging fails
+            logger.warning("Failed to log context assembly: %s", e)
 
     def _build_system_prompt(self, project: Project) -> str:
         """Build the system prompt."""
