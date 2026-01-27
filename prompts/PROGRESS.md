@@ -410,6 +410,16 @@ src/ringmaster/
 - ✅ Line number display and total line count
 - ✅ Connection status indicator (green=connected, red=disconnected)
 
+### Worker Monitor (`src/ringmaster/worker/monitor.py`)
+- ✅ Heartbeat-based liveness detection (ACTIVE, THINKING, SLOW, LIKELY_HUNG)
+- ✅ Context degradation detection (repetition, excessive apologies, retry loops)
+- ✅ Configurable thresholds for monitoring sensitivity
+- ✅ Recovery action recommendations (none, log_warning, interrupt, checkpoint_restart, escalate)
+- ✅ N-gram analysis for repetition scoring
+- ✅ Pattern-based detection for apology/retry phrases
+- ✅ Integration with WorkerExecutor for real-time monitoring
+- ✅ Event emission for hung/degraded worker notifications
+
 Implemented shortcuts:
 - g m: Go to mailbox (projects)
 - g a: Go to agents (workers)
@@ -507,6 +517,7 @@ Implemented shortcuts:
 | 36 | 2026-01-27 | Add worker capabilities: capabilities field on Worker, required_capabilities on Task/Subtask, migration 006, get_capable_workers() method, scheduler capability matching, API endpoints for capability management, 7 new tests, total 256 tests passing |
 | 37 | 2026-01-27 | Fix sqlite3.Row compatibility bug: capabilities and required_capabilities columns were not being read due to sqlite3.Row not supporting 'in' operator, switched to row.keys() checks, all 256 tests passing |
 | 38 | 2026-01-27 | Add real-time worker output streaming: OutputBuffer class for buffering worker output with pub/sub support, SSE stream endpoint for real-time output, polling endpoint for recent output, WORKER_OUTPUT event type, WorkerOutputPanel React component with live/polling modes, auto-scroll detection, 6 new tests, total 262 tests passing |
+| 39 | 2026-01-27 | Add long-running task monitoring: WorkerMonitor class with heartbeat-based liveness detection (ACTIVE/THINKING/SLOW/LIKELY_HUNG), context degradation detection (repetition, apologies, retry loops), n-gram analysis for repetition scoring, recovery action recommendations, executor integration for real-time monitoring, 21 new tests, total 283 tests passing |
 
 ## Blockers
 

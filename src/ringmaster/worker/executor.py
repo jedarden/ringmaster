@@ -12,6 +12,11 @@ from ringmaster.domain import Project, Task, TaskStatus, Worker, WorkerStatus
 from ringmaster.enricher import EnrichmentPipeline
 from ringmaster.events import EventBus, EventType
 from ringmaster.worker.interface import SessionConfig, SessionResult, SessionStatus
+from ringmaster.worker.monitor import (
+    RecoveryAction,
+    WorkerMonitor,
+    recommend_recovery,
+)
 from ringmaster.worker.output_buffer import output_buffer
 from ringmaster.worker.platforms import get_worker
 
@@ -45,6 +50,8 @@ class WorkerExecutor:
         self.event_bus = event_bus
         self._active_sessions: dict[str, asyncio.Task] = {}
         self._enrichment_pipeline: EnrichmentPipeline | None = None
+        self._monitors: dict[str, WorkerMonitor] = {}  # worker_id -> monitor
+        self._monitor_check_interval: float = 30.0  # seconds between monitor checks
 
     @property
     def enrichment_pipeline(self) -> EnrichmentPipeline:
@@ -55,6 +62,106 @@ class WorkerExecutor:
                 db=self.db,
             )
         return self._enrichment_pipeline
+
+    def _get_monitor(self, worker_id: str, task_id: str | None = None) -> WorkerMonitor:
+        """Get or create a monitor for a worker.
+
+        Args:
+            worker_id: The worker ID to monitor.
+            task_id: The task being executed.
+
+        Returns:
+            WorkerMonitor instance.
+        """
+        if worker_id not in self._monitors:
+            self._monitors[worker_id] = WorkerMonitor(worker_id=worker_id, task_id=task_id)
+        else:
+            # Reset for new task
+            self._monitors[worker_id].reset(task_id=task_id)
+        return self._monitors[worker_id]
+
+    async def _handle_recovery(
+        self,
+        recovery: RecoveryAction,
+        task: Task,
+        worker: Worker,
+    ) -> bool:
+        """Handle a recommended recovery action.
+
+        Args:
+            recovery: The recommended action.
+            task: The task being executed.
+            worker: The worker executing the task.
+
+        Returns:
+            True if execution should be interrupted, False otherwise.
+        """
+        if recovery.action == "none":
+            return False
+
+        if recovery.action == "log_warning":
+            logger.warning(
+                f"Worker {worker.id} task {task.id}: {recovery.reason}"
+            )
+            return False
+
+        if recovery.action == "interrupt":
+            logger.warning(
+                f"Worker {worker.id} task {task.id} needs interrupt: {recovery.reason}"
+            )
+            # Emit event for UI notification
+            if self.event_bus:
+                await self.event_bus.emit(
+                    EventType.WORKER_STATUS,
+                    {
+                        "worker_id": worker.id,
+                        "task_id": task.id,
+                        "status": "hung",
+                        "reason": recovery.reason,
+                        "action": recovery.action,
+                    },
+                    project_id=task.project_id,
+                )
+            return True  # Signal to interrupt execution
+
+        if recovery.action == "checkpoint_restart":
+            logger.warning(
+                f"Worker {worker.id} task {task.id} needs restart: {recovery.reason}"
+            )
+            # Emit event for UI notification
+            if self.event_bus:
+                await self.event_bus.emit(
+                    EventType.WORKER_STATUS,
+                    {
+                        "worker_id": worker.id,
+                        "task_id": task.id,
+                        "status": "degraded",
+                        "reason": recovery.reason,
+                        "action": recovery.action,
+                    },
+                    project_id=task.project_id,
+                )
+            return True  # Signal to interrupt and restart with fresh context
+
+        if recovery.action == "escalate":
+            logger.error(
+                f"Worker {worker.id} task {task.id} needs escalation: {recovery.reason}"
+            )
+            if self.event_bus:
+                await self.event_bus.emit(
+                    EventType.WORKER_STATUS,
+                    {
+                        "worker_id": worker.id,
+                        "task_id": task.id,
+                        "status": "escalate",
+                        "reason": recovery.reason,
+                        "action": recovery.action,
+                    },
+                    project_id=task.project_id,
+                )
+            return True
+
+        return False
 
     async def execute_task(
         self,
@@ -138,11 +245,16 @@ class WorkerExecutor:
         # Store in active sessions
         self._active_sessions[task.id] = asyncio.current_task()  # type: ignore
 
+        # Initialize monitor for this execution
+        monitor = self._get_monitor(worker.id, task.id)
+        should_interrupt = False
+        last_monitor_check = datetime.now(UTC)
+
         try:
             # Clear previous output in buffer
             await output_buffer.clear(worker.id)
 
-            # Stream output to file, buffer, and callback
+            # Stream output to file, buffer, callback, and monitor
             output_file = task_output_dir / f"iteration_{task.attempts:03d}.log"
             with open(output_file, "w") as f:
                 async for line in handle.stream_output():
@@ -151,6 +263,9 @@ class WorkerExecutor:
 
                     # Write to output buffer for streaming
                     await output_buffer.write(worker.id, line)
+
+                    # Record output in monitor for liveness/degradation tracking
+                    await monitor.record_output(line)
 
                     # Emit output event for real-time WebSocket updates
                     if self.event_bus:
@@ -167,8 +282,30 @@ class WorkerExecutor:
                     if on_output:
                         on_output(line)
 
-            # Wait for completion
-            result = await handle.wait()
+                    # Periodic monitoring check (every N seconds)
+                    now = datetime.now(UTC)
+                    if (now - last_monitor_check).total_seconds() >= self._monitor_check_interval:
+                        last_monitor_check = now
+                        recovery = recommend_recovery(monitor)
+                        should_interrupt = await self._handle_recovery(recovery, task, worker)
+                        if should_interrupt:
+                            logger.warning(
+                                f"Interrupting task {task.id} due to {recovery.action}: "
+                                f"{recovery.reason}"
+                            )
+                            break
+
+            # Wait for completion (unless interrupted)
+            if not should_interrupt:
+                result = await handle.wait()
+            else:
+                # Force stop the session if interrupted
+                await handle.stop()
+                result = SessionResult(
+                    status=SessionStatus.TIMEOUT,
+                    output="",
+                    error=f"Interrupted: {recovery.reason}",  # type: ignore
+                )
 
             # Update task
             task.output_path = str(output_file)

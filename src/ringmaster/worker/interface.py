@@ -223,6 +223,10 @@ class SessionHandle:
                 self.process.kill()
                 await self.process.wait()
 
+    async def stop(self) -> None:
+        """Stop the running session (alias for cancel)."""
+        await self.cancel()
+
     @property
     def is_running(self) -> bool:
         """Check if the session is still running."""
