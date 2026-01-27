@@ -433,6 +433,19 @@ Implemented shortcuts:
 - ✅ API client functions (performUndo, performRedo, getUndoHistory)
 - ✅ TypeScript types for undo/redo responses
 
+### Worker Capabilities (`src/ringmaster/domain/models.py`, `src/ringmaster/db/repositories.py`)
+- ✅ capabilities field on Worker model (e.g., ["python", "typescript", "security"])
+- ✅ required_capabilities field on Task and Subtask models
+- ✅ Database migration 006 for new columns
+- ✅ WorkerRepository.get_capable_workers() for capability matching
+- ✅ Scheduler uses capability matching when assigning tasks to workers
+- ✅ API endpoints for managing worker capabilities:
+  - GET /api/workers/{id}/capabilities - List worker capabilities
+  - POST /api/workers/{id}/capabilities - Add a capability
+  - DELETE /api/workers/{id}/capabilities/{cap} - Remove a capability
+  - GET /api/workers/capable/{cap} - List workers with a capability
+- ✅ 7 new integration tests
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -476,6 +489,7 @@ Implemented shortcuts:
 | 33 | 2026-01-27 | Add keyboard shortcuts: useKeyboardShortcuts hook with sequence support (g m, g a), useListNavigation for j/k, CommandPalette (Cmd+K), ShortcutsHelp modal (?), pending sequence indicator, ProjectsPage/WorkersPage with j/k navigation |
 | 34 | 2026-01-27 | Add undo/redo system: Action domain model, ActionRepository, undo API routes, action_history migration, UNDO/REDO events, 7 new tests, total 249 tests passing |
 | 35 | 2026-01-27 | Add frontend undo UI: Cmd+Z/Cmd+Shift+Z keyboard shortcuts, useUndo hook, Toast notification component, undo/redo API client functions, WebSocket event refresh |
+| 36 | 2026-01-27 | Add worker capabilities: capabilities field on Worker, required_capabilities on Task/Subtask, migration 006, get_capable_workers() method, scheduler capability matching, API endpoints for capability management, 7 new tests, total 256 tests passing |
 
 ## Blockers
 
