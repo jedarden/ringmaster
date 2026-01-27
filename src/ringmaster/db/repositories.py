@@ -334,8 +334,9 @@ class TaskRepository:
         task_type = TaskType(row["type"])
 
         # Handle required_capabilities column - may not exist in older DBs before migration
+        # Note: use row.keys() instead of 'in row' because sqlite3.Row doesn't support 'in'
         required_capabilities = []
-        if "required_capabilities" in row:
+        if "required_capabilities" in row.keys():  # noqa: SIM118
             required_capabilities = json.loads(row["required_capabilities"]) if row["required_capabilities"] else []
 
         base_kwargs = {
@@ -586,8 +587,9 @@ class WorkerRepository:
     def _row_to_worker(self, row: Any) -> Worker:
         """Convert a database row to a Worker."""
         # Handle capabilities column - may not exist in older DBs before migration
+        # Note: use row.keys() instead of 'in row' because sqlite3.Row doesn't support 'in'
         capabilities = []
-        if "capabilities" in row:
+        if "capabilities" in row.keys():  # noqa: SIM118
             capabilities = json.loads(row["capabilities"]) if row["capabilities"] else []
 
         return Worker(
