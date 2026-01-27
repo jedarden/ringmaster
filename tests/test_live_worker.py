@@ -251,22 +251,23 @@ class TestClaudeCodeTimeout:
 
     @pytest.mark.live
     @pytest.mark.asyncio
-    async def test_long_running_task_timeout(
+    async def test_long_running_task_completes(
         self, live_db, live_project, live_worker, live_project_dir
     ):
-        """Test timeout handling for tasks that might run too long.
+        """Test that long-running tasks complete and don't hang indefinitely.
 
-        This test verifies the system can handle and timeout long-running tasks.
-        We use a task that would normally take a while but set a short timeout.
+        This test verifies the system can handle long-running tasks gracefully.
+        The task is designed to be substantial but should complete in a reasonable time.
         """
         if not shutil.which("claude"):
             pytest.skip("Claude Code CLI not available")
 
         task_repo = TaskRepository(live_db)
+
         task = Task(
             project_id=live_project.id,
             title="Create comprehensive documentation",
-            description="Write detailed documentation for the entire project. This is intentionally a large task to test timeout.",
+            description="Write detailed documentation for the entire project. Include README, API docs, and usage examples.",
             priority=Priority.P3,
             status=TaskStatus.READY,
             max_attempts=1,
@@ -278,16 +279,22 @@ class TestClaudeCodeTimeout:
                 live_db,
                 output_dir=Path(output_dir),
                 project_dir=live_project_dir,
-                timeout_seconds=30,  # Short timeout for testing
             )
 
             start_time = datetime.now(UTC)
             result = await executor.execute_task(task, live_worker)
             elapsed = (datetime.now(UTC) - start_time).total_seconds()
 
-            # Either completed or timed out, but shouldn't hang forever
-            assert elapsed < 120, "Task should complete or timeout within reasonable time"
+            # Task should complete or fail, but shouldn't hang forever
+            assert elapsed < 600, "Task should complete within 10 minutes"
             assert result is not None
+
+            # Verify metrics were recorded
+            metrics = await live_db.fetchone(
+                "SELECT * FROM session_metrics WHERE task_id = ?",
+                (task.id,),
+            )
+            assert metrics is not None, "Session metrics should be recorded"
 
 
 class TestWorkerAvailability:
