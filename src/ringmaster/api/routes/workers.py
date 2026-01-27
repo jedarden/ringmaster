@@ -817,6 +817,123 @@ class WorkerLogResponse(BaseModel):
     lines_count: int
 
 
+# =============================================================================
+# Worker Health Monitoring Endpoints
+# =============================================================================
+
+
+class DegradationSignalsResponse(BaseModel):
+    """Signals indicating potential context degradation."""
+
+    repetition_score: float = 0.0
+    apology_count: int = 0
+    retry_count: int = 0
+    contradiction_count: int = 0
+    is_degraded: bool = False
+
+
+class RecoveryActionResponse(BaseModel):
+    """Recommended recovery action."""
+
+    action: str  # "none", "log_warning", "interrupt", "checkpoint_restart", "escalate"
+    reason: str
+    urgency: str  # "low", "medium", "high", "critical"
+
+
+class WorkerHealthResponse(BaseModel):
+    """Worker health status and monitoring information."""
+
+    worker_id: str
+    task_id: str | None = None
+    liveness_status: str  # "active", "thinking", "slow", "likely_hung", "degraded"
+    degradation: DegradationSignalsResponse
+    recommended_action: RecoveryActionResponse
+    runtime_seconds: float
+    idle_seconds: float
+    total_output_lines: int
+
+
+@router.get("/{worker_id}/health")
+async def get_worker_health(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+) -> WorkerHealthResponse:
+    """Get health status for a worker based on output monitoring.
+
+    Analyzes worker output for:
+    - Liveness: Is the worker still producing output?
+    - Degradation: Is the worker showing signs of context drift?
+    - Recovery: What action should be taken?
+
+    This endpoint requires the worker to be actively monitored via
+    the output buffer. Workers that haven't produced output will
+    show as "unknown" state.
+
+    Args:
+        worker_id: The worker ID.
+
+    Returns:
+        WorkerHealthResponse with health analysis.
+    """
+    from ringmaster.worker.monitor import (
+        LivenessStatus,
+        WorkerMonitor,
+        recommend_recovery,
+    )
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    # Get recent output from buffer for analysis
+    lines = await output_buffer.get_recent(worker_id, limit=500)
+
+    # Create monitor and feed output
+    monitor = WorkerMonitor(
+        worker_id=worker_id,
+        task_id=worker.current_task_id,
+    )
+
+    for line in lines:
+        await monitor.record_output(line.line)
+
+    # Check health
+    liveness = monitor.check_liveness()
+    degradation = monitor.check_degradation()
+    recovery = recommend_recovery(monitor)
+
+    # Map liveness status to string
+    liveness_map = {
+        LivenessStatus.ACTIVE: "active",
+        LivenessStatus.THINKING: "thinking",
+        LivenessStatus.SLOW: "slow",
+        LivenessStatus.LIKELY_HUNG: "likely_hung",
+        LivenessStatus.DEGRADED: "degraded",
+    }
+
+    return WorkerHealthResponse(
+        worker_id=worker_id,
+        task_id=worker.current_task_id,
+        liveness_status=liveness_map.get(liveness, "unknown"),
+        degradation=DegradationSignalsResponse(
+            repetition_score=degradation.repetition_score,
+            apology_count=degradation.apology_count,
+            retry_count=degradation.retry_count,
+            contradiction_count=degradation.contradiction_count,
+            is_degraded=degradation.is_degraded,
+        ),
+        recommended_action=RecoveryActionResponse(
+            action=recovery.action,
+            reason=recovery.reason,
+            urgency=recovery.urgency,
+        ),
+        runtime_seconds=monitor.get_runtime().total_seconds(),
+        idle_seconds=monitor.get_idle_time().total_seconds(),
+        total_output_lines=len(monitor.state.output_lines),
+    )
+
+
 @router.get("/{worker_id}/log")
 async def get_worker_log(
     db: Annotated[Database, Depends(get_db)],

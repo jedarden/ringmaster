@@ -719,6 +719,15 @@ Implemented shortcuts:
   - Returns CurrentTaskInfo (task_id, title, status, started_at, attempts, max_attempts) for busy workers
   - Enables UI to show task title and duration for active workers
 
+### Worker Health Monitoring API (`src/ringmaster/api/routes/workers.py`)
+- ✅ GET /api/workers/{id}/health - Worker health status endpoint
+  - Liveness status (active, thinking, slow, likely_hung, degraded)
+  - Degradation signals (repetition_score, apology_count, retry_count, contradiction_count)
+  - Recommended recovery action (none, log_warning, interrupt, checkpoint_restart, escalate)
+  - Runtime and idle time tracking
+  - Integrates with WorkerMonitor from worker/monitor.py
+- ✅ 5 new integration tests for health endpoint
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -786,6 +795,7 @@ Implemented shortcuts:
 | 57 | 2026-01-27 | Add worker spawner frontend UI: TypeScript types (SpawnWorkerRequest, SpawnedWorkerResponse, TmuxSessionResponse, WorkerLogResponse), API client functions (spawnWorker, killWorker, getWorkerSession, listWorkerSessions, getWorkerLog), WorkersPage spawn modal with worker type/capabilities/worktree config, tmux session status display, spawn/kill buttons, all 454 tests passing |
 | 58 | 2026-01-27 | Add worker task duration display: GET /api/workers/with-tasks endpoint returns enriched worker info including current task title, started_at, attempts; WorkerWithTask/CurrentTaskInfo TypeScript types; listWorkersWithTasks API client; WorkersPage shows task title and live elapsed time with auto-updating timer; CSS styling for current-task-info section; 3 new tests, total 457 tests passing |
 | 59 | 2026-01-27 | Implement HistoryContextStage with RLM integration: completed the TODO in stages.py to wire HistoryContextStage to RLMSummarizer, provides compressed conversation history as worker context; removed stale TODO comment from pipeline.py; 5 new tests, total 462 tests passing |
+| 60 | 2026-01-27 | Add worker health monitoring API: GET /api/workers/{id}/health endpoint exposing liveness status, degradation signals, and recovery recommendations from WorkerMonitor; 5 new tests, total 467 tests passing |
 
 ## Blockers
 

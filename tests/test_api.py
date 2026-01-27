@@ -1508,6 +1508,131 @@ class TestWorkerOutputAPI:
         await output_buffer.clear(worker_id)
 
 
+class TestWorkerHealthAPI:
+    """Tests for worker health monitoring API."""
+
+    async def test_worker_health_no_output(self, client: AsyncClient):
+        """Test health check for worker with no output history."""
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Health Test Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Get health status
+        response = await client.get(f"/api/workers/{worker_id}/health")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        assert data["liveness_status"] == "active"  # New monitor starts active
+        assert data["degradation"]["is_degraded"] is False
+        assert data["recommended_action"]["action"] == "none"
+
+    async def test_worker_health_with_output(self, client: AsyncClient):
+        """Test health check for worker with some output history."""
+        from ringmaster.worker.output_buffer import output_buffer
+
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Active Health Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Add some output
+        await output_buffer.write(worker_id, "Starting task...")
+        await output_buffer.write(worker_id, "Processing...")
+        await output_buffer.write(worker_id, "Done!")
+
+        # Get health status
+        response = await client.get(f"/api/workers/{worker_id}/health")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        assert data["liveness_status"] == "active"
+        assert data["total_output_lines"] == 3
+        assert data["degradation"]["is_degraded"] is False
+
+        # Cleanup
+        await output_buffer.clear(worker_id)
+
+    async def test_worker_health_with_degradation_signals(self, client: AsyncClient):
+        """Test health check detects degradation signals."""
+        from ringmaster.worker.output_buffer import output_buffer
+
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={"name": "Degraded Worker", "type": "test", "command": "test"},
+        )
+        worker_id = create_response.json()["id"]
+
+        # Add output with many apologies (degradation signal)
+        for i in range(10):
+            await output_buffer.write(worker_id, f"Line {i}: I apologize for the confusion.")
+            await output_buffer.write(worker_id, "Let me try again.")
+
+        # Get health status
+        response = await client.get(f"/api/workers/{worker_id}/health")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        # Should detect degradation due to many apologies and retry phrases
+        assert data["degradation"]["apology_count"] >= 5
+        assert data["degradation"]["retry_count"] >= 1
+
+        # Cleanup
+        await output_buffer.clear(worker_id)
+
+    async def test_worker_health_not_found(self, client: AsyncClient):
+        """Test health check for non-existent worker returns 404."""
+        response = await client.get("/api/workers/nonexistent-worker/health")
+        assert response.status_code == 404
+
+    async def test_worker_health_with_task_id(self, client: AsyncClient):
+        """Test health check includes task_id when worker is busy."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Health Task Project"},
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Health test task",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        # Create worker and assign task
+        worker_response = await client.post(
+            "/api/workers",
+            json={"name": "Busy Health Worker", "type": "test", "command": "test"},
+        )
+        worker_id = worker_response.json()["id"]
+
+        await client.post(f"/api/workers/{worker_id}/activate")
+        await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+
+        # Get health status
+        response = await client.get(f"/api/workers/{worker_id}/health")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["worker_id"] == worker_id
+        assert data["task_id"] == task_id
+
+
 class TestQueueAPI:
     """Tests for queue API - testing routes/queue.py."""
 
