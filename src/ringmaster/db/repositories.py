@@ -42,8 +42,8 @@ class ProjectRepository:
         """Create a new project."""
         await self.db.execute(
             """
-            INSERT INTO projects (id, name, description, tech_stack, repo_url, settings, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO projects (id, name, description, tech_stack, repo_url, settings, pinned, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(project.id),
@@ -52,6 +52,7 @@ class ProjectRepository:
                 json.dumps(project.tech_stack),
                 project.repo_url,
                 json.dumps(project.settings),
+                1 if project.pinned else 0,
                 project.created_at.isoformat(),
                 project.updated_at.isoformat(),
             ),
@@ -69,9 +70,9 @@ class ProjectRepository:
         return self._row_to_project(row)
 
     async def list(self, limit: int = 100, offset: int = 0) -> list[Project]:
-        """List all projects."""
+        """List all projects, with pinned projects first."""
         rows = await self.db.fetchall(
-            "SELECT * FROM projects ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+            "SELECT * FROM projects ORDER BY pinned DESC, updated_at DESC LIMIT ? OFFSET ?",
             (limit, offset),
         )
         return [self._row_to_project(row) for row in rows]
@@ -82,7 +83,7 @@ class ProjectRepository:
         await self.db.execute(
             """
             UPDATE projects SET
-                name = ?, description = ?, tech_stack = ?, repo_url = ?, settings = ?, updated_at = ?
+                name = ?, description = ?, tech_stack = ?, repo_url = ?, settings = ?, pinned = ?, updated_at = ?
             WHERE id = ?
             """,
             (
@@ -91,6 +92,7 @@ class ProjectRepository:
                 json.dumps(project.tech_stack),
                 project.repo_url,
                 json.dumps(project.settings),
+                1 if project.pinned else 0,
                 project.updated_at.isoformat(),
                 str(project.id),
             ),
@@ -106,8 +108,21 @@ class ProjectRepository:
         await self.db.commit()
         return cursor.rowcount > 0
 
+    async def set_pinned(self, project_id: UUID, pinned: bool) -> Project | None:
+        """Set the pinned status of a project."""
+        project = await self.get(project_id)
+        if not project:
+            return None
+        project.pinned = pinned
+        return await self.update(project)
+
     def _row_to_project(self, row: Any) -> Project:
         """Convert a database row to a Project."""
+        # Handle pinned column which may not exist in older databases
+        pinned = False
+        row_keys = row.keys()
+        if "pinned" in row_keys:
+            pinned = bool(row["pinned"])
         return Project(
             id=UUID(row["id"]),
             name=row["name"],
@@ -115,6 +130,7 @@ class ProjectRepository:
             tech_stack=json.loads(row["tech_stack"]) if row["tech_stack"] else [],
             repo_url=row["repo_url"],
             settings=json.loads(row["settings"]) if row["settings"] else {},
+            pinned=pinned,
             created_at=datetime.fromisoformat(row["created_at"]),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )

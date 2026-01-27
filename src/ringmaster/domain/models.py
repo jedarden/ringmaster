@@ -46,6 +46,7 @@ class Project(BaseModel):
     tech_stack: list[str] = Field(default_factory=list)
     repo_url: str | None = None
     settings: dict[str, Any] = Field(default_factory=dict)
+    pinned: bool = False  # Pinned projects appear at top of mailbox
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

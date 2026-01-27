@@ -44,6 +44,7 @@ export interface Project {
   tech_stack: string[];
   repo_url: string | null;
   settings: Record<string, unknown>;
+  pinned: boolean;
   created_at: string;
   updated_at: string;
 }

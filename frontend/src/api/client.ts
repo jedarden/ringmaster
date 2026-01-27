@@ -159,6 +159,20 @@ export async function deleteProject(id: string): Promise<void> {
   return handleResponse<void>(response);
 }
 
+export async function pinProject(id: string): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${id}/pin`, {
+    method: "POST",
+  });
+  return handleResponse<Project>(response);
+}
+
+export async function unpinProject(id: string): Promise<Project> {
+  const response = await fetch(`${API_BASE}/projects/${id}/unpin`, {
+    method: "POST",
+  });
+  return handleResponse<Project>(response);
+}
+
 export async function getProjectSummary(id: string): Promise<ProjectSummary> {
   const response = await fetch(`${API_BASE}/projects/${id}/summary`);
   return handleResponse<ProjectSummary>(response);

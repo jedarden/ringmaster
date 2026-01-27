@@ -181,6 +181,32 @@ async def update_project(
     return await repo.update(project)
 
 
+@router.post("/{project_id}/pin")
+async def pin_project(
+    db: Annotated[Database, Depends(get_db)],
+    project_id: UUID,
+) -> Project:
+    """Pin a project to the top of the mailbox."""
+    repo = ProjectRepository(db)
+    project = await repo.set_pinned(project_id, True)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@router.post("/{project_id}/unpin")
+async def unpin_project(
+    db: Annotated[Database, Depends(get_db)],
+    project_id: UUID,
+) -> Project:
+    """Unpin a project from the top of the mailbox."""
+    repo = ProjectRepository(db)
+    project = await repo.set_pinned(project_id, False)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
 @router.delete("/{project_id}", status_code=204)
 async def delete_project(
     db: Annotated[Database, Depends(get_db)],

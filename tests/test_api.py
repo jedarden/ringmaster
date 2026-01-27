@@ -282,6 +282,97 @@ class TestProjectsAPI:
         )
         assert empty_project["total_tasks"] == 0
 
+    async def test_pin_project(self, client: AsyncClient):
+        """Test pinning a project."""
+        # Create project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Pin Test Project"},
+        )
+        project = create_response.json()
+        project_id = project["id"]
+        assert project["pinned"] is False
+
+        # Pin the project
+        response = await client.post(f"/api/projects/{project_id}/pin")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["pinned"] is True
+
+        # Verify project is pinned
+        get_response = await client.get(f"/api/projects/{project_id}")
+        assert get_response.json()["pinned"] is True
+
+    async def test_unpin_project(self, client: AsyncClient):
+        """Test unpinning a project."""
+        # Create project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Unpin Test Project"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Pin first
+        await client.post(f"/api/projects/{project_id}/pin")
+
+        # Then unpin
+        response = await client.post(f"/api/projects/{project_id}/unpin")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["pinned"] is False
+
+        # Verify project is unpinned
+        get_response = await client.get(f"/api/projects/{project_id}")
+        assert get_response.json()["pinned"] is False
+
+    async def test_pin_project_not_found(self, client: AsyncClient):
+        """Test pinning non-existent project."""
+        fake_id = "00000000-0000-0000-0000-000000000000"
+        response = await client.post(f"/api/projects/{fake_id}/pin")
+        assert response.status_code == 404
+
+    async def test_unpin_project_not_found(self, client: AsyncClient):
+        """Test unpinning non-existent project."""
+        fake_id = "00000000-0000-0000-0000-000000000000"
+        response = await client.post(f"/api/projects/{fake_id}/unpin")
+        assert response.status_code == 404
+
+    async def test_pinned_projects_appear_first(self, client: AsyncClient):
+        """Test that pinned projects appear before unpinned projects."""
+        import asyncio
+
+        # Create unpinned project first
+        await client.post(
+            "/api/projects",
+            json={"name": "Unpinned Project"},
+        )
+
+        # Wait a bit so updated_at is different
+        await asyncio.sleep(0.1)
+
+        # Create second project and pin it
+        response = await client.post(
+            "/api/projects",
+            json={"name": "Pinned Project"},
+        )
+        pinned_id = response.json()["id"]
+        await client.post(f"/api/projects/{pinned_id}/pin")
+
+        # List projects - pinned should be first even if it's not the most recent
+        list_response = await client.get("/api/projects")
+        projects = list_response.json()
+
+        # Find positions
+        pinned_idx = next(
+            i for i, p in enumerate(projects) if p["name"] == "Pinned Project"
+        )
+        unpinned_idx = next(
+            i for i, p in enumerate(projects) if p["name"] == "Unpinned Project"
+        )
+
+        # Pinned project should appear before unpinned
+        assert pinned_idx < unpinned_idx
+
 
 class TestTasksAPI:
     """Tests for tasks API."""

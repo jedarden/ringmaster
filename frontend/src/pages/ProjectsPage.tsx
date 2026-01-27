@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { listProjectsWithSummaries, createProject, deleteProject } from "../api/client";
+import { listProjectsWithSummaries, createProject, deleteProject, pinProject, unpinProject } from "../api/client";
 import type { ProjectCreate, ProjectSummary } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { useListNavigation } from "../hooks/useKeyboardShortcuts";
@@ -177,6 +177,19 @@ export function ProjectsPage() {
     }
   };
 
+  const handleTogglePin = async (id: string, currentlyPinned: boolean) => {
+    try {
+      if (currentlyPinned) {
+        await unpinProject(id);
+      } else {
+        await pinProject(id);
+      }
+      await loadProjects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to toggle pin");
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading projects...</div>;
   }
@@ -313,6 +326,7 @@ export function ProjectsPage() {
                     <div className="project-status-indicator" title={statusLabel}>
                       <span className={`status-dot ${statusClass}`} />
                     </div>
+                    {project.pinned && <span className="pin-indicator" title="Pinned">&#128204;</span>}
                     <h3>{project.name}</h3>
                     <span className="time-ago">{formatTimeAgo(latest_activity)}</span>
                   </div>
@@ -375,16 +389,29 @@ export function ProjectsPage() {
                     )}
                   </div>
                 </Link>
-                <button
-                  className="delete-btn"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleDelete(project.id);
-                  }}
-                >
-                  Delete
-                </button>
+                <div className="project-card-actions">
+                  <button
+                    className={`pin-btn ${project.pinned ? "pinned" : ""}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleTogglePin(project.id, project.pinned);
+                    }}
+                    title={project.pinned ? "Unpin project" : "Pin project to top"}
+                  >
+                    {project.pinned ? "Unpin" : "Pin"}
+                  </button>
+                  <button
+                    className="delete-btn"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDelete(project.id);
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             );
           })}
