@@ -1047,14 +1047,15 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
 | 90 | 2026-01-27 | Cleanup: removed accidentally committed `__pycache__/` bytecode files from git tracking. Project confirmed complete with clean working tree. |
 | 91 | 2026-01-27 | **Container/Deployment**: Add production deployment artifacts - Dockerfile with multi-stage build, docker-compose.yml for local development, Kubernetes manifests (namespace, configmap, deployments, services, ingress, PVCs, kustomization), .dockerignore, k8s/README.md with deployment documentation. Addresses functional gap #6. 650 tests passing, linting clean. |
 | 92 | 2026-01-27 | **Live Worker Validation**: Ran live worker tests with actual Claude Code CLI. 5/6 tests passed, validating end-to-end worker execution (task execution, output streaming, status updates, worker availability). Fixed timeout test to be more realistic. Identified known issue: timeout enforcement bug in stream_output loop. Core functionality validated. |
+| 93 | 2026-01-27 | **E2E Scheduler Integration Tests**: Added comprehensive end-to-end integration tests for scheduler and worker execution flow. 8 new tests validating: task assignment to workers, multiple task handling, concurrent task limits, capability-based matching, health check detection, event emission, full task lifecycle transitions, and failure handling. All 658 tests passing (including 6 skipped live tests). Addresses functional gap #5 (Scheduler Task Assignment). |
 
 ## Current Status
 
 **Status**: ⚠️ FUNCTIONAL GAPS REMAIN (6/6 partially addressed)
 
-**Iteration 91 completed**: Container/Deployment artifacts added.
+**Iteration 93 completed**: E2E scheduler integration tests added.
 
-**Test Status**: 650 passed, 6 skipped (live tests), 1 warning (asyncio cleanup)
+**Test Status**: 658 passed, 6 skipped (live tests), 1 warning (asyncio cleanup)
 
 **Linting**: All checks passed
 
@@ -1066,17 +1067,16 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
    - ✅ Core functionality proven: Workers can execute tasks, stream output, and report results
 2. **Enrichment Pipeline Real-World Testing** (OPEN): Not tested with actual project repositories
 3. **Hot-Reload Self-Improvement Loop** (OPEN): Theoretical only, not proven to work
-4. **Frontend-Backend Integration** (OPEN): No E2E tests with Playwright/Cypress
-5. **Scheduler Task Assignment** (OPEN): Integration with spawned workers incomplete
+4. **Frontend-Backend Integration** (PARTIAL): E2E Playwright tests exist (35 tests) but need running backend to validate
+5. **Scheduler Task Assignment** (COMPLETED): 8 new E2E integration tests validate full scheduler → worker → task execution flow
 6. **Container/Deployment** (COMPLETED): Dockerfile and K8s manifests added
 
 ## Recommended Next Steps
 
-1. **Create E2E frontend tests**: Playwright tests for critical user flows (CREATE, UPDATE, DELETE tasks, view workers, etc.)
+1. **Create E2E frontend tests with backend**: Run Playwright tests against running backend server
 2. **Test enrichment on real repo**: Point enrichment pipeline at an actual codebase and validate output quality
 3. **Test hot-reload**: Have ringmaster modify and reload its own code (self-improvement flywheel)
-4. **Test scheduler integration**: Full end-to-end test with spawned workers (ringmaster scheduler → worker spawn → task assignment → completion)
-5. **Fix timeout enforcement bug**: The stream_output loop in SessionHandle doesn't properly enforce the overall timeout
+4. **Fix timeout enforcement bug**: The stream_output loop in SessionHandle doesn't properly enforce the overall timeout
 
 ## Blockers
 

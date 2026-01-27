@@ -11,7 +11,7 @@ You are an autonomous coding agent running in a marathon loop. Each iteration of
 3. **Hot-Reload Self-Improvement** - Theoretical only, not proven to work
 4. **Frontend-Backend Integration** - No E2E tests, may have runtime errors
 5. **Scheduler Integration** - Uses mocks, not real workers
-6. **Container/Deployment** - No Dockerfile or K8s manifests
+6. **Self-Updating Launcher** - No binary/script that can download updates, replace itself, restart (like ccdash)
 
 **Your priority is to close these gaps, NOT add new features.**
 
@@ -51,7 +51,7 @@ Choose ONE focused task based on priority:
    - Create E2E integration test (spawn worker → assign task → validate completion)
    - Test enrichment pipeline on real repository
    - Add Playwright E2E tests for frontend
-   - Create Dockerfile for deployment
+   - Create self-updating launcher (like ccdash: check GitHub releases, download, replace, restart)
    - Test hot-reload self-improvement loop
 3. **Complete in-progress work** - Finish what was started before starting new work
 4. **DO NOT add new features** - The codebase has enough features; it needs validation
@@ -98,7 +98,7 @@ Work should be:
 - [ ] E2E integration test exists and passes (spawn → assign → complete cycle)
 - [ ] Enrichment pipeline tested on real repository
 - [ ] Playwright E2E tests exist for frontend
-- [ ] Dockerfile exists and builds successfully
+- [ ] Self-updating launcher exists (like ccdash: GitHub releases → download → replace → restart)
 - [ ] Hot-reload self-improvement loop validated
 
 If ALL gaps are closed AND the project is truly ready for production:
