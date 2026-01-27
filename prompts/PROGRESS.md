@@ -1050,14 +1050,15 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
 | 93 | 2026-01-27 | **E2E Scheduler Integration Tests**: Added comprehensive end-to-end integration tests for scheduler and worker execution flow. 8 new tests validating: task assignment to workers, multiple task handling, concurrent task limits, capability-based matching, health check detection, event emission, full task lifecycle transitions, and failure handling. All 658 tests passing (including 6 skipped live tests). Addresses functional gap #5 (Scheduler Task Assignment). |
 | 94 | 2026-01-27 | **Frontend-Backend Integration Validation**: Ran E2E Playwright tests against running backend. Identified that Playwright requires GUI libraries (libcairo, libgtk, etc.) for headless Chromium on Linux. Verified backend API health endpoints work correctly (/health returns 200, /api/projects returns empty list). Frontend builds successfully (364KB bundle) and passes ESLint with 0 errors. Documented E2E test requirements in README. |
 | 95 | 2026-01-27 | **Enrichment Pipeline Real-World Testing**: Added 14 comprehensive integration tests (`test_enrichment_pipeline_integration.py`) validating the 9-layer enrichment pipeline against a realistic FastAPI + React project structure. Tests cover: full pipeline for code/deployment/frontend tasks, context hash deduplication, all stages applied, token budgeting, logs/research context, context assembly logging, code context relevance, documentation inclusion, ADR filtering, refinement context, and system prompt quality. All 672 tests passing. |
+| 96 | 2026-01-27 | **Hot-Reload Self-Improvement E2E Tests**: Added 8 comprehensive end-to-end tests (`test_e2e_hot_reload.py`) validating actual Python module reloading for self-improvement. Tests prove: modules ARE reloaded in memory with `importlib.reload()`, new functions become available immediately, failing tests block reload (safety), multiple modules reload together, package `__init__.py` reloads, protected files are blocked, deleted files handled gracefully, and the complete self-improvement flywheel works (modify → detect → test → reload → new behavior active). All 680 tests passing (including 6 skipped live tests). Addresses functional gap #3 (Hot-Reload Self-Improvement Loop). |
 
 ## Current Status
 
-**Status**: ⚠️ FUNCTIONAL GAPS REMAIN (5/6 partially addressed)
+**Status**: ⚠️ FUNCTIONAL GAPS REMAIN (4/6 addressed)
 
-**Iteration 95 completed**: Enrichment pipeline real-world testing.
+**Iteration 96 completed**: Hot-reload self-improvement E2E validation.
 
-**Test Status**: 672 passed, 6 skipped (live tests), 1 warning (asyncio cleanup)
+**Test Status**: 680 passed, 6 skipped (live tests), 1 warning (asyncio cleanup)
 
 **Linting**: All checks passed (backend + frontend)
 
@@ -1073,7 +1074,13 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
    - ✅ FastAPI + React project structure simulated with backend, frontend, tests, README, ADRs, deployment files
    - ✅ Tests for code context, deployment context, documentation context, logs context, research context
    - ✅ Validates context assembly logging and token budgeting
-3. **Hot-Reload Self-Improvement Loop** (OPEN): Theoretical only, not proven to work
+3. **Hot-Reload Self-Improvement Loop** (COMPLETED): 8 new E2E tests prove actual module reloading works
+   - ✅ `test_module_is_actually_reloaded_in_memory`: Verifies `importlib.reload()` updates module objects in memory
+   - ✅ `test_hot_reload_workflow_end_to_end`: Full change → detect → test → reload cycle
+   - ✅ `test_failing_tests_block_reload`: Safety mechanism prevents broken code from being reloaded
+   - ✅ `test_multiple_modules_reloaded_together`: Dependent modules reload correctly
+   - ✅ `test_package_init_reloaded`: Package `__init__.py` reloads
+   - ✅ `test_ringmaster_can_reload_its_own_modules`: Complete self-improvement flywheel validated
 4. **Frontend-Backend Integration** (PARTIAL):
    - ✅ Backend API verified working (health check, projects endpoint)
    - ✅ Frontend builds successfully
@@ -1086,10 +1093,9 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
 
 ## Recommended Next Steps
 
-1. **Test hot-reload**: Have ringmaster modify and reload its own code (self-improvement flywheel)
-2. **Fix timeout enforcement bug**: The stream_output loop in SessionHandle doesn't properly enforce the overall timeout
-3. **Run Playwright E2E tests**: Requires installing GUI libraries or running in an environment with display server (Xvfb, VNC, or headed mode)
-4. **Create self-updating launcher**: Binary/script that downloads updates from GitHub, replaces itself, restarts (like ccdash)
+1. **Fix timeout enforcement bug**: The stream_output loop in SessionHandle doesn't properly enforce the overall timeout
+2. **Run Playwright E2E tests**: Requires installing GUI libraries or running in an environment with display server (Xvfb, VNC, or headed mode)
+3. **Create self-updating launcher**: Binary/script that downloads updates from GitHub, replaces itself, restarts (like ccdash)
 
 ## Blockers
 
