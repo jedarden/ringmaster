@@ -1670,6 +1670,71 @@ class TestWorkersAPI:
         response = await client.post(f"/api/workers/{worker_id}/pause")
         assert response.status_code == 400
 
+    async def test_pause_all_workers(self, client: AsyncClient):
+        """Test pausing all active workers."""
+        # Create multiple workers
+        worker1_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Active Worker 1",
+                "type": "claude-code",
+                "command": "claude",
+            },
+        )
+        worker1_id = worker1_response.json()["id"]
+
+        worker2_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Active Worker 2",
+                "type": "aider",
+                "command": "aider",
+            },
+        )
+        worker2_id = worker2_response.json()["id"]
+
+        # Activate both workers
+        await client.post(f"/api/workers/{worker1_id}/activate")
+        await client.post(f"/api/workers/{worker2_id}/activate")
+
+        # Pause all workers
+        response = await client.post("/api/workers/pause-all")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["paused_count"] == 2
+        assert set(data["paused_worker_ids"]) == {worker1_id, worker2_id}
+        assert data["skipped_count"] == 0
+
+        # Verify workers are now offline
+        worker1_data = await client.get(f"/api/workers/{worker1_id}")
+        assert worker1_data.json()["status"] == "offline"
+
+        worker2_data = await client.get(f"/api/workers/{worker2_id}")
+        assert worker2_data.json()["status"] == "offline"
+
+    async def test_pause_all_workers_no_active(self, client: AsyncClient):
+        """Test pausing all workers when none are active."""
+        # Create an offline worker (default state)
+        await client.post(
+            "/api/workers",
+            json={
+                "name": "Offline Worker",
+                "type": "claude-code",
+                "command": "claude",
+            },
+        )
+
+        # Pause all - should return 0 paused
+        response = await client.post("/api/workers/pause-all")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["paused_count"] == 0
+        assert data["paused_worker_ids"] == []
+
     async def test_list_workers_with_tasks(self, client: AsyncClient):
         """Test listing workers with task information."""
         # Create a project and task

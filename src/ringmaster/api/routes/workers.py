@@ -582,6 +582,75 @@ async def pause_worker(
     )
 
 
+class PauseAllResponse(BaseModel):
+    """Response for pausing all workers."""
+
+    success: bool
+    message: str
+    paused_count: int
+    paused_worker_ids: list[str]
+    skipped_count: int
+
+
+@router.post("/pause-all")
+async def pause_all_workers(
+    db: Annotated[Database, Depends(get_db)],
+) -> PauseAllResponse:
+    """Pause all active workers (graceful - finish current iterations).
+
+    This marks all non-offline workers for pausing. Each worker will complete
+    its current task iteration and then become offline instead of picking up
+    new tasks.
+
+    Returns:
+        PauseAllResponse with count of paused workers.
+    """
+    from ringmaster.events import EventBus, EventType
+
+    repo = WorkerRepository(db)
+
+    # Get all non-offline workers
+    all_workers = await repo.list(limit=1000)
+    active_workers = [w for w in all_workers if w.status != WorkerStatus.OFFLINE]
+
+    if not active_workers:
+        return PauseAllResponse(
+            success=True,
+            message="No active workers to pause.",
+            paused_count=0,
+            paused_worker_ids=[],
+            skipped_count=0,
+        )
+
+    paused_ids = []
+    event_bus = EventBus()
+
+    for worker in active_workers:
+        previous_status = worker.status
+        worker.status = WorkerStatus.OFFLINE
+        # Don't clear current_task_id - let task complete
+        await repo.update(worker)
+        paused_ids.append(worker.id)
+
+        # Emit pause event for each worker
+        await event_bus.emit(
+            EventType.WORKER_PAUSED,
+            {
+                "worker_id": worker.id,
+                "previous_status": previous_status.value,
+                "current_task_id": worker.current_task_id,
+            },
+        )
+
+    return PauseAllResponse(
+        success=True,
+        message=f"Paused {len(paused_ids)} worker(s). Current tasks will complete.",
+        paused_count=len(paused_ids),
+        paused_worker_ids=paused_ids,
+        skipped_count=0,
+    )
+
+
 # =============================================================================
 # Tmux Worker Spawning Endpoints
 # =============================================================================

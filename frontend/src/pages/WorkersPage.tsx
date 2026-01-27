@@ -7,6 +7,7 @@ import {
   deleteWorker,
   cancelWorkerTask,
   pauseWorker,
+  pauseAllWorkers,
   spawnWorker,
   killWorker,
   listWorkerSessions,
@@ -243,6 +244,24 @@ export function WorkersPage() {
     }
   };
 
+  const [pauseAllLoading, setPauseAllLoading] = useState(false);
+
+  const handlePauseAll = async () => {
+    if (!confirm("Pause all active workers? They will complete their current tasks and then stop.")) return;
+
+    try {
+      setPauseAllLoading(true);
+      const result = await pauseAllWorkers();
+      if (result.paused_count > 0) {
+        await loadWorkers();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pause all workers");
+    } finally {
+      setPauseAllLoading(false);
+    }
+  };
+
   // Check if a worker has an active tmux session
   const hasSession = (workerId: string) => {
     return tmuxSessions.some((s) => s.worker_id === workerId);
@@ -322,13 +341,27 @@ export function WorkersPage() {
   // For keyboard selection, we need flat index mapping
   const getWorkerIndex = (worker: WorkerWithTask) => workers.findIndex(w => w.id === worker.id);
 
+  // Check if there are any active workers to pause
+  const hasActiveWorkers = activeWorkers.length > 0;
+
   return (
     <div className="workers-page">
       <div className="page-header">
         <h1>Workers</h1>
-        <button onClick={() => setShowCreateForm(!showCreateForm)}>
-          {showCreateForm ? "Cancel" : "+ New Worker"}
-        </button>
+        <div className="header-actions">
+          {hasActiveWorkers && (
+            <button
+              onClick={handlePauseAll}
+              disabled={pauseAllLoading}
+              className="pause-all-btn"
+            >
+              {pauseAllLoading ? "Pausing..." : "Pause All"}
+            </button>
+          )}
+          <button onClick={() => setShowCreateForm(!showCreateForm)}>
+            {showCreateForm ? "Cancel" : "+ New Worker"}
+          </button>
+        </div>
       </div>
 
       {error && <div className="error">{error}</div>}

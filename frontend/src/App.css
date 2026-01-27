@@ -623,6 +623,24 @@ textarea {
   cursor: not-allowed;
 }
 
+/* Pause All button in page header */
+.pause-all-btn {
+  background: var(--color-warning);
+  color: black;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.pause-all-btn:hover {
+  background: #f59e0b;
+}
+
+.pause-all-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .worker-card.offline {
   opacity: 0.6;
 }

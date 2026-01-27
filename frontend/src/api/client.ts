@@ -420,6 +420,21 @@ export async function pauseWorker(id: string): Promise<InterruptResponse> {
   return handleResponse<InterruptResponse>(response);
 }
 
+export interface PauseAllResponse {
+  success: boolean;
+  message: string;
+  paused_count: number;
+  paused_worker_ids: string[];
+  skipped_count: number;
+}
+
+export async function pauseAllWorkers(): Promise<PauseAllResponse> {
+  const response = await fetch(`${API_BASE}/workers/pause-all`, {
+    method: "POST",
+  });
+  return handleResponse<PauseAllResponse>(response);
+}
+
 // Worker Output API
 
 import type { OutputResponse, OutputBufferStats } from "../types";
