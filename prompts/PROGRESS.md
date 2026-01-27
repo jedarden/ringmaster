@@ -1004,6 +1004,7 @@ The MVP is complete. For production deployment:
 | 87 | 2026-01-27 | Fix frontend ESLint errors: move useToast hook to separate file (react-refresh/only-export-components), refactor useListNavigation to derive index instead of setState in useEffect (react-hooks/set-state-in-effect), convert handleCreateDependency to useCallback and reorder (react-hooks/exhaustive-deps), add useCallback wrapper for loadRouting; all lint checks now pass with 0 errors and 0 warnings; all 650 tests + 6 skipped passing |
 | 88 | 2026-01-27 | Add project settings modal: ProjectSettingsModal component for editing project name, description, repo URL, tech stack, working_dir, and base_branch settings; settings field added to ProjectUpdate type; PATCH /api/projects/{id} now supports settings merge updates; Settings button added to ProjectDetailPage header; CSS styles for modal and form components; all 650 tests + 6 skipped passing |
 | 89 | 2026-01-27 | **PROJECT COMPLETE**: All acceptance criteria met. Updated GitHub issue with completion status. 650 tests passing, frontend builds and lints clean. Ready for production deployment. |
+| 90 | 2026-01-27 | Cleanup: removed accidentally committed `__pycache__/` bytecode files from git tracking. Project confirmed complete with clean working tree. |
 
 ## Blockers
 
