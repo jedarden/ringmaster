@@ -12,6 +12,7 @@ automatically transition tasks from REVIEW to DONE status.
 
 import asyncio
 import logging
+import sys
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
@@ -331,12 +332,15 @@ class TaskValidator:
 
     def _detect_test_command(self, working_dir: Path) -> str | None:
         """Auto-detect the appropriate test command for the project."""
+        # Use sys.executable for portability across Python installations
+        python_exe = sys.executable
+
         # Python
         if (working_dir / "pytest.ini").exists() or (working_dir / "pyproject.toml").exists():
-            return "python -m pytest --tb=short -q"
+            return f"{python_exe} -m pytest --tb=short -q"
 
         if (working_dir / "setup.py").exists():
-            return "python -m pytest --tb=short -q"
+            return f"{python_exe} -m pytest --tb=short -q"
 
         # Node.js
         if (working_dir / "package.json").exists():
@@ -354,12 +358,15 @@ class TaskValidator:
 
     def _detect_lint_command(self, working_dir: Path) -> str | None:
         """Auto-detect the appropriate lint command for the project."""
+        # Use sys.executable for portability across Python installations
+        python_exe = sys.executable
+
         # Python
         if (working_dir / "ruff.toml").exists() or (working_dir / "pyproject.toml").exists():
-            return "ruff check ."
+            return f"{python_exe} -m ruff check ."
 
         if (working_dir / ".flake8").exists() or (working_dir / "setup.cfg").exists():
-            return "flake8 ."
+            return f"{python_exe} -m flake8 ."
 
         # Node.js
         if (working_dir / ".eslintrc.js").exists() or (working_dir / ".eslintrc.json").exists():
@@ -380,9 +387,12 @@ class TaskValidator:
 
     def _detect_type_check_command(self, working_dir: Path) -> str | None:
         """Auto-detect the appropriate type check command for the project."""
+        # Use sys.executable for portability across Python installations
+        python_exe = sys.executable
+
         # Python
         if (working_dir / "mypy.ini").exists() or (working_dir / "pyproject.toml").exists():
-            return "mypy ."
+            return f"{python_exe} -m mypy ."
 
         # TypeScript
         if (working_dir / "tsconfig.json").exists():
