@@ -316,11 +316,22 @@ src/ringmaster/
 - ✅ Dedicated /projects/:projectId/graph route
 - ✅ "View Graph" link on project detail page
 
+### Task Assignment UI (`frontend/src/pages/ProjectDetailPage.tsx`)
+- ✅ Worker selector dropdown in task cards
+- ✅ Shows available (idle or already assigned) workers only
+- ✅ POST /api/tasks/{task_id}/assign endpoint
+- ✅ Validates worker availability (rejects offline/busy workers)
+- ✅ Validates task type (epics cannot be assigned)
+- ✅ Updates both task (status=assigned) and worker (status=busy) atomically
+- ✅ Unassign by selecting "Unassigned" option
+- ✅ Real-time updates via WebSocket events
+- ✅ 5 new integration tests
+
 ## Next Steps
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
-2. **Task Assignment UI**: Add UI for assigning tasks to workers manually
-3. **Graph Editing**: Allow creating dependencies by dragging between nodes
+2. **Graph Editing**: Allow creating dependencies by dragging between nodes
+3. **Subtask View**: Show subtasks nested under their parent tasks
 
 ## Iteration Log
 
@@ -352,6 +363,7 @@ src/ringmaster/
 | 24 | 2026-01-27 | Add WebSocket log streaming: LOG_CREATED event emission from logs API, LogsViewer WebSocket integration for real-time updates in live mode, connection status indicator, duplicate prevention via seen log IDs, 2 new tests, total 206 tests passing |
 | 25 | 2026-01-27 | Add file download endpoint: GET /api/chat/projects/{id}/uploads/{filename}/download with proper Content-Type and Content-Disposition headers, frontend client helpers (getDownloadUrl, downloadFile, triggerDownload), 3 new tests, total 209 tests passing |
 | 26 | 2026-01-27 | Add task dependency graph visualization: /api/graph endpoint for graph data, DependencyGraph React component with force-directed SVG layout, node shapes by type, colors by status, size by priority, critical path highlighting, interactive drag/hover/click, /projects/:projectId/graph route, 8 new tests, total 217 tests passing |
+| 27 | 2026-01-27 | Add task assignment UI: POST /api/tasks/{task_id}/assign endpoint, worker selector dropdown in task cards, validates worker availability (idle/not offline), validates task type (no epics), updates task and worker status atomically, unassign support, 5 new tests, total 222 tests passing |
 
 ## Blockers
 
