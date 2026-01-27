@@ -326,7 +326,7 @@ export function ProjectsPage() {
       ) : (
         <div className="projects-list" ref={listRef}>
           {summaries.map((summary, index) => {
-            const { project, task_counts, total_tasks, active_workers, pending_decisions, pending_questions, latest_activity } = summary;
+            const { project, task_counts, total_tasks, active_workers, pending_decisions, pending_questions, latest_activity, latest_message } = summary;
             const status = getProjectStatus(summary);
             const { className: statusClass, label: statusLabel } = getStatusIndicator(status);
             const completedTasks = task_counts.done;
@@ -374,6 +374,16 @@ export function ProjectsPage() {
                       )}
                     </div>
 
+                    {/* Latest message preview */}
+                    {latest_message && (
+                      <div className="latest-message-preview">
+                        <span className={`message-role ${latest_message.role}`}>
+                          {latest_message.role === 'user' ? '👤' : latest_message.role === 'agent' ? '🤖' : '💬'}
+                        </span>
+                        <span className="message-content">"{latest_message.content}"</span>
+                      </div>
+                    )}
+
                     {/* Task progress */}
                     {total_tasks > 0 && (
                       <div className="task-progress">
@@ -389,8 +399,8 @@ export function ProjectsPage() {
                       </div>
                     )}
 
-                    {/* Description */}
-                    {project.description && (
+                    {/* Description - only show if no latest message */}
+                    {!latest_message && project.description && (
                       <p className="project-description">{project.description}</p>
                     )}
 

@@ -75,6 +75,12 @@ export interface TaskStatusCounts {
   failed: number;
 }
 
+export interface LatestMessage {
+  content: string;
+  role: string;
+  created_at: string;
+}
+
 export interface ProjectSummary {
   project: Project;
   task_counts: TaskStatusCounts;
@@ -83,6 +89,7 @@ export interface ProjectSummary {
   pending_decisions: number;
   pending_questions: number;
   latest_activity: string | null;
+  latest_message: LatestMessage | null;
 }
 
 export interface TaskBase {

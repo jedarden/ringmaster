@@ -282,6 +282,74 @@ class TestProjectsAPI:
         )
         assert empty_project["total_tasks"] == 0
 
+    async def test_project_summary_latest_message(self, client: AsyncClient):
+        """Test that project summary includes latest message preview."""
+        # Create a project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Project With Messages"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Add a chat message
+        message_response = await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "content": "Should we use JWT or session-based auth?",
+                "role": "user",
+            },
+        )
+        assert message_response.status_code == 201
+
+        # Get project summary
+        response = await client.get(f"/api/projects/{project_id}/summary")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check latest_message is present
+        assert data["latest_message"] is not None
+        assert data["latest_message"]["role"] == "user"
+        assert "JWT" in data["latest_message"]["content"]
+
+        # Also check in the with-summaries list
+        list_response = await client.get("/api/projects/with-summaries")
+        summaries = list_response.json()
+        project_summary = next(
+            s for s in summaries if s["project"]["id"] == project_id
+        )
+        assert project_summary["latest_message"] is not None
+        assert project_summary["latest_message"]["role"] == "user"
+
+    async def test_project_summary_latest_message_truncation(self, client: AsyncClient):
+        """Test that long messages are truncated in latest_message preview."""
+        # Create a project
+        create_response = await client.post(
+            "/api/projects",
+            json={"name": "Project With Long Message"},
+        )
+        project_id = create_response.json()["id"]
+
+        # Add a very long chat message (> 100 chars)
+        long_content = "A" * 200
+        await client.post(
+            f"/api/chat/projects/{project_id}/messages",
+            json={
+                "project_id": project_id,
+                "content": long_content,
+                "role": "user",
+            },
+        )
+
+        # Get project summary
+        response = await client.get(f"/api/projects/{project_id}/summary")
+        data = response.json()
+
+        # Check message is truncated to ~100 chars with "..."
+        assert data["latest_message"] is not None
+        assert len(data["latest_message"]["content"]) == 100
+        assert data["latest_message"]["content"].endswith("...")
+
     async def test_pin_project(self, client: AsyncClient):
         """Test pinning a project."""
         # Create project

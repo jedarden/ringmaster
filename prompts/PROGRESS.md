@@ -969,6 +969,7 @@ Implemented shortcuts:
 | 81 | 2026-01-27 | Add project pinning to mailbox: pinned field on Project model, migration 012_project_pinned.sql, POST /pin and /unpin endpoints, pinned projects sort to top of list, frontend pin toggle button with visual indicator, 5 new tests, total 643 tests passing |
 | 82 | 2026-01-27 | Add project ranking algorithm for mailbox sorting: per docs/07-user-experience.md ranking factors (pinned, decisions needed, active workers, blocked/failed tasks, questions, in-progress work, recent activity, alphabetical tiebreaker); sort query param on /api/projects/with-summaries (rank, recent, alphabetical); _rank_projects() and _parse_activity_timestamp() helper functions; 3 new tests, total 646 tests passing |
 | 83 | 2026-01-27 | Add sort selector UI to projects mailbox: dropdown in ProjectsPage header to sort by Priority (rank), Recent Activity, or Alphabetical; update listProjectsWithSummaries() API client to accept sort param; CSS styles for sort selector; fix unused variable lint error in test_api.py; all 646 tests passing |
+| 84 | 2026-01-27 | Add latest message preview to project mailbox: LatestMessage model with content/role/created_at fields; latest_message field on ProjectSummary response; _get_latest_message() helper with 100-char truncation; frontend LatestMessage TypeScript type; ProjectsPage displays message preview with role icon (👤/🤖/💬); CSS styles for latest-message-preview; per docs/07-user-experience.md mailbox mockup showing conversation excerpts; 2 new tests, total 648 tests passing |
 
 ## Blockers
 

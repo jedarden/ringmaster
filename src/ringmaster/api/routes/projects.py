@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
-from ringmaster.db import Database, ProjectRepository, TaskRepository
+from ringmaster.db import ChatRepository, Database, ProjectRepository, TaskRepository
 from ringmaster.domain import Project
 
 router = APIRouter()
@@ -27,6 +27,14 @@ class TaskStatusCounts(BaseModel):
     failed: int = 0
 
 
+class LatestMessage(BaseModel):
+    """Preview of the most recent message in a project."""
+
+    content: str  # Truncated message content
+    role: str  # "user", "assistant", "agent", etc.
+    created_at: str  # ISO timestamp
+
+
 class ProjectSummary(BaseModel):
     """Summary of a project with activity stats."""
 
@@ -37,6 +45,7 @@ class ProjectSummary(BaseModel):
     pending_decisions: int
     pending_questions: int
     latest_activity: str | None  # ISO timestamp
+    latest_message: LatestMessage | None = None  # Most recent chat message preview
 
 
 class ProjectCreate(BaseModel):
@@ -116,6 +125,9 @@ async def list_projects_with_summaries(
         # Get latest activity
         latest_activity = await _get_latest_activity(db, project.id)
 
+        # Get latest message preview
+        latest_message = await _get_latest_message(db, project.id)
+
         summaries.append(
             ProjectSummary(
                 project=project,
@@ -136,6 +148,7 @@ async def list_projects_with_summaries(
                 pending_decisions=pending_decisions,
                 pending_questions=pending_questions,
                 latest_activity=latest_activity,
+                latest_message=latest_message,
             )
         )
 
@@ -284,6 +297,9 @@ async def get_project_summary(
     # Get latest activity
     latest_activity = await _get_latest_activity(db, project_id)
 
+    # Get latest message preview
+    latest_message = await _get_latest_message(db, project_id)
+
     return ProjectSummary(
         project=project,
         task_counts=task_counts,
@@ -303,6 +319,7 @@ async def get_project_summary(
         pending_decisions=pending_decisions,
         pending_questions=pending_questions,
         latest_activity=latest_activity,
+        latest_message=latest_message,
     )
 
 
@@ -367,6 +384,30 @@ async def _get_latest_activity(db: Database, project_id: UUID) -> str | None:
         (str(project_id),),
     )
     return row["latest"] if row and row["latest"] else None
+
+
+async def _get_latest_message(db: Database, project_id: UUID) -> LatestMessage | None:
+    """Get the most recent chat message preview for a project.
+
+    Returns a truncated preview (max 100 chars) of the latest message.
+    """
+    chat_repo = ChatRepository(db)
+    messages = await chat_repo.get_recent_messages(project_id, count=1)
+
+    if not messages:
+        return None
+
+    msg = messages[0]
+    # Truncate content to 100 characters
+    content = msg.content
+    if len(content) > 100:
+        content = content[:97] + "..."
+
+    return LatestMessage(
+        content=content,
+        role=msg.role,
+        created_at=msg.created_at.isoformat(),
+    )
 
 
 def _parse_activity_timestamp(timestamp: str | None) -> float:
