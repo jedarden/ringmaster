@@ -913,6 +913,154 @@ def report_result(
     asyncio.run(do_report())
 
 
+# =============================================================================
+# Self-Update Commands
+# =============================================================================
+
+
+@cli.group()
+def update() -> None:
+    """Manage Ringmaster updates."""
+    pass
+
+
+@update.command("check")
+@click.option("--force", "-f", is_flag=True, help="Bypass cache and check GitHub")
+def update_check(force: bool) -> None:
+    """Check for updates from GitHub releases."""
+    from ringmaster.updater import check_for_updates
+
+    result = check_for_updates(force=force)
+
+    if result.status.value == "up_to_date":
+        console.print(f"[green]✓[/green] {result.message}")
+        console.print(f"  Current: [cyan]{result.current_version}[/cyan]")
+    elif result.status.value == "update_available":
+        console.print(f"[yellow]→[/yellow] {result.message}")
+        console.print(f"  Current: [dim]{result.current_version}[/dim]")
+        console.print(f"  Latest:  [cyan]{result.latest_version}[/cyan]")
+        console.print("\nRun [cyan]ringmaster update apply[/cyan] to update")
+    else:
+        console.print(f"[red]✗[/red] {result.message}")
+        if result.error:
+            console.print(f"  [dim]{result.error}[/dim]")
+
+
+@update.command("apply")
+@click.option("--version", "-v", help="Specific version to install")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def update_apply(version: str | None, yes: bool) -> None:
+    """Download and apply an update from GitHub releases.
+
+    This will replace the current executable and restart Ringmaster.
+    """
+    from ringmaster.updater import (
+        SelfUpdateResult,
+        UpdateStatus,
+        check_for_updates,
+        download_update,
+        apply_update,
+    )
+
+    current_version = check_for_updates().current_version
+
+    # Check what update we're applying
+    if version:
+        console.print(f"Checking for version [cyan]{version}[/cyan]...")
+    else:
+        console.print("Checking for updates...")
+
+    check_result = check_for_updates(force=True)
+
+    if version and check_result.latest_version != version:
+        console.print(f"[yellow]Warning: Version {version} not found in latest releases[/yellow]")
+        console.print("Attempting to download anyway...")
+
+    if check_result.status.value == "up_to_date" and not version:
+        console.print("[green]Already up to date![/green]")
+        console.print(f"  Current version: [cyan]{current_version}[/cyan]")
+        return
+
+    if check_result.status.value == "update_available":
+        console.print(f"Update available: [cyan]{check_result.latest_version}[/cyan]")
+    elif version:
+        console.print(f"Downloading version: [cyan]{version}[/cyan]")
+
+    # Confirm
+    if not yes:
+        latest = version or check_result.latest_version
+        if not click.confirm(f"Update Ringmaster {current_version} → {latest}?"):
+            console.print("Aborted")
+            return
+
+    # Download
+    console.print("Downloading update...")
+    downloaded_path = download_update(version)
+
+    if not downloaded_path:
+        console.print("[red]Failed to download update[/red]")
+        console.print("[dim]No pre-built binary available for this platform[/dim]")
+        console.print("\nYou can install Ringmaster manually:")
+        console.print("  pip install --upgrade ringmaster")
+        raise SystemExit(1)
+
+    console.print("  Downloaded: [dim]" + str(downloaded_path) + "[/dim]")
+
+    # Apply update
+    console.print("Applying update...")
+    apply_result = apply_update(downloaded_path)
+
+    if apply_result.status == UpdateStatus.SUCCESS:
+        console.print("[green]✓[/green] Update applied successfully!")
+        console.print("  Restart Ringmaster to use the new version")
+        console.print("\nTo restart now, run:")
+        console.print("  [cyan]ringmaster update restart[/cyan]")
+
+        if apply_result.backup_path:
+            console.print(f"\nBackup saved to: [dim]{apply_result.backup_path}[/dim]")
+    else:
+        console.print(f"[red]✗[/red] {apply_result.message}")
+        if apply_result.error:
+            console.print(f"  Error: {apply_result.error}")
+        if apply_result.backup_path:
+            console.print(f"  Backup available at: {apply_result.backup_path}")
+        raise SystemExit(1)
+
+
+@update.command("restart")
+@click.argument("args", nargs=-1)
+def update_restart(args: tuple[str, ...]) -> None:
+    """Restart Ringmaster with the updated version.
+
+    Any additional arguments are passed to the new process.
+    """
+    from ringmaster.updater import restart_with_new_version
+
+    console.print("[yellow]Restarting Ringmaster...[/yellow]")
+
+    args_list = list(args) if args else None
+    restart_with_new_version(args_list)
+
+
+@update.command("rollback")
+@click.option("--backup", "-b", type=click.Path(), help="Path to backup file")
+def update_rollback(backup: str | None) -> None:
+    """Rollback to a previous version using backup."""
+    from pathlib import Path
+
+    from ringmaster.updater import rollback
+
+    backup_path = Path(backup) if backup else None
+
+    if rollback(backup_path):
+        console.print("[green]✓[/green] Rollback successful!")
+        console.print("Restart Ringmaster to use the previous version")
+    else:
+        console.print("[red]✗[/red] Rollback failed")
+        console.print("[dim]No backup found or restore failed[/dim]")
+        raise SystemExit(1)
+
+
 def main() -> None:
     """Main entry point."""
     cli()
