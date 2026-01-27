@@ -1,15 +1,18 @@
-import { useEffect, useState, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { listProjects, createProject, deleteProject } from "../api/client";
 import type { Project, ProjectCreate } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
+import { useListNavigation } from "../hooks/useKeyboardShortcuts";
 
 export function ProjectsPage() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newProject, setNewProject] = useState<ProjectCreate>({ name: "" });
+  const listRef = useRef<HTMLDivElement>(null);
 
   const loadProjects = useCallback(async () => {
     try {
@@ -36,6 +39,22 @@ export function ProjectsPage() {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  // Keyboard navigation for project list
+  const { selectedIndex, setSelectedIndex } = useListNavigation({
+    items: projects,
+    enabled: !showCreateForm,
+    onSelect: (_project, index) => {
+      // Scroll selected item into view
+      const items = listRef.current?.querySelectorAll(".project-card");
+      if (items?.[index]) {
+        items[index].scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    },
+    onOpen: (project) => {
+      navigate(`/projects/${project.id}`);
+    },
+  });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +104,7 @@ export function ProjectsPage() {
             value={newProject.name}
             onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
             required
+            autoFocus
           />
           <input
             type="text"
@@ -103,9 +123,13 @@ export function ProjectsPage() {
           <p>No projects yet. Create one to get started!</p>
         </div>
       ) : (
-        <div className="projects-list">
-          {projects.map((project) => (
-            <div key={project.id} className="project-card">
+        <div className="projects-list" ref={listRef}>
+          {projects.map((project, index) => (
+            <div
+              key={project.id}
+              className={`project-card ${index === selectedIndex ? "keyboard-selected" : ""}`}
+              onClick={() => setSelectedIndex(index)}
+            >
               <Link to={`/projects/${project.id}`} className="project-link">
                 <h3>{project.name}</h3>
                 {project.description && <p>{project.description}</p>}
@@ -130,6 +154,19 @@ export function ProjectsPage() {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Keyboard navigation hint */}
+      {projects.length > 0 && !showCreateForm && (
+        <div
+          style={{
+            marginTop: "1rem",
+            fontSize: "0.8rem",
+            color: "var(--color-text-muted)",
+          }}
+        >
+          Use <kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>j</kbd>/<kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>k</kbd> to navigate, <kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>Enter</kbd> to open
         </div>
       )}
     </div>

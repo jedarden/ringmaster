@@ -1,12 +1,22 @@
-import { NavLink, Outlet } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState, useCallback } from "react";
 import { healthCheck } from "../api/client";
 import { useWebSocket } from "../hooks/useWebSocket";
+import { useDefaultShortcuts } from "../hooks/useKeyboardShortcuts";
+import { CommandPalette } from "./CommandPalette";
+import { ShortcutsHelp } from "./ShortcutsHelp";
 
 export function Layout() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [apiStatus, setApiStatus] = useState<"connected" | "disconnected" | "checking">("checking");
   const { connected: wsConnected } = useWebSocket();
 
+  // Modal states
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  // Health check
   useEffect(() => {
     const checkHealth = async () => {
       try {
@@ -21,6 +31,39 @@ export function Layout() {
     const interval = setInterval(checkHealth, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Handle escape to close modals or go back
+  const handleEscape = useCallback(() => {
+    if (showCommandPalette) {
+      setShowCommandPalette(false);
+    } else if (showShortcutsHelp) {
+      setShowShortcutsHelp(false);
+    } else if (location.pathname !== "/") {
+      // Go back if not on home page
+      navigate(-1);
+    }
+  }, [showCommandPalette, showShortcutsHelp, location.pathname, navigate]);
+
+  // Toggle help modal
+  const toggleShortcutsHelp = useCallback(() => {
+    setShowShortcutsHelp(prev => !prev);
+  }, []);
+
+  // Set up keyboard shortcuts
+  const { pendingSequence } = useDefaultShortcuts({
+    onGoToMailbox: () => navigate("/"),
+    onGoToAgents: () => navigate("/workers"),
+    onGoToQueue: () => navigate("/queue"),
+    onGoToMetrics: () => navigate("/metrics"),
+    onGoToLogs: () => navigate("/logs"),
+    onOpenCommandPalette: () => setShowCommandPalette(true),
+    onSearch: () => setShowCommandPalette(true), // "/" also opens command palette
+    onShowHelp: toggleShortcutsHelp,
+    onEscape: handleEscape,
+    // Note: Undo/Redo would need an undo stack implementation
+    // onUndo: () => {},
+    // onRedo: () => {},
+  });
 
   return (
     <div className="app">
@@ -46,6 +89,21 @@ export function Layout() {
           </nav>
         </div>
         <div className="header-right">
+          <button
+            className="help-btn"
+            onClick={toggleShortcutsHelp}
+            title="Keyboard shortcuts (?)"
+            style={{
+              padding: "0.25rem 0.5rem",
+              fontSize: "0.8rem",
+              background: "transparent",
+              border: "1px solid var(--color-primary)",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            ?
+          </button>
           <span className={`ws-status status-${wsConnected ? "connected" : "disconnected"}`}>
             WS: {wsConnected ? "live" : "offline"}
           </span>
@@ -57,6 +115,25 @@ export function Layout() {
       <main className="app-main">
         <Outlet />
       </main>
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={showCommandPalette}
+        onClose={() => setShowCommandPalette(false)}
+      />
+
+      {/* Shortcuts Help Modal */}
+      <ShortcutsHelp
+        isOpen={showShortcutsHelp}
+        onClose={() => setShowShortcutsHelp(false)}
+      />
+
+      {/* Pending Shortcut Indicator */}
+      {pendingSequence && (
+        <div className="shortcut-indicator">
+          {pendingSequence}...
+        </div>
+      )}
     </div>
   );
 }

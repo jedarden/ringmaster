@@ -2523,3 +2523,321 @@ textarea {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* ===========================================
+   Command Palette Styles
+   =========================================== */
+
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 15vh;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.command-palette {
+  width: 100%;
+  max-width: 600px;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  animation: command-palette-in 0.15s ease-out;
+}
+
+@keyframes command-palette-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.command-palette-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.command-palette-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  color: var(--color-text);
+}
+
+.command-palette-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.command-palette-body {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.command-palette-loading,
+.command-palette-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.command-group {
+  padding: 0.5rem 0;
+}
+
+.command-group-label {
+  padding: 0.5rem 1rem;
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.command-item:hover,
+.command-item.selected {
+  background: var(--color-primary);
+}
+
+.command-label {
+  font-size: 0.9rem;
+}
+
+.command-shortcut {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.5rem;
+  background: var(--color-bg);
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  font-family: monospace;
+}
+
+.command-palette-footer {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--color-primary);
+  background: var(--color-bg);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.command-palette-footer kbd {
+  background: var(--color-surface);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: inherit;
+  margin-right: 0.25rem;
+}
+
+/* ===========================================
+   Shortcuts Help Modal Styles
+   =========================================== */
+
+.shortcuts-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.shortcuts-help {
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: shortcuts-help-in 0.15s ease-out;
+}
+
+@keyframes shortcuts-help-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.shortcuts-help-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.shortcuts-help-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.shortcuts-help-header .close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.shortcuts-help-header .close-btn:hover {
+  color: var(--color-text);
+}
+
+.shortcuts-help-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.shortcut-group {
+  margin-bottom: 1.25rem;
+}
+
+.shortcut-group:last-child {
+  margin-bottom: 0;
+}
+
+.shortcut-group h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.8rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.shortcut-group table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.shortcut-group tr {
+  border-bottom: 1px solid var(--color-bg);
+}
+
+.shortcut-group tr:last-child {
+  border-bottom: none;
+}
+
+.shortcut-keys {
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  white-space: nowrap;
+  width: 120px;
+}
+
+.shortcut-keys kbd {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-primary);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  min-width: 1.5rem;
+  text-align: center;
+}
+
+.shortcut-keys .key-separator {
+  margin: 0 0.15rem;
+  color: var(--color-text-muted);
+}
+
+.shortcut-description {
+  padding: 0.5rem 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.shortcuts-help-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--color-primary);
+  background: var(--color-bg);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.shortcuts-help-footer kbd {
+  background: var(--color-surface);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-family: inherit;
+  margin: 0 0.1rem;
+}
+
+/* ===========================================
+   Pending Shortcut Indicator
+   =========================================== */
+
+.shortcut-indicator {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  border-radius: var(--radius);
+  font-family: monospace;
+  font-size: 1rem;
+  color: var(--color-accent);
+  z-index: 1001;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  animation: shortcut-indicator-in 0.1s ease-out;
+}
+
+@keyframes shortcut-indicator-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ===========================================
+   Selected Item in Lists
+   =========================================== */
+
+.project-card.keyboard-selected,
+.worker-card.keyboard-selected,
+.task-row.keyboard-selected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
