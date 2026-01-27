@@ -460,3 +460,23 @@ export interface GraphData {
   edges: GraphEdge[];
   stats: Record<string, number>;
 }
+
+// Bulk operations types
+
+export interface BulkUpdateRequest {
+  task_ids: string[];
+  status?: TaskStatus | null;
+  priority?: Priority | null;
+  worker_id?: string | null;
+  unassign?: boolean;
+}
+
+export interface BulkDeleteRequest {
+  task_ids: string[];
+}
+
+export interface BulkOperationResponse {
+  updated: number;
+  failed: number;
+  errors: string[];
+}

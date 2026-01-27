@@ -44,6 +44,9 @@ import type {
   LogLevel,
   LogComponent,
   GraphData,
+  BulkUpdateRequest,
+  BulkDeleteRequest,
+  BulkOperationResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -222,6 +225,24 @@ export async function assignTask(taskId: string, data: TaskAssign): Promise<AnyT
     body: JSON.stringify(data),
   });
   return handleResponse<AnyTask>(response);
+}
+
+export async function bulkUpdateTasks(data: BulkUpdateRequest): Promise<BulkOperationResponse> {
+  const response = await fetch(`${API_BASE}/tasks/bulk-update`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<BulkOperationResponse>(response);
+}
+
+export async function bulkDeleteTasks(data: BulkDeleteRequest): Promise<BulkOperationResponse> {
+  const response = await fetch(`${API_BASE}/tasks/bulk-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<BulkOperationResponse>(response);
 }
 
 // Workers API

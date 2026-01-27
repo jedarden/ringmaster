@@ -65,6 +65,24 @@ class TaskAssign(BaseModel):
     worker_id: str | None = None  # None to unassign
 
 
+class BulkUpdateRequest(BaseModel):
+    """Request body for bulk task updates."""
+
+    task_ids: list[str]
+    status: TaskStatus | None = None
+    priority: Priority | None = None
+    worker_id: str | None = None  # For bulk assignment (None = no change, empty string = unassign)
+    unassign: bool = False  # If True, unassign all selected tasks
+
+
+class BulkUpdateResponse(BaseModel):
+    """Response for bulk task updates."""
+
+    updated: int
+    failed: int
+    errors: list[str]
+
+
 @router.get("")
 async def list_tasks(
     db: Annotated[Database, Depends(get_db)],
@@ -337,3 +355,159 @@ async def get_task_dependents(
     """Get tasks that depend on this task."""
     repo = TaskRepository(db)
     return await repo.get_dependents(task_id)
+
+
+@router.post("/bulk-update")
+async def bulk_update_tasks(
+    db: Annotated[Database, Depends(get_db)],
+    body: BulkUpdateRequest,
+) -> BulkUpdateResponse:
+    """Bulk update multiple tasks."""
+    task_repo = TaskRepository(db)
+    worker_repo = WorkerRepository(db)
+
+    updated = 0
+    failed = 0
+    errors: list[str] = []
+
+    # If assigning to a worker, validate the worker exists and is available
+    target_worker = None
+    if body.worker_id:
+        target_worker = await worker_repo.get(body.worker_id)
+        if not target_worker:
+            return BulkUpdateResponse(
+                updated=0,
+                failed=len(body.task_ids),
+                errors=[f"Worker {body.worker_id} not found"],
+            )
+        if target_worker.status == WorkerStatus.OFFLINE:
+            return BulkUpdateResponse(
+                updated=0,
+                failed=len(body.task_ids),
+                errors=["Worker is offline"],
+            )
+
+    for task_id in body.task_ids:
+        try:
+            task = await task_repo.get_task(task_id)
+            if not task:
+                errors.append(f"Task {task_id} not found")
+                failed += 1
+                continue
+
+            # Epics cannot be assigned
+            if task.type == TaskType.EPIC and (body.worker_id or body.unassign):
+                errors.append(f"Epic {task_id} cannot be assigned to workers")
+                failed += 1
+                continue
+
+            changed = False
+
+            # Update status if provided
+            if body.status is not None and task.status != body.status:
+                task.status = body.status
+                changed = True
+
+            # Update priority if provided
+            if body.priority is not None and task.priority != body.priority:
+                task.priority = body.priority
+                changed = True
+
+            # Handle assignment/unassignment
+            if body.unassign and hasattr(task, "worker_id") and task.worker_id:
+                old_worker_id = task.worker_id
+                task.worker_id = None
+                if task.status == TaskStatus.ASSIGNED:
+                    task.status = TaskStatus.READY
+                changed = True
+
+                # Mark old worker as idle
+                old_worker = await worker_repo.get(old_worker_id)
+                if old_worker and old_worker.current_task_id == task_id:
+                    old_worker.status = WorkerStatus.IDLE
+                    old_worker.current_task_id = None
+                    await worker_repo.update(old_worker)
+
+            elif body.worker_id and hasattr(task, "worker_id"):
+                # Check if worker is busy with another task
+                if (
+                    target_worker
+                    and target_worker.status == WorkerStatus.BUSY
+                    and target_worker.current_task_id != task_id
+                ):
+                    errors.append(
+                        f"Worker busy, cannot assign task {task_id}"
+                    )
+                    failed += 1
+                    continue
+
+                task.worker_id = body.worker_id
+                task.status = TaskStatus.ASSIGNED
+                changed = True
+
+            if changed:
+                await task_repo.update_task(task)
+                updated += 1
+
+                # Emit event
+                await event_bus.emit(
+                    EventType.TASK_UPDATED,
+                    data={"task_id": task.id, "status": task.status.value, "bulk": True},
+                    project_id=str(task.project_id),
+                )
+            else:
+                # No changes needed
+                updated += 1
+
+        except Exception as e:
+            errors.append(f"Error updating {task_id}: {str(e)}")
+            failed += 1
+
+    return BulkUpdateResponse(updated=updated, failed=failed, errors=errors)
+
+
+class BulkDeleteRequest(BaseModel):
+    """Request body for bulk task deletion."""
+
+    task_ids: list[str]
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_tasks(
+    db: Annotated[Database, Depends(get_db)],
+    body: BulkDeleteRequest,
+) -> BulkUpdateResponse:
+    """Bulk delete multiple tasks."""
+    task_repo = TaskRepository(db)
+
+    deleted = 0
+    failed = 0
+    errors: list[str] = []
+
+    for task_id in body.task_ids:
+        try:
+            task = await task_repo.get_task(task_id)
+            if not task:
+                errors.append(f"Task {task_id} not found")
+                failed += 1
+                continue
+
+            project_id = str(task.project_id)
+            success = await task_repo.delete_task(task_id)
+            if success:
+                deleted += 1
+                # Emit event
+                await event_bus.emit(
+                    EventType.TASK_DELETED,
+                    data={"task_id": task_id, "bulk": True},
+                    project_id=project_id,
+                )
+            else:
+                errors.append(f"Failed to delete {task_id}")
+                failed += 1
+
+        except Exception as e:
+            errors.append(f"Error deleting {task_id}: {str(e)}")
+            failed += 1
+
+    return BulkUpdateResponse(updated=deleted, failed=failed, errors=errors)

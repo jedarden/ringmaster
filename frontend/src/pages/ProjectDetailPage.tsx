@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getProject, listTasks, listWorkers, createTask, createEpic, updateTask, deleteTask, assignTask } from "../api/client";
+import { getProject, listTasks, listWorkers, createTask, createEpic, updateTask, deleteTask, assignTask, bulkUpdateTasks, bulkDeleteTasks } from "../api/client";
 import type { Project, AnyTask, Worker, TaskCreate, EpicCreate } from "../types";
 import { TaskStatus, TaskType, Priority, WorkerStatus } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
@@ -19,6 +19,8 @@ export function ProjectDetailPage() {
   const [taskType, setTaskType] = useState<"task" | "epic">("task");
   const [newTask, setNewTask] = useState<TaskCreate | EpicCreate>({ project_id: "", title: "" });
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
@@ -117,6 +119,114 @@ export function ProjectDetailPage() {
       }
       return next;
     });
+  };
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTasks((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) {
+        next.delete(taskId);
+      } else {
+        next.add(taskId);
+      }
+      return next;
+    });
+  };
+
+  const selectAllTasks = () => {
+    const allTaskIds = tasks
+      .filter((t) => t.type !== TaskType.EPIC)
+      .map((t) => t.id);
+    setSelectedTasks(new Set(allTaskIds));
+  };
+
+  const deselectAllTasks = () => {
+    setSelectedTasks(new Set());
+  };
+
+  const handleBulkStatusChange = async (status: TaskStatus) => {
+    if (selectedTasks.size === 0) return;
+
+    try {
+      setBulkLoading(true);
+      const result = await bulkUpdateTasks({
+        task_ids: Array.from(selectedTasks),
+        status,
+      });
+      if (result.errors.length > 0) {
+        setError(`Updated ${result.updated}, failed ${result.failed}: ${result.errors[0]}`);
+      }
+      await loadData();
+      setSelectedTasks(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk update failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkPriorityChange = async (priority: Priority) => {
+    if (selectedTasks.size === 0) return;
+
+    try {
+      setBulkLoading(true);
+      const result = await bulkUpdateTasks({
+        task_ids: Array.from(selectedTasks),
+        priority,
+      });
+      if (result.errors.length > 0) {
+        setError(`Updated ${result.updated}, failed ${result.failed}: ${result.errors[0]}`);
+      }
+      await loadData();
+      setSelectedTasks(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk update failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkAssign = async (workerId: string | null) => {
+    if (selectedTasks.size === 0) return;
+
+    try {
+      setBulkLoading(true);
+      const result = await bulkUpdateTasks({
+        task_ids: Array.from(selectedTasks),
+        worker_id: workerId || undefined,
+        unassign: !workerId,
+      });
+      if (result.errors.length > 0) {
+        setError(`Updated ${result.updated}, failed ${result.failed}: ${result.errors[0]}`);
+      }
+      await loadData();
+      setSelectedTasks(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk assign failed");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTasks.size === 0) return;
+    if (!confirm(`Delete ${selectedTasks.size} selected tasks?`)) return;
+
+    try {
+      setBulkLoading(true);
+      const result = await bulkDeleteTasks({
+        task_ids: Array.from(selectedTasks),
+      });
+      if (result.errors.length > 0) {
+        setError(`Deleted ${result.updated}, failed ${result.failed}: ${result.errors[0]}`);
+      }
+      await loadData();
+      setSelectedTasks(new Set());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk delete failed");
+    } finally {
+      setBulkLoading(false);
+    }
   };
 
   if (loading) {
@@ -344,7 +454,79 @@ export function ProjectDetailPage() {
           )}
 
           <div className="section">
-            <h2>Tasks</h2>
+            <div className="section-header">
+              <h2>Tasks</h2>
+              <div className="bulk-selection-controls">
+                <button onClick={selectAllTasks} className="select-btn">
+                  Select All
+                </button>
+                <button onClick={deselectAllTasks} className="select-btn" disabled={selectedTasks.size === 0}>
+                  Deselect All
+                </button>
+              </div>
+            </div>
+
+            {selectedTasks.size > 0 && (
+              <div className="bulk-toolbar">
+                <span className="bulk-count">{selectedTasks.size} selected</span>
+                <div className="bulk-actions">
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleBulkStatusChange(e.target.value as TaskStatus);
+                        e.target.value = "";
+                      }
+                    }}
+                    disabled={bulkLoading}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Set Status...</option>
+                    {Object.values(TaskStatus).map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleBulkPriorityChange(e.target.value as Priority);
+                        e.target.value = "";
+                      }
+                    }}
+                    disabled={bulkLoading}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Set Priority...</option>
+                    {Object.values(Priority).map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                  <select
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === "__unassign__") {
+                        handleBulkAssign(null);
+                      } else if (val) {
+                        handleBulkAssign(val);
+                      }
+                      e.target.value = "";
+                    }}
+                    disabled={bulkLoading}
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Assign to...</option>
+                    <option value="__unassign__">Unassign All</option>
+                    {workers.filter((w) => w.status === WorkerStatus.IDLE).map((w) => (
+                      <option key={w.id} value={w.id}>{w.name}</option>
+                    ))}
+                  </select>
+                  <button onClick={handleBulkDelete} className="delete-btn" disabled={bulkLoading}>
+                    Delete Selected
+                  </button>
+                </div>
+                {bulkLoading && <span className="bulk-loading">Updating...</span>}
+              </div>
+            )}
+
             <div className="kanban-board">
               {Object.entries(groupedTasks).map(([status, statusTasks]) => (
                 <div key={status} className="kanban-column">
@@ -362,8 +544,14 @@ export function ProjectDetailPage() {
                       const isExpanded = expandedTasks.has(task.id);
 
                       return (
-                        <div key={task.id} className="task-card">
+                        <div key={task.id} className={`task-card ${selectedTasks.has(task.id) ? "selected" : ""}`}>
                           <div className="task-header">
+                            <input
+                              type="checkbox"
+                              checked={selectedTasks.has(task.id)}
+                              onChange={() => toggleTaskSelection(task.id)}
+                              className="task-checkbox"
+                            />
                             <span className={`priority priority-${task.priority.toLowerCase()}`}>
                               {task.priority}
                             </span>

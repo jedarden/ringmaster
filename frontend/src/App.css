@@ -2426,3 +2426,100 @@ textarea {
   border-color: var(--color-error);
   color: white;
 }
+
+/* ===========================================
+   Bulk Task Operations
+   =========================================== */
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-header h2 {
+  margin: 0;
+}
+
+.bulk-selection-controls {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.select-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  color: var(--color-text-muted);
+}
+
+.select-btn:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.select-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bulk-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--color-primary);
+  border-radius: var(--radius);
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.bulk-count {
+  font-weight: bold;
+  color: var(--color-accent);
+  font-size: 0.9rem;
+}
+
+.bulk-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.bulk-actions select {
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  min-width: 120px;
+}
+
+.bulk-actions .delete-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.bulk-loading {
+  color: var(--color-warning);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.task-checkbox {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: var(--color-accent);
+}
+
+.task-card.selected {
+  border: 2px solid var(--color-accent);
+  background: rgba(233, 69, 96, 0.1);
+}
+
+.task-card .task-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

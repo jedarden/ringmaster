@@ -552,6 +552,122 @@ class TestTasksAPI:
         assert response.status_code == 400
         assert "epic" in response.json()["detail"].lower()
 
+    async def test_bulk_update_status(self, client: AsyncClient):
+        """Test bulk updating task status."""
+        # Create project and tasks
+        project_response = await client.post(
+            "/api/projects", json={"name": "Bulk Update Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_ids = []
+        for i in range(3):
+            task_response = await client.post(
+                "/api/tasks",
+                json={"project_id": project_id, "title": f"Bulk Task {i}"},
+            )
+            task_ids.append(task_response.json()["id"])
+
+        # Bulk update status
+        response = await client.post(
+            "/api/tasks/bulk-update",
+            json={"task_ids": task_ids, "status": "in_progress"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated"] == 3
+        assert data["failed"] == 0
+
+        # Verify all tasks updated
+        for task_id in task_ids:
+            task_response = await client.get(f"/api/tasks/{task_id}")
+            assert task_response.json()["status"] == "in_progress"
+
+    async def test_bulk_update_priority(self, client: AsyncClient):
+        """Test bulk updating task priority."""
+        # Create project and tasks
+        project_response = await client.post(
+            "/api/projects", json={"name": "Bulk Priority Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_ids = []
+        for i in range(2):
+            task_response = await client.post(
+                "/api/tasks",
+                json={"project_id": project_id, "title": f"Priority Task {i}"},
+            )
+            task_ids.append(task_response.json()["id"])
+
+        # Bulk update priority
+        response = await client.post(
+            "/api/tasks/bulk-update",
+            json={"task_ids": task_ids, "priority": "P0"},
+        )
+        assert response.status_code == 200
+        assert response.json()["updated"] == 2
+
+        # Verify
+        for task_id in task_ids:
+            task_response = await client.get(f"/api/tasks/{task_id}")
+            assert task_response.json()["priority"] == "P0"
+
+    async def test_bulk_delete(self, client: AsyncClient):
+        """Test bulk deleting tasks."""
+        # Create project and tasks
+        project_response = await client.post(
+            "/api/projects", json={"name": "Bulk Delete Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_ids = []
+        for i in range(3):
+            task_response = await client.post(
+                "/api/tasks",
+                json={"project_id": project_id, "title": f"Delete Task {i}"},
+            )
+            task_ids.append(task_response.json()["id"])
+
+        # Bulk delete
+        response = await client.post(
+            "/api/tasks/bulk-delete",
+            json={"task_ids": task_ids},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated"] == 3
+        assert data["failed"] == 0
+
+        # Verify all deleted
+        for task_id in task_ids:
+            task_response = await client.get(f"/api/tasks/{task_id}")
+            assert task_response.status_code == 404
+
+    async def test_bulk_update_with_invalid_task(self, client: AsyncClient):
+        """Test bulk update handles invalid task IDs gracefully."""
+        # Create project and one valid task
+        project_response = await client.post(
+            "/api/projects", json={"name": "Partial Bulk Test"}
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Valid Task"},
+        )
+        valid_task_id = task_response.json()["id"]
+
+        # Bulk update with mix of valid and invalid
+        response = await client.post(
+            "/api/tasks/bulk-update",
+            json={"task_ids": [valid_task_id, "invalid-id"], "status": "done"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["updated"] == 1
+        assert data["failed"] == 1
+        assert len(data["errors"]) == 1
+
 
 class TestWorkersAPI:
     """Tests for workers API - testing routes/workers.py."""
