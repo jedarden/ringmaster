@@ -1,13 +1,17 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { getQueueStats, getReadyTasks } from "../api/client";
 import type { QueueStats, Task } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
+import { useListNavigation } from "../hooks/useKeyboardShortcuts";
 
 export function QueuePage() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<QueueStats | null>(null);
   const [readyTasks, setReadyTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -39,6 +43,25 @@ export function QueuePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Keyboard navigation for ready tasks list
+  const { selectedIndex } = useListNavigation({
+    items: readyTasks,
+    enabled: true,
+    onSelect: (_task, index) => {
+      // Scroll selected item into view
+      const items = listRef.current?.querySelectorAll(".task-row");
+      if (items?.[index]) {
+        items[index].scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    },
+    onOpen: (task) => {
+      // Navigate to the task's project
+      if (task.project_id) {
+        navigate(`/projects/${task.project_id}?task=${task.id}`);
+      }
+    },
+  });
 
   if (loading && !stats) {
     return <div className="loading">Loading queue...</div>;
@@ -104,12 +127,16 @@ export function QueuePage() {
 
       <div className="section">
         <h2>Ready Tasks ({readyTasks.length})</h2>
+        <p className="keyboard-hint">Use j/k to navigate, Enter to open task's project</p>
         {readyTasks.length === 0 ? (
           <p className="empty-state">No tasks ready for assignment</p>
         ) : (
-          <div className="ready-tasks-list">
-            {readyTasks.map((task) => (
-              <div key={task.id} className="task-row">
+          <div className="ready-tasks-list" ref={listRef}>
+            {readyTasks.map((task, index) => (
+              <div
+                key={task.id}
+                className={`task-row${selectedIndex === index ? " keyboard-selected" : ""}`}
+              >
                 <span className={`priority priority-${task.priority.toLowerCase()}`}>
                   {task.priority}
                 </span>
