@@ -715,6 +715,9 @@ Implemented shortcuts:
 - ✅ GET /api/workers/{id}/session - Get session info
 - ✅ GET /api/workers/sessions/list - List all worker sessions
 - ✅ GET /api/workers/{id}/log - Get worker log output
+- ✅ GET /api/workers/with-tasks - List workers with enriched task info
+  - Returns CurrentTaskInfo (task_id, title, status, started_at, attempts, max_attempts) for busy workers
+  - Enables UI to show task title and duration for active workers
 
 ## Next Steps
 
@@ -781,6 +784,7 @@ Implemented shortcuts:
 | 55 | 2026-01-27 | Add tmux-based worker spawning: WorkerSpawner class with spawn/kill/list_sessions, worker script generation for claude-code/aider/codex/goose/generic; CLI commands `worker spawn/attach/kill/sessions/output`; API endpoints POST /spawn, POST /kill, GET /session, GET /sessions/list, GET /log; enables on-demand worker management per docs/09-remaining-decisions.md section 4; 21 new tests, total 454 tests passing |
 | 56 | 2026-01-27 | Fix test portability: use sys.executable instead of hardcoded 'python' in test_cli_worker.py subprocess calls, fix linting issues in test_spawner.py (combine nested with statements, remove unused imports/variables), all 454 tests passing |
 | 57 | 2026-01-27 | Add worker spawner frontend UI: TypeScript types (SpawnWorkerRequest, SpawnedWorkerResponse, TmuxSessionResponse, WorkerLogResponse), API client functions (spawnWorker, killWorker, getWorkerSession, listWorkerSessions, getWorkerLog), WorkersPage spawn modal with worker type/capabilities/worktree config, tmux session status display, spawn/kill buttons, all 454 tests passing |
+| 58 | 2026-01-27 | Add worker task duration display: GET /api/workers/with-tasks endpoint returns enriched worker info including current task title, started_at, attempts; WorkerWithTask/CurrentTaskInfo TypeScript types; listWorkersWithTasks API client; WorkersPage shows task title and live elapsed time with auto-updating timer; CSS styling for current-task-info section; 3 new tests, total 457 tests passing |
 
 ## Blockers
 

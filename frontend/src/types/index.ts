@@ -187,6 +187,22 @@ export interface Worker {
   last_active_at: string | null;
 }
 
+// Current task info for busy workers
+export interface CurrentTaskInfo {
+  task_id: string;
+  title: string;
+  status: string;
+  started_at: string | null;
+  attempts: number;
+  max_attempts: number;
+}
+
+// Worker with enriched task information
+export interface WorkerWithTask extends Worker {
+  current_task: CurrentTaskInfo | null;
+  capabilities: string[];
+}
+
 export interface WorkerCreate {
   name: string;
   type: string;

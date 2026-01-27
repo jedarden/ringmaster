@@ -463,6 +463,35 @@ textarea {
   opacity: 0.6;
 }
 
+/* Current task info in worker cards */
+.current-task-info {
+  background: var(--color-bg);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.current-task-info .task-title {
+  margin: 0 0 0.25rem 0;
+  color: var(--color-text);
+}
+
+.current-task-info .task-meta {
+  margin: 0;
+  display: flex;
+  gap: 1rem;
+  font-size: 0.8rem;
+}
+
+.current-task-info .iteration {
+  color: var(--color-info);
+}
+
+.current-task-info .duration {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
 /* Status Badges */
 .status-badge {
   padding: 0.25rem 0.5rem;

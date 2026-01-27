@@ -13,6 +13,7 @@ import type {
   Dependency,
   DependencyCreate,
   Worker,
+  WorkerWithTask,
   WorkerCreate,
   WorkerUpdate,
   QueueStats,
@@ -312,6 +313,19 @@ export async function listWorkers(
 
   const response = await fetch(`${API_BASE}/workers?${searchParams}`);
   return handleResponse<Worker[]>(response);
+}
+
+export async function listWorkersWithTasks(
+  params: ListWorkersParams = {}
+): Promise<WorkerWithTask[]> {
+  const searchParams = new URLSearchParams();
+  if (params.status) searchParams.set("status", params.status);
+  if (params.worker_type) searchParams.set("worker_type", params.worker_type);
+  searchParams.set("limit", (params.limit || 100).toString());
+  searchParams.set("offset", (params.offset || 0).toString());
+
+  const response = await fetch(`${API_BASE}/workers/with-tasks?${searchParams}`);
+  return handleResponse<WorkerWithTask[]>(response);
 }
 
 export async function createWorker(data: WorkerCreate): Promise<Worker> {

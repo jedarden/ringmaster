@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  listWorkers,
+  listWorkersWithTasks,
   createWorker,
   activateWorker,
   deactivateWorker,
@@ -13,13 +13,35 @@ import {
 } from "../api/client";
 import type { TmuxSessionResponse, SpawnWorkerRequest } from "../types";
 import { WorkerOutputPanel } from "../components/WorkerOutputPanel";
-import type { Worker, WorkerCreate } from "../types";
+import type { WorkerWithTask, WorkerCreate } from "../types";
 import { WorkerStatus } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { useListNavigation } from "../hooks/useKeyboardShortcuts";
 
+// Helper to format elapsed time
+function formatDuration(startedAt: string | null): string {
+  if (!startedAt) return "";
+  const start = new Date(startedAt).getTime();
+  const now = Date.now();
+  const diffMs = now - start;
+
+  if (diffMs < 0) return "";
+
+  const seconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}h ${minutes % 60}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
 export function WorkersPage() {
-  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [workers, setWorkers] = useState<WorkerWithTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -37,12 +59,14 @@ export function WorkersPage() {
     worker_type: "claude-code",
     capabilities: [],
   });
+  // Timer to update duration display for busy workers
+  const [, setTick] = useState(0);
 
   const loadWorkers = useCallback(async () => {
     try {
       setLoading(true);
       const [workersData, sessionsData] = await Promise.all([
-        listWorkers(),
+        listWorkersWithTasks(),
         listWorkerSessions().catch(() => []),
       ]);
       setWorkers(workersData);
@@ -67,6 +91,18 @@ export function WorkersPage() {
   useEffect(() => {
     loadWorkers();
   }, [loadWorkers]);
+
+  // Timer to update duration display for busy workers every second
+  useEffect(() => {
+    const hasBusyWorkers = workers.some((w) => w.status === WorkerStatus.BUSY);
+    if (!hasBusyWorkers) return;
+
+    const interval = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [workers]);
 
   // Keyboard navigation for workers list
   const { selectedIndex, setSelectedIndex } = useListNavigation({
@@ -214,7 +250,7 @@ export function WorkersPage() {
   const offlineWorkers = workers.filter((w) => w.status === WorkerStatus.OFFLINE);
 
   // For keyboard selection, we need flat index mapping
-  const getWorkerIndex = (worker: Worker) => workers.findIndex(w => w.id === worker.id);
+  const getWorkerIndex = (worker: WorkerWithTask) => workers.findIndex(w => w.id === worker.id);
 
   return (
     <div className="workers-page">
@@ -285,7 +321,24 @@ export function WorkersPage() {
                       </div>
                       <div className="worker-info">
                         <p>Command: <code>{worker.command}</code></p>
-                        {worker.current_task_id && (
+                        {worker.current_task && (
+                          <div className="current-task-info">
+                            <p className="task-title">
+                              <strong>Task:</strong> {worker.current_task.title}
+                            </p>
+                            <p className="task-meta">
+                              <span className="iteration">
+                                Iteration {worker.current_task.attempts}/{worker.current_task.max_attempts}
+                              </span>
+                              {worker.current_task.started_at && (
+                                <span className="duration">
+                                  Duration: {formatDuration(worker.current_task.started_at)}
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        )}
+                        {!worker.current_task && worker.current_task_id && (
                           <p>Current task: {worker.current_task_id}</p>
                         )}
                         <p>

@@ -1256,6 +1256,118 @@ class TestWorkersAPI:
         response = await client.post(f"/api/workers/{worker_id}/pause")
         assert response.status_code == 400
 
+    async def test_list_workers_with_tasks(self, client: AsyncClient):
+        """Test listing workers with task information."""
+        # Create a project and task
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Worker Task Test Project"},
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Test Task for Worker",
+                "description": "Task being worked on",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        # Create and activate a worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Task Worker",
+                "type": "claude-code",
+                "command": "claude",
+                "capabilities": ["python"],
+            },
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Activate and assign task
+        await client.post(f"/api/workers/{worker_id}/activate")
+        await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+
+        # List workers with tasks
+        response = await client.get("/api/workers/with-tasks")
+        assert response.status_code == 200
+        workers = response.json()
+        assert len(workers) == 1
+
+        worker = workers[0]
+        assert worker["id"] == worker_id
+        assert worker["current_task_id"] == task_id
+        assert worker["current_task"] is not None
+        assert worker["current_task"]["task_id"] == task_id
+        assert worker["current_task"]["title"] == "Test Task for Worker"
+
+    async def test_list_workers_with_tasks_idle_worker(self, client: AsyncClient):
+        """Test listing workers without tasks shows null current_task."""
+        # Create idle worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Idle Worker",
+                "type": "aider",
+                "command": "aider",
+            },
+        )
+        worker_id = worker_response.json()["id"]
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # List workers with tasks
+        response = await client.get("/api/workers/with-tasks")
+        assert response.status_code == 200
+        workers = response.json()
+        assert len(workers) == 1
+
+        worker = workers[0]
+        assert worker["current_task_id"] is None
+        assert worker["current_task"] is None
+
+    async def test_list_workers_with_tasks_filter_by_status(self, client: AsyncClient):
+        """Test filtering workers with tasks by status."""
+        # Create two workers - one idle, one offline
+        worker1_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Idle Worker Filter",
+                "type": "claude-code",
+                "command": "claude",
+            },
+        )
+        worker1_id = worker1_response.json()["id"]
+        await client.post(f"/api/workers/{worker1_id}/activate")
+
+        await client.post(
+            "/api/workers",
+            json={
+                "name": "Offline Worker Filter",
+                "type": "aider",
+                "command": "aider",
+            },
+        )
+
+        # Filter by idle status
+        response = await client.get("/api/workers/with-tasks?status=idle")
+        assert response.status_code == 200
+        workers = response.json()
+        assert len(workers) == 1
+        assert workers[0]["status"] == "idle"
+
+        # Filter by offline status
+        response = await client.get("/api/workers/with-tasks?status=offline")
+        assert response.status_code == 200
+        workers = response.json()
+        assert len(workers) == 1
+        assert workers[0]["status"] == "offline"
+
 
 class TestWorkerOutputAPI:
     """Tests for worker output streaming API."""

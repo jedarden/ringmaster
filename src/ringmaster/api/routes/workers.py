@@ -14,6 +14,41 @@ from ringmaster.worker.output_buffer import output_buffer
 router = APIRouter()
 
 
+class CurrentTaskInfo(BaseModel):
+    """Information about a worker's current task."""
+
+    task_id: str
+    title: str
+    status: str
+    started_at: str | None = None
+    attempts: int = 0
+    max_attempts: int = 5
+
+
+class WorkerWithTask(BaseModel):
+    """Worker with optional current task information."""
+
+    id: str
+    name: str
+    type: str
+    status: WorkerStatus
+    current_task_id: str | None = None
+    capabilities: list[str] = []
+    command: str
+    args: list[str] = []
+    prompt_flag: str = "-p"
+    working_dir: str | None = None
+    timeout_seconds: int = 1800
+    env_vars: dict[str, str] = {}
+    tasks_completed: int = 0
+    tasks_failed: int = 0
+    avg_completion_seconds: float | None = None
+    created_at: str
+    last_active_at: str | None = None
+    # Enriched task info
+    current_task: CurrentTaskInfo | None = None
+
+
 class WorkerCreate(BaseModel):
     """Request body for creating a worker."""
 
@@ -59,6 +94,57 @@ async def list_workers(
     """List workers with optional filters."""
     repo = WorkerRepository(db)
     return await repo.list(status=status, worker_type=worker_type, limit=limit, offset=offset)
+
+
+@router.get("/with-tasks")
+async def list_workers_with_tasks(
+    db: Annotated[Database, Depends(get_db)],
+    status: WorkerStatus | None = None,
+    worker_type: str | None = None,
+    limit: int = Query(default=100, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+) -> list[WorkerWithTask]:
+    """List workers with their current task information.
+
+    For busy workers, includes task title, started_at, and iteration info.
+    This enables the UI to show duration and task context.
+    """
+    from ringmaster.db import TaskRepository
+
+    repo = WorkerRepository(db)
+    task_repo = TaskRepository(db)
+
+    workers = await repo.list(status=status, worker_type=worker_type, limit=limit, offset=offset)
+
+    result = []
+    for worker in workers:
+        worker_dict = worker.model_dump()
+        worker_dict["created_at"] = worker.created_at.isoformat()
+        worker_dict["last_active_at"] = (
+            worker.last_active_at.isoformat() if worker.last_active_at else None
+        )
+
+        current_task = None
+        if worker.current_task_id:
+            task = await task_repo.get_task(worker.current_task_id)
+            if task:
+                current_task = CurrentTaskInfo(
+                    task_id=task.id,
+                    title=task.title,
+                    status=task.status.value,
+                    started_at=task.started_at.isoformat() if task.started_at else None,
+                    attempts=task.attempts,
+                    max_attempts=task.max_attempts,
+                )
+
+        result.append(WorkerWithTask(
+            **{k: v for k, v in worker_dict.items() if k not in ("created_at", "last_active_at")},
+            created_at=worker.created_at.isoformat(),
+            last_active_at=worker.last_active_at.isoformat() if worker.last_active_at else None,
+            current_task=current_task,
+        ))
+
+    return result
 
 
 @router.post("", status_code=201)
