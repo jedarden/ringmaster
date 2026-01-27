@@ -4126,3 +4126,362 @@ textarea {
 .file-history-btn:hover {
   background: var(--color-accent);
 }
+
+/* Validation Panel */
+.validation-panel {
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.validation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.validation-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.validation-count {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+}
+
+.validation-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.validation-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.validation-card {
+  padding: 1rem;
+  border-bottom: 1px solid var(--color-primary);
+}
+
+.validation-card:last-child {
+  border-bottom: none;
+}
+
+.validation-task-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.validation-task-title {
+  font-weight: 500;
+  flex: 1;
+}
+
+.validation-task-id {
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+}
+
+.validation-task-description {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.validation-error {
+  color: var(--color-error);
+  font-size: 0.85rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius);
+}
+
+.validation-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.validation-actions.validation-retry {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-primary);
+}
+
+.btn-validate {
+  background: var(--color-info);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: opacity 0.2s;
+}
+
+.btn-validate:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-approve {
+  background: var(--color-success);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: opacity 0.2s;
+}
+
+.btn-approve:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-reject {
+  background: var(--color-error);
+  border: none;
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: opacity 0.2s;
+}
+
+.btn-reject:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-cancel {
+  background: var(--color-surface);
+  border: 1px solid var(--color-primary);
+  color: var(--color-text);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn-cancel:hover:not(:disabled) {
+  background: var(--color-bg);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.validation-reject-form {
+  margin-top: 0.75rem;
+}
+
+.validation-reject-form textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  padding: 0.5rem;
+}
+
+.reject-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* Validation Result Display */
+.validation-result {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  border-left: 3px solid var(--color-text-muted);
+}
+
+.validation-result.passed {
+  border-left-color: var(--color-success);
+}
+
+.validation-result.failed {
+  border-left-color: var(--color-error);
+}
+
+.validation-result.review {
+  border-left-color: var(--color-warning);
+}
+
+.validation-result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.validation-status-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: bold;
+}
+
+.validation-status-icon.pass {
+  background: var(--color-success);
+  color: white;
+}
+
+.validation-status-icon.fail {
+  background: var(--color-error);
+  color: white;
+}
+
+.validation-status-icon.review {
+  background: var(--color-warning);
+  color: white;
+}
+
+.validation-result-summary {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.validation-review-reason {
+  font-size: 0.85rem;
+  padding: 0.5rem;
+  background: rgba(251, 146, 60, 0.1);
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+}
+
+.validation-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.validation-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+}
+
+.validation-check.passed {
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.validation-check.failed {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.validation-check.skipped {
+  background: rgba(156, 163, 175, 0.1);
+}
+
+.validation-check.error {
+  background: rgba(251, 146, 60, 0.1);
+}
+
+.check-icon {
+  font-weight: bold;
+  width: 1em;
+}
+
+.validation-check.passed .check-icon {
+  color: var(--color-success);
+}
+
+.validation-check.failed .check-icon {
+  color: var(--color-error);
+}
+
+.validation-check.skipped .check-icon {
+  color: var(--color-text-muted);
+}
+
+.validation-check.error .check-icon {
+  color: var(--color-warning);
+}
+
+.check-name {
+  font-weight: 500;
+}
+
+.check-status {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.3rem;
+  border-radius: 3px;
+  background: var(--color-surface);
+}
+
+.check-duration {
+  color: var(--color-text-muted);
+  font-family: monospace;
+}
+
+.check-message {
+  flex: 1;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.validation-new-status {
+  font-size: 0.85rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-primary);
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.status-badge.done {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--color-success);
+}
+
+.status-badge.in_progress {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--color-info);
+}
+
+.status-badge.review {
+  background: rgba(251, 146, 60, 0.2);
+  color: var(--color-warning);
+}

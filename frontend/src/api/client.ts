@@ -67,6 +67,9 @@ import type {
   SpawnedWorkerResponse,
   TmuxSessionResponse,
   WorkerLogResponse,
+  ValidationResponse,
+  ApproveResponse,
+  RejectResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -1123,6 +1126,59 @@ export async function getWorkerLog(
   const params = new URLSearchParams({ lines: lines.toString() });
   const response = await fetch(`${API_BASE}/workers/${workerId}/log?${params}`);
   return handleResponse<WorkerLogResponse>(response);
+}
+
+// Task Validation API
+
+/**
+ * Validate a task in REVIEW status.
+ * Runs deterministic validation checks (tests, linting) on the task's changes.
+ * If validation passes, the task transitions to DONE.
+ * If validation fails, the task can go back to IN_PROGRESS for fixes.
+ */
+export async function validateTask(
+  taskId: string,
+  workingDir?: string
+): Promise<ValidationResponse> {
+  const params = new URLSearchParams();
+  if (workingDir) {
+    params.set("working_dir", workingDir);
+  }
+  const response = await fetch(
+    `${API_BASE}/tasks/${taskId}/validate${params.toString() ? "?" + params : ""}`,
+    { method: "POST" }
+  );
+  return handleResponse<ValidationResponse>(response);
+}
+
+/**
+ * Manually approve a task in REVIEW status.
+ * For tasks that need human review or when automated validation is not applicable.
+ */
+export async function approveTask(taskId: string): Promise<ApproveResponse> {
+  const response = await fetch(`${API_BASE}/tasks/${taskId}/approve`, {
+    method: "POST",
+  });
+  return handleResponse<ApproveResponse>(response);
+}
+
+/**
+ * Reject a task in REVIEW status.
+ * Sends the task back to IN_PROGRESS status so the worker can address the issues.
+ */
+export async function rejectTask(
+  taskId: string,
+  reason?: string
+): Promise<RejectResponse> {
+  const params = new URLSearchParams();
+  if (reason) {
+    params.set("reason", reason);
+  }
+  const response = await fetch(
+    `${API_BASE}/tasks/${taskId}/reject${params.toString() ? "?" + params : ""}`,
+    { method: "POST" }
+  );
+  return handleResponse<RejectResponse>(response);
 }
 
 export { ApiError };

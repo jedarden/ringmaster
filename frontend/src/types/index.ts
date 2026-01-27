@@ -739,3 +739,44 @@ export interface WorkerLogResponse {
   output: string | null;
   lines_count: number;
 }
+
+// Task Validation types
+
+export const ValidationStatus = {
+  PASSED: "passed",
+  FAILED: "failed",
+  SKIPPED: "skipped",
+  ERROR: "error",
+} as const;
+export type ValidationStatus =
+  (typeof ValidationStatus)[keyof typeof ValidationStatus];
+
+export interface ValidationCheck {
+  name: string;
+  status: ValidationStatus;
+  message: string;
+  duration_seconds: number;
+}
+
+export interface ValidationResponse {
+  task_id: string;
+  overall_passed: boolean;
+  needs_human_review: boolean;
+  review_reason: string;
+  checks: ValidationCheck[];
+  summary: string;
+  new_status: string;
+}
+
+export interface ApproveResponse {
+  task_id: string;
+  status: string;
+  approved: boolean;
+}
+
+export interface RejectResponse {
+  task_id: string;
+  status: string;
+  rejected: boolean;
+  reason: string | null;
+}

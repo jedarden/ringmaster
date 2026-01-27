@@ -9,6 +9,7 @@ import { FileBrowser } from "../components/FileBrowser";
 import { TaskInput } from "../components/TaskInput";
 import { DecisionPanel } from "../components/DecisionPanel";
 import { QuestionPanel } from "../components/QuestionPanel";
+import { ValidationPanel } from "../components/ValidationPanel";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -689,6 +690,11 @@ export function ProjectDetailPage() {
         <div className="project-chat-sidebar">
           {projectId && (
             <>
+              <ValidationPanel
+                tasks={tasks}
+                workingDir={project?.repo_url || undefined}
+                onStatusChange={() => loadData()}
+              />
               <DecisionPanel
                 projectId={projectId}
                 onDecisionResolved={() => loadData()}

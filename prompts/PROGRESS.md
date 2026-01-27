@@ -828,6 +828,19 @@ Implemented shortcuts:
   - REVIEW → REVIEW (needs human review, stays for attention)
 - ✅ 23 new tests covering all validation scenarios
 
+### Validation Frontend UI (`frontend/src/components/ValidationPanel.tsx`)
+- ✅ ValidationPanel component for tasks in REVIEW status
+  - Displays count of tasks awaiting review
+  - ValidationCard for each task with title, description, task ID
+  - "Run Validation" button to trigger automated checks
+  - "Approve" button for direct approval
+  - "Reject" button with optional reason form
+  - ValidationResultDisplay showing check results
+- ✅ TypeScript types: ValidationStatus, ValidationCheck, ValidationResponse, ApproveResponse, RejectResponse
+- ✅ API client functions: validateTask(), approveTask(), rejectTask()
+- ✅ CSS styles for validation panel, cards, checks, status badges
+- ✅ Integrated in ProjectDetailPage sidebar (above DecisionPanel)
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -906,6 +919,7 @@ Implemented shortcuts:
 | 68 | 2026-01-27 | Add Reasoning Bank for reflexion-based learning: TaskOutcome model, task_outcomes table (migration 011), ReasoningBankRepository with find_similar() using Jaccard similarity, select_model_with_learning() blending static heuristics with learned experience, executor integration via _record_outcome(), API endpoints for outcomes/model-stats/find-similar; per docs/08-open-architecture.md Reflexion-Based Learning; 25 new tests, total 602 tests passing |
 | 69 | 2026-01-27 | Wire model routing into executor: execute_task() now calls select_model_for_task() and get_model_for_worker_type() to select appropriate model based on task complexity, passes selected model to SessionConfig, tracks actual model used (e.g., "claude-sonnet-4-20250514") in TaskOutcome instead of just worker type; enables accurate learning from model performance; all 602 tests passing |
 | 70 | 2026-01-27 | Add task validation stage: TaskValidator class with auto-detection of test/lint commands for Python, Node.js, Rust, Go; ValidationResult with check status (passed/failed/skipped/error); sensitive pattern detection triggers human review; POST /api/tasks/{id}/validate, /approve, /reject endpoints; transitions tasks from REVIEW to DONE or back to IN_PROGRESS; per docs/08-open-architecture.md section 3; 23 new tests, total 625 tests passing |
+| 71 | 2026-01-27 | Add Validation Frontend UI: ValidationPanel component for REVIEW status tasks, TypeScript types (ValidationStatus, ValidationCheck, ValidationResponse, ApproveResponse, RejectResponse), API client functions (validateTask, approveTask, rejectTask), CSS styles for validation panel with check result display, integrated in ProjectDetailPage sidebar; all 625 tests passing |
 
 ## Blockers
 
