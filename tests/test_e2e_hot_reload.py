@@ -10,7 +10,6 @@ This test validates that when ringmaster modifies its own source code:
 This is the critical validation that the self-improvement flywheel actually works.
 """
 
-import asyncio
 import sys
 import time
 from pathlib import Path
@@ -19,7 +18,7 @@ import pytest
 
 from ringmaster.reload.reloader import HotReloader, ReloadStatus
 from ringmaster.reload.safety import SafetyConfig
-from ringmaster.reload.watcher import FileChange, FileChangeWatcher
+from ringmaster.reload.watcher import FileChangeWatcher
 
 
 @pytest.fixture
@@ -117,7 +116,6 @@ class TestModuleReloading:
     async def test_module_is_actually_reloaded_in_memory(self, reload_project):
         """Verify that reload_module actually updates the module in memory."""
         project = reload_project
-        src_dir = project["src_dir"]
         import_root = project["root"] / "src"
 
         # Add src to path so we can import

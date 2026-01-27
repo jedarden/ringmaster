@@ -529,10 +529,10 @@ class TestE2EWorkerExecutionFlow:
         )
 
         # Mock the worker interface to simulate execution without real CLI
-        from ringmaster.worker.platforms import WorkerInterface, SessionHandle
+        from ringmaster.worker.platforms import WorkerInterface
 
         mock_handle = AsyncMock()
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         mock_handle.wait = AsyncMock(return_value=SessionResult(
             status=SessionStatus.COMPLETED,
             output="Task completed",
@@ -554,14 +554,13 @@ class TestE2EWorkerExecutionFlow:
 
         # Patch get_worker to return our mock
         # Also patch event_bus.emit to avoid UUID validation issues
-        original_emit = event_bus.emit
         emitted_events = []
 
         async def mock_emit(event_type, data, project_id=None):
             emitted_events.append((event_type, data, str(project_id) if project_id else None))
 
-        with patch('ringmaster.worker.executor.get_worker', return_value=mock_interface):
-            with patch.object(event_bus, 'emit', side_effect=mock_emit):
+        with patch('ringmaster.worker.executor.get_worker', return_value=mock_interface), \
+             patch.object(event_bus, 'emit', side_effect=mock_emit):
                 # Execute the task
                 result = await executor.execute_task(task, worker)
 
@@ -617,10 +616,10 @@ class TestE2EWorkerExecutionFlow:
         )
 
         # Mock the worker interface to simulate failure
-        from ringmaster.worker.platforms import WorkerInterface, SessionHandle
+        from ringmaster.worker.platforms import WorkerInterface
 
         mock_handle = AsyncMock()
-        from datetime import datetime, UTC
+        from datetime import UTC, datetime
         mock_handle.wait = AsyncMock(return_value=SessionResult(
             status=SessionStatus.COMPLETED,
             output="Task failed",
@@ -643,9 +642,9 @@ class TestE2EWorkerExecutionFlow:
         async def mock_emit(event_type, data, project_id=None):
             pass
 
-        with patch('ringmaster.worker.executor.get_worker', return_value=mock_interface):
-            with patch.object(event_bus, 'emit', side_effect=mock_emit):
-                result = await executor.execute_task(task, worker)
+        with patch('ringmaster.worker.executor.get_worker', return_value=mock_interface), \
+             patch.object(event_bus, 'emit', side_effect=mock_emit):
+            result = await executor.execute_task(task, worker)
 
         # Verify failure was captured
         assert result.status == SessionStatus.COMPLETED  # Session completed but with non-zero exit

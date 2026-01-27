@@ -955,11 +955,10 @@ def update_apply(version: str | None, yes: bool) -> None:
     This will replace the current executable and restart Ringmaster.
     """
     from ringmaster.updater import (
-        SelfUpdateResult,
         UpdateStatus,
+        apply_update,
         check_for_updates,
         download_update,
-        apply_update,
     )
 
     current_version = check_for_updates().current_version

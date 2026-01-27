@@ -168,14 +168,26 @@ class SessionHandle:
         """
         timeout = timeout or self.config.timeout_seconds
         status = SessionStatus.RUNNING
+        started_at = datetime.now(UTC)
 
         try:
-            # Collect remaining output
-            async for _line in self.stream_output():
-                pass
+            # Collect remaining output with overall timeout enforcement
+            # We wrap the entire streaming+wait operation to enforce the timeout
+            async def _collect_and_wait() -> None:
+                # First, stream all available output
+                async for _line in self.stream_output():
+                    # Check if we've exceeded the timeout during streaming
+                    elapsed = (datetime.now(UTC) - started_at).total_seconds()
+                    if elapsed > timeout:
+                        raise TimeoutError(f"Overall timeout of {timeout}s exceeded during streaming")
+                    # Yield control to allow other tasks to run
+                    await asyncio.sleep(0)
 
-            # Wait for process to complete
-            await asyncio.wait_for(self.process.wait(), timeout=timeout)
+                # Then wait for the process to complete
+                await self.process.wait()
+
+            # Enforce the overall timeout for the entire operation
+            await asyncio.wait_for(_collect_and_wait(), timeout=timeout)
 
             if self.process.returncode == 0:
                 status = SessionStatus.COMPLETED
@@ -184,6 +196,7 @@ class SessionHandle:
 
         except TimeoutError:
             status = SessionStatus.TIMEOUT
+            logger.warning(f"Session timeout after {timeout}s")
             self.process.kill()
             await self.process.wait()
 

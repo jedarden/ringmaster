@@ -9,7 +9,6 @@ Per PROGRESS.md functional gap #2: "Enrichment Pipeline Real-World Testing"
 
 import tempfile
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
