@@ -27,6 +27,8 @@ class EventType(str, Enum):
     WORKER_CONNECTED = "worker.connected"
     WORKER_DISCONNECTED = "worker.disconnected"
     WORKER_OUTPUT = "worker.output"  # Real-time output streaming
+    WORKER_TASK_CANCELLED = "worker.task_cancelled"  # User cancelled task
+    WORKER_PAUSED = "worker.paused"  # User paused worker
 
     # Project events
     PROJECT_CREATED = "project.created"

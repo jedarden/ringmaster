@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
 from ringmaster.db import Database, WorkerRepository
-from ringmaster.domain import Worker, WorkerStatus
+from ringmaster.domain import TaskStatus, Worker, WorkerStatus
 from ringmaster.worker.output_buffer import output_buffer
 
 router = APIRouter()
@@ -360,3 +360,137 @@ async def get_output_stats() -> dict:
         Dict of worker_id -> buffer stats.
     """
     return output_buffer.get_buffer_stats()
+
+
+class CancelResponse(BaseModel):
+    """Response for cancel operation."""
+
+    success: bool
+    message: str
+    task_id: str | None = None
+
+
+class InterruptResponse(BaseModel):
+    """Response for interrupt/pause operation."""
+
+    success: bool
+    message: str
+    worker_id: str
+
+
+@router.post("/{worker_id}/cancel")
+async def cancel_worker_task(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+) -> CancelResponse:
+    """Cancel the current task of a busy worker.
+
+    This immediately cancels the running task and marks both
+    the worker as idle and the task as failed.
+
+    Args:
+        worker_id: The worker ID.
+
+    Returns:
+        CancelResponse with success status.
+    """
+    from ringmaster.events import EventBus, EventType
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    if worker.status != WorkerStatus.BUSY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Worker is not busy (status: {worker.status.value})"
+        )
+
+    task_id = worker.current_task_id
+    if not task_id:
+        raise HTTPException(status_code=400, detail="Worker has no current task")
+
+    # Update task status to failed
+    from ringmaster.db import TaskRepository
+    task_repo = TaskRepository(db)
+    task = await task_repo.get_task(task_id)
+    if task:
+        task.status = TaskStatus.FAILED
+        task.worker_id = None
+        await task_repo.update_task(task)
+
+    # Mark worker as idle
+    worker.status = WorkerStatus.IDLE
+    worker.current_task_id = None
+    await repo.update(worker)
+
+    # Emit cancellation event
+    event_bus = EventBus()
+    await event_bus.emit(
+        EventType.WORKER_TASK_CANCELLED,
+        {
+            "worker_id": worker_id,
+            "task_id": task_id,
+            "reason": "User cancelled",
+        },
+    )
+
+    return CancelResponse(
+        success=True,
+        message=f"Cancelled task {task_id} on worker {worker_id}",
+        task_id=task_id,
+    )
+
+
+@router.post("/{worker_id}/pause")
+async def pause_worker(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+) -> InterruptResponse:
+    """Pause a worker (graceful - finish current iteration).
+
+    This marks the worker for pausing. The worker will complete
+    its current task iteration and then become idle instead of
+    picking up new tasks.
+
+    Args:
+        worker_id: The worker ID.
+
+    Returns:
+        InterruptResponse with success status.
+    """
+    from ringmaster.events import EventBus, EventType
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    if worker.status == WorkerStatus.OFFLINE:
+        raise HTTPException(status_code=400, detail="Worker is offline")
+
+    # Mark worker as paused (using OFFLINE status since we don't have PAUSED)
+    # The worker will finish its current task and not pick up new ones
+    previous_status = worker.status
+    worker.status = WorkerStatus.OFFLINE
+
+    # Don't clear current_task_id - let task complete
+    await repo.update(worker)
+
+    # Emit pause event
+    event_bus = EventBus()
+    await event_bus.emit(
+        EventType.WORKER_PAUSED,
+        {
+            "worker_id": worker_id,
+            "previous_status": previous_status.value,
+            "current_task_id": worker.current_task_id,
+        },
+    )
+
+    return InterruptResponse(
+        success=True,
+        message=f"Worker {worker_id} paused. Current task will complete.",
+        worker_id=worker_id,
+    )

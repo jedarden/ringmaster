@@ -354,6 +354,32 @@ export async function deactivateWorker(id: string): Promise<Worker> {
   return handleResponse<Worker>(response);
 }
 
+export interface CancelResponse {
+  success: boolean;
+  message: string;
+  task_id: string | null;
+}
+
+export interface InterruptResponse {
+  success: boolean;
+  message: string;
+  worker_id: string;
+}
+
+export async function cancelWorkerTask(id: string): Promise<CancelResponse> {
+  const response = await fetch(`${API_BASE}/workers/${id}/cancel`, {
+    method: "POST",
+  });
+  return handleResponse<CancelResponse>(response);
+}
+
+export async function pauseWorker(id: string): Promise<InterruptResponse> {
+  const response = await fetch(`${API_BASE}/workers/${id}/pause`, {
+    method: "POST",
+  });
+  return handleResponse<InterruptResponse>(response);
+}
+
 // Worker Output API
 
 import type { OutputResponse, OutputBufferStats } from "../types";

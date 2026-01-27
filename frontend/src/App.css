@@ -424,6 +424,39 @@ textarea {
   margin-top: 1rem;
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.worker-actions .view-output-btn {
+  background: var(--color-info);
+  color: white;
+}
+
+.worker-actions .view-output-btn:hover {
+  background: #2563eb;
+}
+
+.worker-actions .pause-btn {
+  background: var(--color-warning);
+  color: black;
+}
+
+.worker-actions .pause-btn:hover {
+  background: #f59e0b;
+}
+
+.worker-actions .cancel-btn {
+  background: var(--color-error);
+  color: white;
+}
+
+.worker-actions .cancel-btn:hover {
+  background: #dc2626;
+}
+
+.worker-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .worker-card.offline {

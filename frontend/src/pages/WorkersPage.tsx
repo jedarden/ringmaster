@@ -5,7 +5,10 @@ import {
   activateWorker,
   deactivateWorker,
   deleteWorker,
+  cancelWorkerTask,
+  pauseWorker,
 } from "../api/client";
+import { WorkerOutputPanel } from "../components/WorkerOutputPanel";
 import type { Worker, WorkerCreate } from "../types";
 import { WorkerStatus } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
@@ -22,6 +25,8 @@ export function WorkersPage() {
     command: "claude",
   });
   const listRef = useRef<HTMLDivElement>(null);
+  const [outputPanelWorkerId, setOutputPanelWorkerId] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const loadWorkers = useCallback(async () => {
     try {
@@ -110,6 +115,32 @@ export function WorkersPage() {
       await loadWorkers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete worker");
+    }
+  };
+
+  const handleCancel = async (id: string) => {
+    if (!confirm("Cancel the current task? The task will be marked as failed.")) return;
+
+    try {
+      setActionLoading(id);
+      await cancelWorkerTask(id);
+      await loadWorkers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel task");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handlePause = async (id: string) => {
+    try {
+      setActionLoading(id);
+      await pauseWorker(id);
+      await loadWorkers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to pause worker");
+    } finally {
+      setActionLoading(null);
     }
   };
 
@@ -216,7 +247,31 @@ export function WorkersPage() {
                             Deactivate
                           </button>
                         ) : worker.status === WorkerStatus.BUSY ? (
-                          <span className="busy-note">Working...</span>
+                          <>
+                            <button
+                              onClick={() => setOutputPanelWorkerId(worker.id)}
+                              className="view-output-btn"
+                              title="View live output"
+                            >
+                              View Output
+                            </button>
+                            <button
+                              onClick={() => handlePause(worker.id)}
+                              disabled={actionLoading === worker.id}
+                              className="pause-btn"
+                              title="Pause worker after current iteration"
+                            >
+                              {actionLoading === worker.id ? "..." : "Pause"}
+                            </button>
+                            <button
+                              onClick={() => handleCancel(worker.id)}
+                              disabled={actionLoading === worker.id}
+                              className="cancel-btn"
+                              title="Cancel current task immediately"
+                            >
+                              {actionLoading === worker.id ? "..." : "Cancel"}
+                            </button>
+                          </>
                         ) : null}
                         <button
                           onClick={() => handleDelete(worker.id)}
@@ -282,6 +337,15 @@ export function WorkersPage() {
         >
           Use <kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>j</kbd>/<kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>k</kbd> to navigate, <kbd style={{ background: "var(--color-surface)", padding: "0.1rem 0.4rem", borderRadius: "3px" }}>Enter</kbd> to toggle
         </div>
+      )}
+
+      {/* Worker Output Panel */}
+      {outputPanelWorkerId && (
+        <WorkerOutputPanel
+          workerId={outputPanelWorkerId}
+          isOpen={!!outputPanelWorkerId}
+          onClose={() => setOutputPanelWorkerId(null)}
+        />
       )}
     </div>
   );

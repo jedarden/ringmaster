@@ -1133,6 +1133,129 @@ class TestWorkersAPI:
         response = await client.delete(f"/api/workers/{worker_id}/capabilities/rust")
         assert response.status_code == 404
 
+    async def test_cancel_worker_task(self, client: AsyncClient):
+        """Test canceling a busy worker's task."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Cancel Test Project"},
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Task to cancel",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        # Create and activate worker (makes it idle)
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Busy Worker",
+                "type": "claude-code",
+                "command": "claude",
+            },
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Activate worker to make it idle (assignable)
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Assign task to worker - this makes the worker BUSY
+        assign_resp = await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+        assert assign_resp.status_code == 200
+
+        # Verify worker is busy
+        worker_check = await client.get(f"/api/workers/{worker_id}")
+        assert worker_check.json()["status"] == "busy"
+
+        # Cancel the worker's task
+        response = await client.post(f"/api/workers/{worker_id}/cancel")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["task_id"] == task_id
+
+        # Verify worker is now idle
+        worker_response = await client.get(f"/api/workers/{worker_id}")
+        assert worker_response.json()["status"] == "idle"
+
+        # Verify task is marked as failed
+        task_response = await client.get(f"/api/tasks/{task_id}")
+        assert task_response.json()["status"] == "failed"
+
+    async def test_cancel_worker_not_busy_fails(self, client: AsyncClient):
+        """Test canceling a worker that's not busy returns error."""
+        # Create idle worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Idle Worker",
+                "type": "aider",
+                "command": "aider",
+            },
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Activate worker (sets to idle)
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Try to cancel
+        response = await client.post(f"/api/workers/{worker_id}/cancel")
+        assert response.status_code == 400
+
+    async def test_pause_worker(self, client: AsyncClient):
+        """Test pausing an active worker."""
+        # Create and activate worker
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Pause Worker",
+                "type": "claude-code",
+                "command": "claude",
+            },
+        )
+        worker_id = worker_response.json()["id"]
+
+        await client.post(f"/api/workers/{worker_id}/activate")
+
+        # Pause the worker
+        response = await client.post(f"/api/workers/{worker_id}/pause")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["worker_id"] == worker_id
+
+        # Verify worker is now offline (paused)
+        worker_response = await client.get(f"/api/workers/{worker_id}")
+        assert worker_response.json()["status"] == "offline"
+
+    async def test_pause_offline_worker_fails(self, client: AsyncClient):
+        """Test pausing an already offline worker returns error."""
+        # Create worker (default is offline)
+        worker_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Offline Worker",
+                "type": "goose",
+                "command": "goose",
+            },
+        )
+        worker_id = worker_response.json()["id"]
+
+        # Try to pause
+        response = await client.post(f"/api/workers/{worker_id}/pause")
+        assert response.status_code == 400
+
 
 class TestWorkerOutputAPI:
     """Tests for worker output streaming API."""
