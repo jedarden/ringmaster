@@ -391,6 +391,205 @@ def worker_activate(worker_id: str) -> None:
     asyncio.run(do_activate())
 
 
+@worker.command("spawn")
+@click.argument("worker_id")
+@click.option("--type", "-t", "worker_type", default="claude-code", help="Worker type")
+@click.option("--capabilities", "-c", multiple=True, help="Worker capabilities")
+@click.option("--worktree", "-w", type=click.Path(), help="Git worktree path")
+@click.option("--command", help="Custom command (for generic workers)")
+@click.option("--log-dir", type=click.Path(), help="Log directory")
+def worker_spawn(
+    worker_id: str,
+    worker_type: str,
+    capabilities: tuple[str, ...],
+    worktree: str | None,
+    command: str | None,
+    log_dir: str | None,
+) -> None:
+    """Spawn a worker in a tmux session.
+
+    Creates a new tmux session running a worker script that:
+    - Polls for tasks via `ringmaster pull-bead`
+    - Builds prompts via `ringmaster build-prompt`
+    - Executes the worker CLI (claude, aider, etc.)
+    - Reports results via `ringmaster report-result`
+
+    Worker types: claude-code, aider, codex, goose, generic
+    """
+    from ringmaster.db import WorkerRepository, get_database
+    from ringmaster.domain import Worker, WorkerStatus
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    async def do_spawn() -> None:
+        db = await get_database()
+        worker_repo = WorkerRepository(db)
+
+        # Check if worker exists in DB, create if not
+        worker = await worker_repo.get(worker_id)
+        if not worker:
+            worker = Worker(
+                id=worker_id,
+                name=worker_id,
+                type=worker_type,
+                command=command or worker_type,
+                capabilities=list(capabilities) if capabilities else [],
+            )
+            await worker_repo.create(worker)
+            console.print(f"[green]Created worker record: {worker_id}[/green]")
+        else:
+            # Update capabilities if provided
+            if capabilities:
+                worker.capabilities = list(capabilities)
+                await worker_repo.update(worker)
+
+        # Create spawner
+        spawner = WorkerSpawner(
+            log_dir=Path(log_dir) if log_dir else None,
+            db_path=db.db_path,
+        )
+
+        try:
+            spawned = await spawner.spawn(
+                worker_id=worker_id,
+                worker_type=worker_type,
+                capabilities=list(capabilities) if capabilities else None,
+                worktree_path=worktree,
+                custom_command=command,
+            )
+
+            # Update worker status
+            worker.status = WorkerStatus.IDLE
+            await worker_repo.update(worker)
+
+            console.print(f"[green]Spawned worker {worker_id}[/green]")
+            console.print(f"  Type: {spawned.worker_type}")
+            console.print(f"  Session: {spawned.tmux_session}")
+            console.print(f"  Log: {spawned.log_path}")
+            console.print(f"\nTo attach: [cyan]{spawner.attach_command(worker_id)}[/cyan]")
+
+        except RuntimeError as e:
+            console.print(f"[red]Failed to spawn worker: {e}[/red]")
+            raise SystemExit(1) from e
+
+    asyncio.run(do_spawn())
+
+
+@worker.command("attach")
+@click.argument("worker_id")
+def worker_attach(worker_id: str) -> None:
+    """Show command to attach to a worker's tmux session."""
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    spawner = WorkerSpawner()
+    cmd = spawner.attach_command(worker_id)
+    console.print(f"[cyan]{cmd}[/cyan]")
+    console.print("\n[dim]Run the above command to attach to the worker session[/dim]")
+
+
+@worker.command("kill")
+@click.argument("worker_id")
+@click.option("--force", "-f", is_flag=True, help="Force kill without confirmation")
+def worker_kill(worker_id: str, force: bool) -> None:
+    """Kill a worker's tmux session."""
+    from ringmaster.db import WorkerRepository, get_database
+    from ringmaster.domain import WorkerStatus
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    async def do_kill() -> None:
+        spawner = WorkerSpawner()
+
+        # Check if running
+        if not await spawner.is_running(worker_id):
+            console.print(f"[yellow]Worker {worker_id} is not running[/yellow]")
+            return
+
+        if not force and not click.confirm(f"Kill worker {worker_id}?"):
+            console.print("Aborted")
+            return
+
+        success = await spawner.kill(worker_id)
+        if success:
+            console.print(f"[green]Killed worker {worker_id}[/green]")
+
+            # Update worker status in database
+            db = await get_database()
+            worker_repo = WorkerRepository(db)
+            worker = await worker_repo.get(worker_id)
+            if worker:
+                worker.status = WorkerStatus.OFFLINE
+                worker.current_task_id = None
+                await worker_repo.update(worker)
+                console.print("  Updated worker status to offline")
+        else:
+            console.print(f"[red]Failed to kill worker {worker_id}[/red]")
+
+    asyncio.run(do_kill())
+
+
+@worker.command("sessions")
+def worker_sessions() -> None:
+    """List all running worker tmux sessions."""
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    async def do_list() -> None:
+        spawner = WorkerSpawner()
+        sessions = await spawner.list_sessions()
+
+        if not sessions:
+            console.print("[yellow]No running worker sessions[/yellow]")
+            return
+
+        table = Table(title="Worker Sessions")
+        table.add_column("Session", style="cyan")
+        table.add_column("Worker ID")
+        table.add_column("Attach Command", style="dim")
+
+        for session in sessions:
+            # Extract worker ID from session name
+            worker_id = session.replace("rm-worker-", "")
+            table.add_row(
+                session,
+                worker_id,
+                f"tmux attach -t {session}",
+            )
+
+        console.print(table)
+
+    asyncio.run(do_list())
+
+
+@worker.command("output")
+@click.argument("worker_id")
+@click.option("--lines", "-n", default=50, help="Number of lines to show")
+@click.option("--follow", "-f", is_flag=True, help="Follow log output")
+def worker_output(worker_id: str, lines: int, follow: bool) -> None:
+    """Show recent output from a worker's log."""
+    import subprocess as sp
+
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    async def do_output() -> None:
+        spawner = WorkerSpawner()
+        log_path = spawner.log_dir / f"{worker_id}.log"
+
+        if not log_path.exists():
+            console.print(f"[yellow]No log file found for worker {worker_id}[/yellow]")
+            return
+
+        if follow:
+            # Use tail -f for following
+            console.print(f"[dim]Following {log_path}... (Ctrl+C to stop)[/dim]\n")
+            sp.run(["tail", "-f", "-n", str(lines), str(log_path)])
+        else:
+            output = await spawner.get_output(worker_id, lines)
+            if output:
+                console.print(output)
+            else:
+                console.print("[yellow]No output available[/yellow]")
+
+    asyncio.run(do_output())
+
+
 @cli.command()
 def doctor() -> None:
     """Check system health and worker availability."""

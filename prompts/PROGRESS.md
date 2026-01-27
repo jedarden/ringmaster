@@ -680,6 +680,42 @@ Implemented shortcuts:
   - Unblocks dependent tasks on success
 - ✅ 7 new tests covering all CLI commands
 
+### Worker Spawner (`src/ringmaster/worker/spawner.py`)
+- ✅ WorkerSpawner class for tmux-based worker management
+- ✅ Worker script template generation for multiple worker types:
+  - Claude Code (`claude --print --dangerously-skip-permissions`)
+  - Aider (`aider --yes --no-git`)
+  - Codex (`codex --quiet --auto-approve`)
+  - Goose (`goose run --non-interactive`)
+  - Generic (custom command via WORKER_COMMAND env var)
+- ✅ Spawner operations:
+  - spawn(): Create tmux session with worker script
+  - kill(): Terminate worker's tmux session
+  - is_running(): Check if worker session exists
+  - list_sessions(): List all ringmaster worker sessions
+  - get_output(): Retrieve recent log output
+  - send_signal(): Send signals to worker process
+  - cleanup_stale(): Prune orphaned sessions/scripts
+- ✅ SpawnedWorker dataclass with status tracking
+- ✅ 21 new tests covering all spawner operations
+
+### Worker Tmux CLI Commands (`src/ringmaster/cli.py`)
+- ✅ `worker spawn` - Spawn worker in tmux session
+  - Creates worker record if not exists
+  - Generates bash worker script
+  - Launches in detached tmux session
+- ✅ `worker attach` - Show attach command for worker session
+- ✅ `worker kill` - Kill worker's tmux session
+- ✅ `worker sessions` - List all running worker sessions
+- ✅ `worker output` - Show recent log output (supports -f follow mode)
+
+### Worker Spawning API (`src/ringmaster/api/routes/workers.py`)
+- ✅ POST /api/workers/{id}/spawn - Spawn worker in tmux
+- ✅ POST /api/workers/{id}/kill - Kill worker's tmux session
+- ✅ GET /api/workers/{id}/session - Get session info
+- ✅ GET /api/workers/sessions/list - List all worker sessions
+- ✅ GET /api/workers/{id}/log - Get worker log output
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -742,6 +778,7 @@ Implemented shortcuts:
 | 52 | 2026-01-27 | Add git worktree support for worker isolation: Worktree/WorktreeConfig dataclasses, list_worktrees(), get_or_create_worktree(), remove_worktree(), get_worktree_status(), commit_worktree_changes(), merge_worktree_to_main(), clean_stale_worktrees(); handles both repos with origin remote and local-only repos; 20 new tests, total 422 tests passing |
 | 53 | 2026-01-27 | Integrate git worktrees into WorkerExecutor: use_worktrees parameter, _get_working_directory() creates worktree for git repos, falls back for non-git, reuses worktree per worker, _report_worktree_status() for debugging; 4 new tests, total 426 tests passing |
 | 54 | 2026-01-27 | Add worker CLI commands for external scripts: `pull-bead` (claim task matching capabilities), `build-prompt` (enriched prompt to stdout/file), `report-result` (completion/failure with retry backoff); enables bash-based worker scripts per docs/09-remaining-decisions.md section 4; 7 new tests, total 433 tests passing |
+| 55 | 2026-01-27 | Add tmux-based worker spawning: WorkerSpawner class with spawn/kill/list_sessions, worker script generation for claude-code/aider/codex/goose/generic; CLI commands `worker spawn/attach/kill/sessions/output`; API endpoints POST /spawn, POST /kill, GET /session, GET /sessions/list, GET /log; enables on-demand worker management per docs/09-remaining-decisions.md section 4; 21 new tests, total 454 tests passing |
 
 ## Blockers
 

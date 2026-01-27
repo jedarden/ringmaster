@@ -10,6 +10,7 @@ from ringmaster.worker.monitor import (
     recommend_recovery,
 )
 from ringmaster.worker.platforms import AiderWorker, ClaudeCodeWorker
+from ringmaster.worker.spawner import SpawnedWorker, SpawnStatus, WorkerSpawner
 
 __all__ = [
     "WorkerInterface",
@@ -21,4 +22,7 @@ __all__ = [
     "DegradationSignals",
     "RecoveryAction",
     "recommend_recovery",
+    "WorkerSpawner",
+    "SpawnedWorker",
+    "SpawnStatus",
 ]

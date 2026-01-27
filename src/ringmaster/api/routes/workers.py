@@ -494,3 +494,275 @@ async def pause_worker(
         message=f"Worker {worker_id} paused. Current task will complete.",
         worker_id=worker_id,
     )
+
+
+# =============================================================================
+# Tmux Worker Spawning Endpoints
+# =============================================================================
+
+
+class SpawnWorkerRequest(BaseModel):
+    """Request body for spawning a worker in tmux."""
+
+    worker_type: str = "claude-code"  # claude-code, aider, codex, goose, generic
+    capabilities: list[str] = []
+    worktree_path: str | None = None
+    custom_command: str | None = None
+
+
+class SpawnedWorkerResponse(BaseModel):
+    """Response for a spawned worker."""
+
+    worker_id: str
+    worker_type: str
+    tmux_session: str
+    log_path: str | None
+    status: str
+    attach_command: str
+
+
+class TmuxSessionResponse(BaseModel):
+    """Response for a tmux session."""
+
+    session_name: str
+    worker_id: str
+    attach_command: str
+
+
+@router.post("/{worker_id}/spawn", status_code=201)
+async def spawn_worker(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+    body: SpawnWorkerRequest,
+) -> SpawnedWorkerResponse:
+    """Spawn a worker in a new tmux session.
+
+    Creates a new tmux session running a worker script that:
+    - Polls for tasks via `ringmaster pull-bead`
+    - Builds prompts via `ringmaster build-prompt`
+    - Executes the worker CLI (claude, aider, etc.)
+    - Reports results via `ringmaster report-result`
+
+    Args:
+        worker_id: Unique worker identifier.
+        body: Spawn configuration.
+
+    Returns:
+        SpawnedWorkerResponse with session details.
+    """
+    from ringmaster.events import EventBus, EventType
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    repo = WorkerRepository(db)
+
+    # Check if worker exists, create if not
+    worker = await repo.get(worker_id)
+    if not worker:
+        worker = Worker(
+            id=worker_id,
+            name=worker_id,
+            type=body.worker_type,
+            command=body.custom_command or body.worker_type,
+            capabilities=body.capabilities,
+        )
+        await repo.create(worker)
+    else:
+        # Update capabilities if provided
+        if body.capabilities:
+            worker.capabilities = body.capabilities
+            await repo.update(worker)
+
+    # Create spawner and spawn
+    spawner = WorkerSpawner(db_path=db.db_path)
+
+    try:
+        spawned = await spawner.spawn(
+            worker_id=worker_id,
+            worker_type=body.worker_type,
+            capabilities=body.capabilities,
+            worktree_path=body.worktree_path,
+            custom_command=body.custom_command,
+        )
+
+        # Update worker status to idle (ready to work)
+        worker.status = WorkerStatus.IDLE
+        await repo.update(worker)
+
+        # Emit spawn event
+        event_bus = EventBus()
+        await event_bus.emit(
+            EventType.WORKER_UPDATED,
+            {
+                "worker_id": worker_id,
+                "action": "spawned",
+                "tmux_session": spawned.tmux_session,
+            },
+        )
+
+        return SpawnedWorkerResponse(
+            worker_id=spawned.worker_id,
+            worker_type=spawned.worker_type,
+            tmux_session=spawned.tmux_session,
+            log_path=spawned.log_path,
+            status=spawned.status.value,
+            attach_command=spawner.attach_command(worker_id),
+        )
+
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.post("/{worker_id}/kill")
+async def kill_worker(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+) -> InterruptResponse:
+    """Kill a worker's tmux session.
+
+    This terminates the tmux session and marks the worker as offline.
+    Any running task will be interrupted.
+
+    Args:
+        worker_id: The worker ID.
+
+    Returns:
+        InterruptResponse with success status.
+    """
+    from ringmaster.events import EventBus, EventType
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    # Kill the tmux session
+    spawner = WorkerSpawner()
+    success = await spawner.kill(worker_id)
+
+    if not success:
+        # Session may not exist, still update DB
+        pass
+
+    # Update worker status
+    worker.status = WorkerStatus.OFFLINE
+    worker.current_task_id = None
+    await repo.update(worker)
+
+    # Emit kill event
+    event_bus = EventBus()
+    await event_bus.emit(
+        EventType.WORKER_UPDATED,
+        {
+            "worker_id": worker_id,
+            "action": "killed",
+        },
+    )
+
+    return InterruptResponse(
+        success=True,
+        message=f"Worker {worker_id} killed",
+        worker_id=worker_id,
+    )
+
+
+@router.get("/{worker_id}/session")
+async def get_worker_session(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+) -> TmuxSessionResponse:
+    """Get tmux session info for a worker.
+
+    Args:
+        worker_id: The worker ID.
+
+    Returns:
+        TmuxSessionResponse with session details.
+    """
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    spawner = WorkerSpawner()
+    session_name = spawner._get_tmux_session_name(worker_id)
+
+    # Check if session is running
+    if not await spawner.is_running(worker_id):
+        raise HTTPException(status_code=404, detail="Worker session not running")
+
+    return TmuxSessionResponse(
+        session_name=session_name,
+        worker_id=worker_id,
+        attach_command=spawner.attach_command(worker_id),
+    )
+
+
+@router.get("/sessions/list")
+async def list_worker_sessions() -> list[TmuxSessionResponse]:
+    """List all running worker tmux sessions.
+
+    Returns:
+        List of running worker sessions.
+    """
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    spawner = WorkerSpawner()
+    sessions = await spawner.list_sessions()
+
+    return [
+        TmuxSessionResponse(
+            session_name=session,
+            worker_id=session.replace("rm-worker-", ""),
+            attach_command=f"tmux attach -t {session}",
+        )
+        for session in sessions
+    ]
+
+
+class WorkerLogResponse(BaseModel):
+    """Response for worker log output."""
+
+    worker_id: str
+    log_path: str | None
+    output: str | None
+    lines_count: int
+
+
+@router.get("/{worker_id}/log")
+async def get_worker_log(
+    db: Annotated[Database, Depends(get_db)],
+    worker_id: str,
+    lines: int = Query(default=100, ge=1, le=10000),
+) -> WorkerLogResponse:
+    """Get recent log output from a worker's log file.
+
+    This reads from the worker's log file (not the output buffer).
+    Use this for workers running in tmux sessions.
+
+    Args:
+        worker_id: The worker ID.
+        lines: Number of lines to retrieve.
+
+    Returns:
+        WorkerLogResponse with log output.
+    """
+    from ringmaster.worker.spawner import WorkerSpawner
+
+    repo = WorkerRepository(db)
+    worker = await repo.get(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    spawner = WorkerSpawner()
+    output = await spawner.get_output(worker_id, lines)
+    log_path = spawner.log_dir / f"{worker_id}.log"
+
+    return WorkerLogResponse(
+        worker_id=worker_id,
+        log_path=str(log_path) if log_path.exists() else None,
+        output=output,
+        lines_count=len(output.split("\n")) if output else 0,
+    )
