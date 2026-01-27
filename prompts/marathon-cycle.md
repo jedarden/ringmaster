@@ -59,6 +59,7 @@ Work should be:
 ### 5. Checkpoint
 
 - Stage and commit changes with descriptive message
+- **Push to origin**: `git push origin main`
 - Update `prompts/PROGRESS.md` with:
   - What was accomplished this iteration
   - Current state (what works, what doesn't)
