@@ -48,6 +48,13 @@ The Python-based implementation is now functional with all core components in pl
 - ✅ Generic worker for arbitrary CLIs
 - ✅ Async subprocess execution with streaming
 - ✅ Session lifecycle management
+- ✅ **Real-time output streaming**
+  - OutputBuffer class with pub/sub for real-time output
+  - GET /api/workers/{id}/output - Poll recent output lines
+  - GET /api/workers/{id}/output/stream - SSE stream for real-time
+  - GET /api/workers/output/stats - Buffer statistics
+  - WORKER_OUTPUT event for WebSocket notifications
+  - Executor integration: writes to buffer and emits events
 
 ### Enricher (`src/ringmaster/enricher/`)
 - ✅ 5-layer prompt assembly pipeline
@@ -395,6 +402,14 @@ src/ringmaster/
 - ✅ ProjectsPage with j/k navigation and Enter to open
 - ✅ WorkersPage with j/k navigation and Enter to toggle
 
+### Worker Output Panel (`frontend/src/components/WorkerOutputPanel.tsx`)
+- ✅ Real-time output streaming via SSE (Server-Sent Events)
+- ✅ Live mode with EventSource connection
+- ✅ Polling mode fallback with refresh button
+- ✅ Auto-scroll with manual scroll detection
+- ✅ Line number display and total line count
+- ✅ Connection status indicator (green=connected, red=disconnected)
+
 Implemented shortcuts:
 - g m: Go to mailbox (projects)
 - g a: Go to agents (workers)
@@ -491,6 +506,7 @@ Implemented shortcuts:
 | 35 | 2026-01-27 | Add frontend undo UI: Cmd+Z/Cmd+Shift+Z keyboard shortcuts, useUndo hook, Toast notification component, undo/redo API client functions, WebSocket event refresh |
 | 36 | 2026-01-27 | Add worker capabilities: capabilities field on Worker, required_capabilities on Task/Subtask, migration 006, get_capable_workers() method, scheduler capability matching, API endpoints for capability management, 7 new tests, total 256 tests passing |
 | 37 | 2026-01-27 | Fix sqlite3.Row compatibility bug: capabilities and required_capabilities columns were not being read due to sqlite3.Row not supporting 'in' operator, switched to row.keys() checks, all 256 tests passing |
+| 38 | 2026-01-27 | Add real-time worker output streaming: OutputBuffer class for buffering worker output with pub/sub support, SSE stream endpoint for real-time output, polling endpoint for recent output, WORKER_OUTPUT event type, WorkerOutputPanel React component with live/polling modes, auto-scroll detection, 6 new tests, total 262 tests passing |
 
 ## Blockers
 
