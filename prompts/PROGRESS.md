@@ -600,10 +600,19 @@ Implemented shortcuts:
 - ✅ TypeScript types: CommitInfo, FileHistoryResponse, DiffHunkInfo, FileDiffResponse, FileAtCommitResponse
 - ✅ API client functions: getFileHistory(), getFileDiff(), getFileAtCommit()
 
+### Task Auto-Retry with Exponential Backoff (`src/ringmaster/worker/executor.py`)
+- ✅ `retry_after` and `last_failure_reason` fields on Task/Subtask models
+- ✅ Database migration 008_retry_tracking.sql for new columns
+- ✅ `calculate_retry_backoff()` function with exponential delay (30s, 60s, 120s, ...)
+- ✅ `get_ready_tasks()` filters out tasks with future retry_after
+- ✅ Executor sets retry_after on failure with configurable max delay (1 hour)
+- ✅ TASK_RETRY event emission with backoff details
+- ✅ Success clears retry tracking fields
+- ✅ 10 new tests covering backoff calculation and retry behavior
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
-2. **Task Iteration Auto-Retry**: Implement automatic retry logic when tasks fail (up to max_attempts)
 
 ## Iteration Log
 
@@ -657,6 +666,7 @@ Implemented shortcuts:
 | 46 | 2026-01-27 | Add deployment context source for enrichment pipeline: DeploymentContextExtractor class with env file loading (.env with secret redaction), Docker Compose configs, K8s manifests (with YAML parsing and secret value redaction), Helm values, CI/CD workflow files (GitHub Actions, GitLab CI), GitHub Actions status via gh CLI; task relevance scoring for deployment keywords; token budgeting with file limits; DeploymentContextStage integrated into 6-layer pipeline; 22 new tests, total 364 tests passing |
 | 47 | 2026-01-27 | Add Git file history and diff API: Git operations module (get_file_history, get_file_diff, get_file_at_commit, is_git_repo), 3 new API endpoints for file git operations with path traversal protection, response models for commit info and diff hunks, 17 new tests, total 381 tests passing |
 | 48 | 2026-01-27 | Add Git History Frontend UI: GitHistoryModal component with commit list and time-ago formatting, FileDiffViewer with unified diff display and color-coded lines, TypeScript types for git API responses, API client functions (getFileHistory, getFileDiff, getFileAtCommit), History button integrated into FileBrowser file preview, CSS styles for modal and diff viewer |
+| 49 | 2026-01-27 | Add task auto-retry with exponential backoff: retry_after and last_failure_reason fields on Task/Subtask models, migration 008_retry_tracking.sql, calculate_retry_backoff() function (30s/60s/120s/...), get_ready_tasks() filters tasks in backoff period, TASK_RETRY event emission, success clears retry tracking, 10 new tests, total 391 tests passing |
 
 ## Blockers
 
