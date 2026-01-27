@@ -149,10 +149,13 @@ class WorkerExecutor:
                 task_id=task.id,
             )
 
+            # Use project setting for base branch, default to "main"
+            base_branch = project.settings.get("base_branch", "main")
+
             worktree = await get_or_create_worktree(
                 repo_path=project_dir,
                 config=config,
-                base_branch="main",  # TODO: Make configurable per project
+                base_branch=base_branch,
             )
 
             logger.info(
