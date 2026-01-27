@@ -1,6 +1,5 @@
 """Tests for documentation context extraction."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -216,8 +215,6 @@ class TestFormatDocumentationContext:
 
     def test_formats_readme(self, tmp_path: Path):
         """Test formatting README."""
-        extractor = DocumentationContextExtractor(project_dir=tmp_path)
-
         # Create a mock result
         from ringmaster.enricher.documentation_context import (
             DocFile,
