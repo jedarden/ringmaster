@@ -1803,3 +1803,96 @@ class TestLogsAPI:
         data = response.json()
         assert "deleted" in data
         assert "cutoff" in data
+
+    async def test_create_log_emits_websocket_event(self, client: AsyncClient):
+        """Test that creating a log emits a WebSocket event."""
+        import asyncio
+        from ringmaster.events import event_bus
+        from ringmaster.events.types import EventType
+
+        # Track events received
+        received_events = []
+
+        async def capture_event(event):
+            received_events.append(event)
+
+        event_bus.add_callback(capture_event)
+
+        try:
+            # Create a log entry
+            response = await client.post(
+                "/api/logs",
+                json={
+                    "level": "info",
+                    "component": "api",
+                    "message": "WebSocket test log",
+                    "project_id": None,
+                },
+            )
+            assert response.status_code == 201
+            log_data = response.json()
+
+            # Allow event to be processed
+            await asyncio.sleep(0.05)
+
+            # Verify event was emitted
+            log_events = [e for e in received_events if e.type == EventType.LOG_CREATED]
+            assert len(log_events) >= 1
+
+            # Check event data
+            last_log_event = log_events[-1]
+            assert last_log_event.data["id"] == log_data["id"]
+            assert last_log_event.data["level"] == "info"
+            assert last_log_event.data["component"] == "api"
+            assert last_log_event.data["message"] == "WebSocket test log"
+
+        finally:
+            event_bus.remove_callback(capture_event)
+
+    async def test_create_log_with_project_emits_event_with_project_id(
+        self, client: AsyncClient
+    ):
+        """Test that log events include project_id for filtering."""
+        import asyncio
+        from ringmaster.events import event_bus
+        from ringmaster.events.types import EventType
+
+        # Create a project first
+        project_response = await client.post(
+            "/api/projects", json={"name": "Log Event Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Track events received
+        received_events = []
+
+        async def capture_event(event):
+            received_events.append(event)
+
+        event_bus.add_callback(capture_event)
+
+        try:
+            # Create a log entry with project_id
+            response = await client.post(
+                "/api/logs",
+                json={
+                    "level": "warning",
+                    "component": "scheduler",
+                    "message": "Project-scoped log",
+                    "project_id": project_id,
+                },
+            )
+            assert response.status_code == 201
+
+            # Allow event to be processed
+            await asyncio.sleep(0.05)
+
+            # Verify event includes project_id for filtering
+            log_events = [e for e in received_events if e.type == EventType.LOG_CREATED]
+            assert len(log_events) >= 1
+
+            last_log_event = log_events[-1]
+            assert last_log_event.project_id == project_id
+
+        finally:
+            event_bus.remove_callback(capture_event)

@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { listLogs, getLogStats, getRecentLogs } from "../api/client";
 import type { LogEntry, LogStats, LogLevel, LogComponent } from "../types";
 import { LogLevel as LogLevelEnum, LogComponent as LogComponentEnum } from "../types";
+import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 
 function formatTimestamp(isoString: string): string {
   const date = new Date(isoString);
@@ -87,6 +88,62 @@ export function LogsViewer({
   // Expanded log details
   const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
 
+  // Track seen log IDs to prevent duplicates from both WS and REST
+  const seenLogIds = useRef<Set<number>>(new Set());
+
+  // WebSocket handler for real-time log updates
+  const handleLogEvent = useCallback(
+    (event: WebSocketEvent) => {
+      if (event.type !== "log.created" || !liveMode) return;
+
+      const data = event.data as {
+        id: number;
+        timestamp: string;
+        level: string;
+        component: string;
+        message: string;
+        task_id?: string | null;
+        worker_id?: string | null;
+        data?: Record<string, unknown> | null;
+      };
+
+      // Check if we've already seen this log (from initial load or duplicate WS message)
+      if (seenLogIds.current.has(data.id)) return;
+      seenLogIds.current.add(data.id);
+
+      // Apply filters
+      if (levelFilter && data.level !== levelFilter) return;
+      if (componentFilter && data.component !== componentFilter) return;
+      if (taskId && data.task_id !== taskId) return;
+      if (workerId && data.worker_id !== workerId) return;
+      if (projectId && event.project_id !== projectId) return;
+
+      // Create log entry from event data
+      const newLog: LogEntry = {
+        id: data.id,
+        timestamp: data.timestamp,
+        level: data.level as LogLevel,
+        component: data.component as LogComponent,
+        message: data.message,
+        task_id: data.task_id ?? null,
+        worker_id: data.worker_id ?? null,
+        project_id: event.project_id ?? null,
+        data: data.data ?? null,
+      };
+
+      // Prepend new log to list (newest first)
+      setLogs((prev) => [newLog, ...prev].slice(0, limit));
+      setTotal((prev) => prev + 1);
+    },
+    [liveMode, levelFilter, componentFilter, taskId, workerId, projectId, limit]
+  );
+
+  // Connect to WebSocket for real-time updates
+  const { connected } = useWebSocket({
+    projectId,
+    onEvent: handleLogEvent,
+  });
+
   const loadLogs = useCallback(async () => {
     try {
       if (liveMode) {
@@ -109,6 +166,8 @@ export function LogsViewer({
         if (projectId) {
           filtered = filtered.filter((l) => l.project_id === projectId);
         }
+        // Track seen log IDs to prevent duplicates from WebSocket
+        seenLogIds.current = new Set(filtered.map((l) => l.id));
         setLogs(filtered);
         setTotal(filtered.length);
       } else {
@@ -269,7 +328,12 @@ export function LogsViewer({
       {/* Log Count */}
       <div className="logs-count">
         Showing {logs.length} of {total} logs
-        {liveMode && <span className="live-indicator"> (live)</span>}
+        {liveMode && (
+          <span className={`live-indicator ${connected ? "connected" : "disconnected"}`}>
+            {" "}
+            ({connected ? "live" : "reconnecting..."})
+          </span>
+        )}
       </div>
 
       {/* Log List */}

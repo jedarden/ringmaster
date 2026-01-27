@@ -16,6 +16,8 @@ from pydantic import BaseModel
 from ringmaster.api.deps import get_db
 from ringmaster.db import Database
 from ringmaster.domain.enums import LogComponent, LogLevel
+from ringmaster.events import event_bus
+from ringmaster.events.types import EventType
 
 router = APIRouter()
 
@@ -111,7 +113,25 @@ async def create_log(
     if not row:
         raise HTTPException(status_code=500, detail="Failed to create log entry")
 
-    return _row_to_log_entry(row)
+    log_response = _row_to_log_entry(row)
+
+    # Emit event for WebSocket streaming
+    await event_bus.emit(
+        EventType.LOG_CREATED,
+        data={
+            "id": log_response.id,
+            "timestamp": log_response.timestamp,
+            "level": log_response.level,
+            "component": log_response.component,
+            "message": log_response.message,
+            "task_id": log_response.task_id,
+            "worker_id": log_response.worker_id,
+            "data": log_response.data,
+        },
+        project_id=log_response.project_id,
+    )
+
+    return log_response
 
 
 @router.get("")
