@@ -4,6 +4,12 @@
   box-sizing: border-box;
 }
 
+/* Ensure text elements render with proper height */
+h1, h2, h3, h4, h5, h6, button, span, a, p {
+  min-height: 1em;
+  line-height: normal;
+}
+
 :root {
   --color-bg: #1a1a2e;
   --color-surface: #16213e;
@@ -120,7 +126,7 @@ body {
 
 .page-header h1 {
   margin: 0;
-  flex: 1;
+  flex: 1 0 auto;
 }
 
 .page-header .settings-btn {

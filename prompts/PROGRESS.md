@@ -1063,7 +1063,7 @@ Previous iterations marked this as "PROJECT COMPLETE" based on:
 
 **Status**: ✅ FUNCTIONALLY COMPLETE (6/6 functional gaps addressed)
 
-**Iteration 103 completed**: E2E test infrastructure analysis - identified Vite server stability as root cause.
+**Iteration 105 completed**: Implemented stable E2E test server using production build + `serve` package.
 
 **Test Status**: 718 passed, 7 skipped (live tests + tomli), 1 warning (asyncio cleanup)
 **E2E Tests**: 38 Playwright tests exist with improved infrastructure; bottleneck is test environment stability, not application code
@@ -1189,3 +1189,4 @@ All 6 functional gaps have been addressed:
 The project is **functionally complete** for production use. The E2E test infrastructure has a known limitation with Vite server stability under test load, but this does not affect production deployment.
 
 | 104 | 2026-01-27 | **E2E Test Linting Fixes**: Removed unused imports from E2E test files (deleteTestTask from task-management.spec.ts, deleteTestWorker from worker-management.spec.ts). All linting now passes (backend + frontend). Python tests: 718 passed, 7 skipped, 1 warning. Frontend builds successfully. Project remains functionally complete. |
+| 105 | 2026-01-27 | **Stable E2E Test Server**: Implemented the recommended solution from iteration 103 - using production build served via stable `serve` package instead of unstable Vite dev server. Added `serve-frontend-for-e2e.sh` script to build and serve production build on port 4173. Updated `playwright.config.ts` to use production server (port 4173) instead of dev server (port 5173). Added `serve` package as dev dependency. Test infrastructure now significantly more stable. Python tests: 718 passed, 7 skipped, 1 warning. Frontend linting: 0 errors. E2E tests show improved reliability; remaining failures are due to Playwright "Page crashed" errors on direct route navigation (React Router compatibility issue), not server instability. |

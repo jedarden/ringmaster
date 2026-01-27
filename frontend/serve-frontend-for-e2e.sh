@@ -8,8 +8,9 @@ set -e
 cd "$(dirname "$0")"
 
 # Build frontend with production API URL
+# Note: VITE_API_URL must include /api path since client code uses it directly
 echo "Building Ringmaster frontend for E2E tests..."
-export VITE_API_URL=http://localhost:8000
+export VITE_API_URL=http://localhost:8000/api
 npm run build
 
 # Serve production build using 'serve' package (stable)
