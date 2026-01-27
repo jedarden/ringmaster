@@ -490,6 +490,7 @@ Implemented shortcuts:
 | 34 | 2026-01-27 | Add undo/redo system: Action domain model, ActionRepository, undo API routes, action_history migration, UNDO/REDO events, 7 new tests, total 249 tests passing |
 | 35 | 2026-01-27 | Add frontend undo UI: Cmd+Z/Cmd+Shift+Z keyboard shortcuts, useUndo hook, Toast notification component, undo/redo API client functions, WebSocket event refresh |
 | 36 | 2026-01-27 | Add worker capabilities: capabilities field on Worker, required_capabilities on Task/Subtask, migration 006, get_capable_workers() method, scheduler capability matching, API endpoints for capability management, 7 new tests, total 256 tests passing |
+| 37 | 2026-01-27 | Fix sqlite3.Row compatibility bug: capabilities and required_capabilities columns were not being read due to sqlite3.Row not supporting 'in' operator, switched to row.keys() checks, all 256 tests passing |
 
 ## Blockers
 
