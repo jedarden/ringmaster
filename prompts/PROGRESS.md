@@ -57,7 +57,7 @@ The Python-based implementation is now functional with all core components in pl
   - Executor integration: writes to buffer and emits events
 
 ### Enricher (`src/ringmaster/enricher/`)
-- ✅ 6-layer prompt assembly pipeline
+- ✅ 7-layer prompt assembly pipeline
 - ✅ Stage-based architecture
 - ✅ Context hash for deduplication
 - ✅ RLM summarization with hierarchical compression
@@ -71,6 +71,12 @@ The Python-based implementation is now functional with all core components in pl
   - GitHub Actions run status via gh CLI
   - Task relevance scoring for deployment keywords
   - Token budgeting with file limits
+- ✅ **Logs context extraction** (per docs/04-context-enrichment.md section 6)
+  - Keyword-based debugging task detection (error, bug, fix, crash, etc.)
+  - Task-specific logs (matching task_id)
+  - Project-level error/critical logs from last 24 hours
+  - Stack traces and error details from log data
+  - Token budgeting with truncation
 
 ### Scheduler (`src/ringmaster/scheduler/`)
 - ✅ Worker lifecycle management
@@ -796,6 +802,7 @@ Implemented shortcuts:
 | 58 | 2026-01-27 | Add worker task duration display: GET /api/workers/with-tasks endpoint returns enriched worker info including current task title, started_at, attempts; WorkerWithTask/CurrentTaskInfo TypeScript types; listWorkersWithTasks API client; WorkersPage shows task title and live elapsed time with auto-updating timer; CSS styling for current-task-info section; 3 new tests, total 457 tests passing |
 | 59 | 2026-01-27 | Implement HistoryContextStage with RLM integration: completed the TODO in stages.py to wire HistoryContextStage to RLMSummarizer, provides compressed conversation history as worker context; removed stale TODO comment from pipeline.py; 5 new tests, total 462 tests passing |
 | 60 | 2026-01-27 | Add worker health monitoring API: GET /api/workers/{id}/health endpoint exposing liveness status, degradation signals, and recovery recommendations from WorkerMonitor; 5 new tests, total 467 tests passing |
+| 61 | 2026-01-27 | Add LogsContextStage for debugging task context: per docs/04-context-enrichment.md section 6, enrichment pipeline now includes relevant logs for debugging-related tasks; keyword-based task detection (error, bug, fix, crash, etc.); fetches task-specific logs and project-level error/critical logs from last 24h; includes stack traces and error details; token budgeting with truncation; 14 new tests, total 481 tests passing |
 
 ## Blockers
 
