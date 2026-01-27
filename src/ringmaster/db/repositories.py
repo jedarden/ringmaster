@@ -291,6 +291,15 @@ class TaskRepository:
             for row in rows
         ]
 
+    async def remove_dependency(self, child_id: str, parent_id: str) -> bool:
+        """Remove a dependency between tasks."""
+        cursor = await self.db.execute(
+            "DELETE FROM dependencies WHERE child_id = ? AND parent_id = ?",
+            (child_id, parent_id),
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
     async def get_ready_tasks(self, project_id: UUID | None = None) -> list[Task]:
         """Get tasks that are ready to be assigned (all dependencies complete)."""
         conditions = ["t.status = 'ready'", "t.type IN ('task', 'subtask')"]

@@ -357,6 +357,27 @@ async def get_task_dependents(
     return await repo.get_dependents(task_id)
 
 
+@router.delete("/{task_id}/dependencies/{parent_id}")
+async def remove_task_dependency(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+    parent_id: str,
+) -> dict[str, bool]:
+    """Remove a dependency from a task."""
+    repo = TaskRepository(db)
+
+    # Verify the task exists
+    task = await repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    removed = await repo.remove_dependency(child_id=task_id, parent_id=parent_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Dependency not found")
+
+    return {"removed": True}
+
+
 @router.post("/bulk-update")
 async def bulk_update_tasks(
     db: Annotated[Database, Depends(get_db)],

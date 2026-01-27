@@ -303,6 +303,69 @@ class TestTasksAPI:
         assert len(dependents) == 1
         assert dependents[0]["child_id"] == task2_id
 
+    async def test_remove_task_dependency(self, client: AsyncClient):
+        """Test removing a task dependency."""
+        # Create project and tasks
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Remove Dependency Test"},
+        )
+        project_id = project_response.json()["id"]
+
+        task1_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Parent Task"},
+        )
+        task1_id = task1_response.json()["id"]
+
+        task2_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Child Task"},
+        )
+        task2_id = task2_response.json()["id"]
+
+        # Add dependency: task2 depends on task1
+        await client.post(
+            f"/api/tasks/{task2_id}/dependencies",
+            json={"parent_id": task1_id},
+        )
+
+        # Verify dependency exists
+        response = await client.get(f"/api/tasks/{task2_id}/dependencies")
+        assert len(response.json()) == 1
+
+        # Remove dependency
+        response = await client.delete(
+            f"/api/tasks/{task2_id}/dependencies/{task1_id}"
+        )
+        assert response.status_code == 200
+        assert response.json()["removed"] is True
+
+        # Verify dependency removed
+        response = await client.get(f"/api/tasks/{task2_id}/dependencies")
+        assert len(response.json()) == 0
+
+    async def test_remove_nonexistent_dependency(self, client: AsyncClient):
+        """Test removing a dependency that doesn't exist returns 404."""
+        # Create project and task
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Nonexistent Dependency Test"},
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Orphan Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Try to remove nonexistent dependency
+        response = await client.delete(
+            f"/api/tasks/{task_id}/dependencies/nonexistent-parent"
+        )
+        assert response.status_code == 404
+
     async def test_filter_tasks_by_project(self, client: AsyncClient):
         """Test filtering tasks by project."""
         # Create two projects

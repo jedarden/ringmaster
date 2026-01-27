@@ -218,6 +218,17 @@ export async function getTaskDependents(taskId: string): Promise<Dependency[]> {
   return handleResponse<Dependency[]>(response);
 }
 
+export async function removeTaskDependency(
+  taskId: string,
+  parentId: string
+): Promise<{ removed: boolean }> {
+  const response = await fetch(
+    `${API_BASE}/tasks/${taskId}/dependencies/${encodeURIComponent(parentId)}`,
+    { method: "DELETE" }
+  );
+  return handleResponse<{ removed: boolean }>(response);
+}
+
 export async function assignTask(taskId: string, data: TaskAssign): Promise<AnyTask> {
   const response = await fetch(`${API_BASE}/tasks/${taskId}/assign`, {
     method: "POST",

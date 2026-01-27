@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { GraphData, GraphNode, GraphEdge, TaskStatus, Priority } from "../types";
-import { getGraph } from "../api/client";
+import { getGraph, addTaskDependency, removeTaskDependency } from "../api/client";
 
 interface DependencyGraphProps {
   projectId: string;
@@ -12,6 +12,14 @@ interface SimNode extends GraphNode {
   y: number;
   vx: number;
   vy: number;
+}
+
+interface DragConnection {
+  sourceId: string;
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
 }
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
@@ -58,6 +66,16 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
   const animationRef = useRef<number | undefined>(undefined);
   const isDragging = useRef(false);
   const dragNode = useRef<string | null>(null);
+
+  // Drag-to-create-dependency state
+  const [dragConnection, setDragConnection] = useState<DragConnection | null>(null);
+  const [hoveredEdge, setHoveredEdge] = useState<{ source: string; target: string } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    edge: { source: string; target: string };
+  } | null>(null);
+  const [operationError, setOperationError] = useState<string | null>(null);
 
   // Load graph data
   const loadGraph = useCallback(async () => {
@@ -206,7 +224,7 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
     };
   }, [simNodes.length, edges, dimensions]);
 
-  // Mouse handlers for dragging
+  // Mouse handlers for dragging nodes
   const handleMouseDown = (nodeId: string) => (e: React.MouseEvent) => {
     e.preventDefault();
     isDragging.current = true;
@@ -215,31 +233,111 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
-      if (!isDragging.current || !dragNode.current || !svgRef.current) return;
+      if (!svgRef.current) return;
 
       const svg = svgRef.current;
       const rect = svg.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
 
-      setSimNodes((prev) =>
-        prev.map((n) =>
-          n.id === dragNode.current ? { ...n, x, y, vx: 0, vy: 0 } : n
-        )
-      );
+      // Handle node dragging
+      if (isDragging.current && dragNode.current) {
+        setSimNodes((prev) =>
+          prev.map((n) =>
+            n.id === dragNode.current ? { ...n, x, y, vx: 0, vy: 0 } : n
+          )
+        );
+      }
+
+      // Handle connection dragging
+      if (dragConnection) {
+        setDragConnection((prev) =>
+          prev ? { ...prev, targetX: x, targetY: y } : null
+        );
+      }
     },
-    []
+    [dragConnection]
   );
 
   const handleMouseUp = useCallback(() => {
     isDragging.current = false;
     dragNode.current = null;
-  }, []);
+
+    // Handle connection drop
+    if (dragConnection && hoveredNode && hoveredNode !== dragConnection.sourceId) {
+      // Create dependency: source depends on target (source is child, hovered is parent)
+      handleCreateDependency(dragConnection.sourceId, hoveredNode);
+    }
+    setDragConnection(null);
+  }, [dragConnection, hoveredNode]);
 
   const handleNodeClick = (nodeId: string) => {
     setSelectedNode(nodeId);
     onNodeClick?.(nodeId);
   };
+
+  // Create dependency
+  const handleCreateDependency = async (childId: string, parentId: string) => {
+    try {
+      setOperationError(null);
+      await addTaskDependency(childId, { parent_id: parentId });
+      // Refresh graph to show new edge
+      await loadGraph();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create dependency";
+      setOperationError(message);
+      setTimeout(() => setOperationError(null), 3000);
+    }
+  };
+
+  // Delete dependency
+  const handleDeleteDependency = async (childId: string, parentId: string) => {
+    try {
+      setOperationError(null);
+      await removeTaskDependency(childId, parentId);
+      // Update edges locally
+      setEdges((prev) =>
+        prev.filter((e) => !(e.target === childId && e.source === parentId))
+      );
+      setContextMenu(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete dependency";
+      setOperationError(message);
+      setTimeout(() => setOperationError(null), 3000);
+    }
+  };
+
+  // Start dragging from connector
+  const handleConnectorMouseDown = (nodeId: string, x: number, y: number) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragConnection({
+      sourceId: nodeId,
+      sourceX: x,
+      sourceY: y,
+      targetX: x,
+      targetY: y,
+    });
+  };
+
+  // Edge right-click handler
+  const handleEdgeContextMenu = (source: string, target: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      edge: { source, target },
+    });
+  };
+
+  // Close context menu on click outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener("click", handleClick);
+      return () => document.removeEventListener("click", handleClick);
+    }
+  }, [contextMenu]);
 
   // Render node shape
   const renderNodeShape = (node: SimNode, isSelected: boolean, isHovered: boolean) => {
@@ -292,6 +390,43 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
         strokeWidth={strokeWidth}
         style={{ cursor: "pointer", filter: isHovered ? "brightness(1.1)" : undefined }}
       />
+    );
+  };
+
+  // Render connector point on node
+  const renderConnector = (node: SimNode) => {
+    const r = getNodeRadius(node);
+    const cx = node.x + r + 8;
+    const cy = node.y;
+    const isSource = dragConnection?.sourceId === node.id;
+    const isValidTarget = dragConnection && dragConnection.sourceId !== node.id;
+
+    return (
+      <g>
+        {/* Connector circle */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={6}
+          fill={isSource ? "#3b82f6" : isValidTarget && hoveredNode === node.id ? "#22c55e" : "#d1d5db"}
+          stroke={isSource ? "#1d4ed8" : "#9ca3af"}
+          strokeWidth={1.5}
+          style={{ cursor: "crosshair" }}
+          onMouseDown={handleConnectorMouseDown(node.id, cx, cy)}
+        />
+        {/* Plus icon */}
+        <text
+          x={cx}
+          y={cy}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={10}
+          fill={isSource ? "white" : "#6b7280"}
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
+          +
+        </text>
+      </g>
     );
   };
 
@@ -384,6 +519,18 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
         </div>
       </div>
 
+      {/* Instructions bar */}
+      <div className="px-3 py-2 bg-blue-50 border-b text-xs text-blue-700">
+        <strong>Tips:</strong> Drag nodes to reposition. Click the <span className="font-mono bg-blue-100 px-1 rounded">+</span> connector and drag to another node to create a dependency. Right-click an edge to delete it.
+      </div>
+
+      {/* Error notification */}
+      {operationError && (
+        <div className="px-3 py-2 bg-red-50 border-b text-sm text-red-700">
+          {operationError}
+        </div>
+      )}
+
       {/* Graph */}
       <div className="flex-1 relative" style={{ minHeight: 400 }}>
         <svg
@@ -405,6 +552,26 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
               orient="auto"
             >
               <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280" />
+            </marker>
+            <marker
+              id="arrowhead-hover"
+              markerWidth="10"
+              markerHeight="7"
+              refX="10"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+            </marker>
+            <marker
+              id="arrowhead-drag"
+              markerWidth="10"
+              markerHeight="7"
+              refX="10"
+              refY="3.5"
+              orient="auto"
+            >
+              <polygon points="0 0, 10 3.5, 0 7" fill="#3b82f6" />
             </marker>
           </defs>
 
@@ -429,21 +596,54 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
 
               const isHighlighted =
                 selectedNode === edge.source || selectedNode === edge.target;
+              const isEdgeHovered =
+                hoveredEdge?.source === edge.source && hoveredEdge?.target === edge.target;
 
               return (
-                <line
-                  key={`${edge.source}-${edge.target}-${i}`}
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={isHighlighted ? "#3b82f6" : "#d1d5db"}
-                  strokeWidth={isHighlighted ? 2 : 1}
-                  markerEnd="url(#arrowhead)"
-                />
+                <g key={`${edge.source}-${edge.target}-${i}`}>
+                  {/* Invisible wider line for easier hover/click */}
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="transparent"
+                    strokeWidth={12}
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setHoveredEdge({ source: edge.source, target: edge.target })}
+                    onMouseLeave={() => setHoveredEdge(null)}
+                    onContextMenu={handleEdgeContextMenu(edge.source, edge.target)}
+                  />
+                  {/* Visible line */}
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={isEdgeHovered ? "#ef4444" : isHighlighted ? "#3b82f6" : "#d1d5db"}
+                    strokeWidth={isEdgeHovered ? 3 : isHighlighted ? 2 : 1}
+                    markerEnd={isEdgeHovered ? "url(#arrowhead-hover)" : "url(#arrowhead)"}
+                    style={{ pointerEvents: "none" }}
+                  />
+                </g>
               );
             })}
           </g>
+
+          {/* Drag connection line */}
+          {dragConnection && (
+            <line
+              x1={dragConnection.sourceX}
+              y1={dragConnection.sourceY}
+              x2={dragConnection.targetX}
+              y2={dragConnection.targetY}
+              stroke="#3b82f6"
+              strokeWidth={2}
+              strokeDasharray="5,5"
+              markerEnd="url(#arrowhead-drag)"
+              style={{ pointerEvents: "none" }}
+            />
+          )}
 
           {/* Nodes */}
           <g>
@@ -473,6 +673,8 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
                       ? node.title.slice(0, 15) + "..."
                       : node.title}
                   </text>
+                  {/* Connector for creating dependencies */}
+                  {renderConnector(node)}
                 </g>
               );
             })}
@@ -480,7 +682,7 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
         </svg>
 
         {/* Tooltip */}
-        {hoveredNode && (
+        {hoveredNode && !dragConnection && (
           <div
             className="absolute bg-white border shadow-lg rounded p-3 text-sm pointer-events-none"
             style={{
@@ -513,6 +715,27 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
                 </>
               );
             })()}
+          </div>
+        )}
+
+        {/* Context menu for edge deletion */}
+        {contextMenu && (
+          <div
+            className="absolute bg-white border shadow-lg rounded py-1 text-sm z-50"
+            style={{
+              left: contextMenu.x,
+              top: contextMenu.y,
+            }}
+          >
+            <button
+              className="w-full px-4 py-2 text-left hover:bg-red-50 text-red-600 flex items-center gap-2"
+              onClick={() =>
+                handleDeleteDependency(contextMenu.edge.target, contextMenu.edge.source)
+              }
+            >
+              <span>🗑</span>
+              <span>Delete dependency</span>
+            </button>
           </div>
         )}
       </div>
