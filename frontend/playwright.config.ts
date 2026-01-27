@@ -39,19 +39,22 @@ export default defineConfig({
   ],
 
   // Start both backend API and frontend dev server
-  webServer: [
-    {
-      // Use shell script to initialize database and start API server
-      command: './start-backend-for-e2e.sh',
-      url: 'http://localhost:8000',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120000,
-    },
-    {
-      command: 'npm run dev',
-      url: 'http://localhost:5173',
-      reuseExistingServer: !process.env.CI,
-      timeout: 120000,
-    },
-  ],
+  // Skip webServer if USE_EXISTING_SERVERS env var is set
+  ...(!process.env.USE_EXISTING_SERVERS ? {
+    webServer: [
+      {
+        // Use shell script to initialize database and start API server
+        command: './start-backend-for-e2e.sh',
+        url: 'http://localhost:8000',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      },
+      {
+        command: 'npm run dev',
+        url: 'http://localhost:5173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120000,
+      },
+    ],
+  } : {}),
 });

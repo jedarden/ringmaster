@@ -28,8 +28,8 @@ test.describe('Worker Management', () => {
   });
 
   test('should display workers dashboard', async ({ page }) => {
-    // Should see workers page header
-    await expect(page.getByRole('heading', { name: /workers/i })).toBeVisible();
+    // Should see workers page header (use exact match to avoid matching section headings)
+    await expect(page.getByRole('heading', { name: 'Workers', exact: true })).toBeVisible();
   });
 
   test('should list available workers', async ({ page }) => {

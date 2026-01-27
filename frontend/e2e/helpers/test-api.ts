@@ -28,7 +28,8 @@ interface TestTask {
 interface TestWorker {
   id: string;
   name: string;
-  worker_type: string;
+  type: string;
+  command: string;
   status: string;
   capabilities?: string[];
 }
@@ -68,14 +69,15 @@ export async function createTestTask(projectId: string, overrides: Partial<TestT
       title: overrides.title || `Test Task ${Date.now()}`,
       description: overrides.description || 'A test task for E2E validation',
       status: overrides.status || 'draft',
-      priority: overrides.priority || 'p2',
+      priority: overrides.priority || 'P2',
       type: overrides.type || 'task',
       project_id: projectId,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create test task: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to create test task: ${response.statusText} - ${errorText}`);
   }
 
   return (await response.json()) as TestTask;
@@ -90,14 +92,16 @@ export async function createTestWorker(overrides: Partial<TestWorker> = {}): Pro
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: overrides.name || `e2e-test-worker-${Date.now()}`,
-      worker_type: overrides.worker_type || 'claude-code',
+      type: overrides.type || 'generic',
+      command: overrides.command || 'echo',
       status: overrides.status || 'idle',
       capabilities: overrides.capabilities || ['python', 'typescript'],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create test worker: ${response.statusText}`);
+    const errorText = await response.text();
+    throw new Error(`Failed to create test worker: ${response.statusText} - ${errorText}`);
   }
 
   return (await response.json()) as TestWorker;
@@ -176,9 +180,9 @@ export async function setupTestData(): Promise<{
 
   // Create some tasks in different states
   const tasks = await Promise.all([
-    createTestTask(project.id, { title: 'Draft Task', status: 'draft' }),
-    createTestTask(project.id, { title: 'Ready Task', status: 'ready' }),
-    createTestTask(project.id, { title: 'In Progress Task', status: 'in_progress' }),
+    createTestTask(project.id, { title: 'Draft Task', status: 'draft', priority: 'P2' }),
+    createTestTask(project.id, { title: 'Ready Task', status: 'ready', priority: 'P1' }),
+    createTestTask(project.id, { title: 'In Progress Task', status: 'in_progress', priority: 'P0' }),
   ]);
 
   // Create some test workers
