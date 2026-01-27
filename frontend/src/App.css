@@ -2098,3 +2098,46 @@ textarea {
   font-size: 0.85rem;
   color: var(--color-text-muted);
 }
+
+/* ===========================================
+   Button Link Styles
+   =========================================== */
+
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: var(--color-text);
+  text-decoration: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  transition: all 0.2s;
+}
+
+.btn-link:hover {
+  background: var(--color-accent);
+}
+
+/* ===========================================
+   Graph Page Styles
+   =========================================== */
+
+.graph-page {
+  height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-page .page-header {
+  flex-shrink: 0;
+}
+
+.graph-container {
+  flex: 1;
+  min-height: 0;
+  background: var(--color-surface);
+  border-radius: var(--radius);
+  overflow: hidden;
+}

@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ringmaster.api.routes import (
     chat,
     files,
+    graph,
     input,
     logs,
     metrics,
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
     app.include_router(input.router, prefix="/api/input", tags=["input"])
     app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
+    app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
     app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/health")

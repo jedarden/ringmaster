@@ -6,6 +6,7 @@ import { WorkersPage } from "./pages/WorkersPage";
 import { QueuePage } from "./pages/QueuePage";
 import { MetricsPage } from "./pages/MetricsPage";
 import { LogsPage } from "./pages/LogsPage";
+import { GraphPage } from "./pages/GraphPage";
 import "./App.css";
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<ProjectsPage />} />
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="projects/:projectId/graph" element={<GraphPage />} />
           <Route path="workers" element={<WorkersPage />} />
           <Route path="queue" element={<QueuePage />} />
           <Route path="metrics" element={<MetricsPage />} />

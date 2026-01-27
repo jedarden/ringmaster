@@ -2001,3 +2001,257 @@ class TestLogsAPI:
 
         finally:
             event_bus.remove_callback(capture_event)
+
+
+class TestGraphAPI:
+    """Tests for graph API - task dependency visualization."""
+
+    async def test_get_graph_empty_project(self, client: AsyncClient):
+        """Test getting graph for project with no tasks."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Empty Graph Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(f"/api/graph?project_id={project_id}")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["nodes"] == []
+        assert data["edges"] == []
+        assert data["stats"]["total_nodes"] == 0
+        assert data["stats"]["total_edges"] == 0
+
+    async def test_get_graph_with_tasks(self, client: AsyncClient):
+        """Test getting graph for project with tasks."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Graph Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create tasks
+        task1_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 1"},
+        )
+        task1_id = task1_response.json()["id"]
+
+        task2_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Task 2"},
+        )
+        task2_id = task2_response.json()["id"]
+
+        # Add dependency: task2 depends on task1
+        await client.post(
+            f"/api/tasks/{task2_id}/dependencies",
+            json={"parent_id": task1_id},
+        )
+
+        response = await client.get(f"/api/graph?project_id={project_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Check nodes
+        assert len(data["nodes"]) == 2
+        node_ids = {n["id"] for n in data["nodes"]}
+        assert task1_id in node_ids
+        assert task2_id in node_ids
+
+        # Check edges
+        assert len(data["edges"]) == 1
+        edge = data["edges"][0]
+        assert edge["source"] == task1_id
+        assert edge["target"] == task2_id
+
+        # Check stats
+        assert data["stats"]["total_nodes"] == 2
+        assert data["stats"]["total_edges"] == 1
+
+    async def test_get_graph_includes_node_properties(self, client: AsyncClient):
+        """Test that graph nodes include necessary properties."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Node Properties Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create task
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Test Task",
+                "priority": "P1",
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        response = await client.get(f"/api/graph?project_id={project_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert len(data["nodes"]) == 1
+        node = data["nodes"][0]
+        assert node["id"] == task_id
+        assert node["title"] == "Test Task"
+        assert node["task_type"] == "task"
+        assert node["status"] == "draft"
+        assert node["priority"] == "P1"
+        assert "pagerank_score" in node
+        assert "on_critical_path" in node
+
+    async def test_get_graph_excludes_done_by_default(self, client: AsyncClient):
+        """Test that completed tasks are excluded by default."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Done Exclude Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create task and mark as done
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Done Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        await client.patch(
+            f"/api/tasks/{task_id}",
+            json={"status": "done"},
+        )
+
+        # Create another task that's not done
+        await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Active Task"},
+        )
+
+        response = await client.get(f"/api/graph?project_id={project_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should only have 1 node (the active task)
+        assert len(data["nodes"]) == 1
+        assert data["nodes"][0]["title"] == "Active Task"
+
+    async def test_get_graph_include_done(self, client: AsyncClient):
+        """Test including completed tasks in the graph."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Include Done Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create task and mark as done
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Done Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        await client.patch(
+            f"/api/tasks/{task_id}",
+            json={"status": "done"},
+        )
+
+        response = await client.get(
+            f"/api/graph?project_id={project_id}&include_done=true"
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        assert len(data["nodes"]) == 1
+        assert data["nodes"][0]["status"] == "done"
+
+    async def test_get_graph_with_epic(self, client: AsyncClient):
+        """Test graph includes epics with correct type."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Epic Graph Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create epic
+        await client.post(
+            "/api/tasks/epics",
+            json={
+                "project_id": project_id,
+                "title": "Test Epic",
+                "acceptance_criteria": ["Criterion 1"],
+            },
+        )
+
+        response = await client.get(f"/api/graph?project_id={project_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert len(data["nodes"]) == 1
+        assert data["nodes"][0]["task_type"] == "epic"
+
+    async def test_get_graph_exclude_subtasks(self, client: AsyncClient):
+        """Test excluding subtasks from the graph."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Subtask Exclude Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create parent task
+        task_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Parent Task"},
+        )
+        task_id = task_response.json()["id"]
+
+        # Create subtask
+        await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Subtask",
+                "parent_id": task_id,
+                "task_type": "subtask",
+            },
+        )
+
+        response = await client.get(
+            f"/api/graph?project_id={project_id}&include_subtasks=false"
+        )
+        assert response.status_code == 200
+        data = response.json()
+
+        # Should only have parent task
+        assert len(data["nodes"]) == 1
+        assert data["nodes"][0]["title"] == "Parent Task"
+
+    async def test_get_graph_stats_by_status(self, client: AsyncClient):
+        """Test that graph stats include counts by status."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Stats Status Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Create tasks with different statuses
+        await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Draft Task"},
+        )
+
+        task2_response = await client.post(
+            "/api/tasks",
+            json={"project_id": project_id, "title": "Ready Task"},
+        )
+        await client.post(
+            "/api/queue/enqueue",
+            json={"task_id": task2_response.json()["id"]},
+        )
+
+        response = await client.get(f"/api/graph?project_id={project_id}")
+        assert response.status_code == 200
+        data = response.json()
+
+        assert data["stats"]["total_nodes"] == 2
+        assert data["stats"]["status_draft"] >= 1 or data["stats"]["status_ready"] >= 1

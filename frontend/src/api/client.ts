@@ -42,6 +42,7 @@ import type {
   LogStats,
   LogLevel,
   LogComponent,
+  GraphData,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -678,6 +679,29 @@ export async function clearOldLogs(days = 7): Promise<{ deleted: number; cutoff:
     method: "DELETE",
   });
   return handleResponse<{ deleted: number; cutoff: string }>(response);
+}
+
+// Graph API
+
+export interface GetGraphParams {
+  include_done?: boolean;
+  include_subtasks?: boolean;
+}
+
+export async function getGraph(
+  projectId: string,
+  params: GetGraphParams = {}
+): Promise<GraphData> {
+  const searchParams = new URLSearchParams({ project_id: projectId });
+  if (params.include_done !== undefined) {
+    searchParams.set("include_done", params.include_done.toString());
+  }
+  if (params.include_subtasks !== undefined) {
+    searchParams.set("include_subtasks", params.include_subtasks.toString());
+  }
+
+  const response = await fetch(`${API_BASE}/graph?${searchParams}`);
+  return handleResponse<GraphData>(response);
 }
 
 export { ApiError };

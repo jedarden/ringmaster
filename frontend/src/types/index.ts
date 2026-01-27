@@ -432,3 +432,27 @@ export interface LogStats {
   by_level: Record<string, number>;
   by_component: Record<string, number>;
 }
+
+// Graph types for dependency visualization
+
+export interface GraphNode {
+  id: string;
+  title: string;
+  task_type: TaskType;
+  status: TaskStatus;
+  priority: Priority;
+  parent_id: string | null;
+  pagerank_score: number;
+  on_critical_path: boolean;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  stats: Record<string, number>;
+}

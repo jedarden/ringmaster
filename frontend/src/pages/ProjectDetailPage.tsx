@@ -142,6 +142,9 @@ export function ProjectDetailPage() {
             <button onClick={() => { setShowTaskForm(!showTaskForm); setTaskType("epic"); }}>
               + Manual Epic
             </button>
+            <Link to={`/projects/${projectId}/graph`} className="btn-link">
+              View Graph
+            </Link>
           </div>
 
           {showTaskForm && (
