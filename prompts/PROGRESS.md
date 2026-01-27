@@ -327,11 +327,22 @@ src/ringmaster/
 - ✅ Real-time updates via WebSocket events
 - ✅ 5 new integration tests
 
+### Nested Subtask Display (`frontend/src/pages/ProjectDetailPage.tsx`)
+- ✅ Subtasks grouped by parent task ID
+- ✅ Collapsible subtask section under each task card
+- ✅ Expand/collapse toggle showing subtask count
+- ✅ Subtask priority badge and status badge
+- ✅ Status dropdown for changing subtask status
+- ✅ Worker assignment dropdown for subtasks
+- ✅ Delete button for individual subtasks
+- ✅ Color-coded border based on subtask status (ready/in-progress/blocked/done)
+- ✅ CSS styles for nested subtask components
+
 ## Next Steps
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
 2. **Graph Editing**: Allow creating dependencies by dragging between nodes
-3. **Subtask View**: Show subtasks nested under their parent tasks
+3. **Epic Child Tasks View**: Show child tasks nested under epics (similar to subtasks)
 
 ## Iteration Log
 
@@ -364,6 +375,7 @@ src/ringmaster/
 | 25 | 2026-01-27 | Add file download endpoint: GET /api/chat/projects/{id}/uploads/{filename}/download with proper Content-Type and Content-Disposition headers, frontend client helpers (getDownloadUrl, downloadFile, triggerDownload), 3 new tests, total 209 tests passing |
 | 26 | 2026-01-27 | Add task dependency graph visualization: /api/graph endpoint for graph data, DependencyGraph React component with force-directed SVG layout, node shapes by type, colors by status, size by priority, critical path highlighting, interactive drag/hover/click, /projects/:projectId/graph route, 8 new tests, total 217 tests passing |
 | 27 | 2026-01-27 | Add task assignment UI: POST /api/tasks/{task_id}/assign endpoint, worker selector dropdown in task cards, validates worker availability (idle/not offline), validates task type (no epics), updates task and worker status atomically, unassign support, 5 new tests, total 222 tests passing |
+| 28 | 2026-01-27 | Fix TypeScript error in DependencyGraph (useRef type), add nested subtask display in task cards: collapsible subtask section with expand/collapse toggle, subtask priority/status/title display, status and worker assignment dropdowns, delete button, color-coded border by status, CSS styles for subtask components |
 
 ## Blockers
 
