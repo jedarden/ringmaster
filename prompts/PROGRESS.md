@@ -799,6 +799,35 @@ Implemented shortcuts:
   - DELETE /api/outcomes/cleanup - Prune old outcomes
 - ✅ 25 new tests (15 reasoning bank + 10 learning routing)
 
+### Task Validator (`src/ringmaster/worker/validator.py`)
+- ✅ TaskValidator class for running deterministic validation checks
+- ✅ Auto-detection of test commands:
+  - Python: pytest
+  - Node.js: npm test
+  - Rust: cargo test
+  - Go: go test ./...
+- ✅ Auto-detection of lint commands:
+  - Python: ruff, flake8
+  - Node.js: eslint
+  - Rust: cargo clippy
+  - Go: golangci-lint
+- ✅ Auto-detection of type check commands:
+  - Python: mypy
+  - TypeScript: tsc
+- ✅ Sensitive pattern detection (security, auth, payment, crypto)
+  - Triggers human review requirement
+- ✅ ValidationResult with check status (passed/failed/skipped/error)
+- ✅ Configurable timeouts and commands
+- ✅ API endpoints:
+  - POST /api/tasks/{id}/validate - Run validation and transition status
+  - POST /api/tasks/{id}/approve - Manual approval from REVIEW to DONE
+  - POST /api/tasks/{id}/reject - Rejection with feedback back to IN_PROGRESS
+- ✅ Task status transitions based on validation result:
+  - REVIEW → DONE (validation passed)
+  - REVIEW → IN_PROGRESS (validation failed, for fixes)
+  - REVIEW → REVIEW (needs human review, stays for attention)
+- ✅ 23 new tests covering all validation scenarios
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -876,6 +905,7 @@ Implemented shortcuts:
 | 67 | 2026-01-27 | Add model routing based on task complexity: deterministic heuristics for complexity estimation (file count, keywords, task type, priority), TaskComplexity/ModelTier enums, select_model_for_task(), GET /api/tasks/{id}/routing endpoint with worker_type param; per docs/08-open-architecture.md section 11; 38 new tests, total 577 tests passing |
 | 68 | 2026-01-27 | Add Reasoning Bank for reflexion-based learning: TaskOutcome model, task_outcomes table (migration 011), ReasoningBankRepository with find_similar() using Jaccard similarity, select_model_with_learning() blending static heuristics with learned experience, executor integration via _record_outcome(), API endpoints for outcomes/model-stats/find-similar; per docs/08-open-architecture.md Reflexion-Based Learning; 25 new tests, total 602 tests passing |
 | 69 | 2026-01-27 | Wire model routing into executor: execute_task() now calls select_model_for_task() and get_model_for_worker_type() to select appropriate model based on task complexity, passes selected model to SessionConfig, tracks actual model used (e.g., "claude-sonnet-4-20250514") in TaskOutcome instead of just worker type; enables accurate learning from model performance; all 602 tests passing |
+| 70 | 2026-01-27 | Add task validation stage: TaskValidator class with auto-detection of test/lint commands for Python, Node.js, Rust, Go; ValidationResult with check status (passed/failed/skipped/error); sensitive pattern detection triggers human review; POST /api/tasks/{id}/validate, /approve, /reject endpoints; transitions tasks from REVIEW to DONE or back to IN_PROGRESS; per docs/08-open-architecture.md section 3; 23 new tests, total 625 tests passing |
 
 ## Blockers
 
