@@ -297,8 +297,8 @@ src/ringmaster/
 ## Next Steps
 
 1. **Worker Integration Test**: Test actual worker execution with Claude Code or Aider
-2. **File Download**: Add endpoint to download uploaded files
-3. **Graph Visualization**: Add dependency graph visualization for task relationships
+2. **Graph Visualization**: Add dependency graph visualization for task relationships
+3. **Task Assignment UI**: Add UI for assigning tasks to workers manually
 
 ## Iteration Log
 
@@ -328,6 +328,7 @@ src/ringmaster/
 | 22 | 2026-01-27 | Add file attachments to chat: backend upload endpoint with size/type validation, FileUploadResponse type, uploadFile client function, ChatPanel attachment UI with preview, message attachment display with media icons, fixed chat API paths, 7 new tests, total 204 tests passing |
 | 23 | 2026-01-27 | Add Logs UI: LogsViewer component with live mode auto-refresh, level/component filtering, full-text search, log statistics bar, expandable log details, pagination; LogsPage with /logs route; TypeScript types and API client functions for all log endpoints |
 | 24 | 2026-01-27 | Add WebSocket log streaming: LOG_CREATED event emission from logs API, LogsViewer WebSocket integration for real-time updates in live mode, connection status indicator, duplicate prevention via seen log IDs, 2 new tests, total 206 tests passing |
+| 25 | 2026-01-27 | Add file download endpoint: GET /api/chat/projects/{id}/uploads/{filename}/download with proper Content-Type and Content-Disposition headers, frontend client helpers (getDownloadUrl, downloadFile, triggerDownload), 3 new tests, total 209 tests passing |
 
 ## Blockers
 
