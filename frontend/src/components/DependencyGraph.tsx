@@ -55,7 +55,7 @@ export function DependencyGraph({ projectId, onNodeClick }: DependencyGraphProps
   const [includeDone, setIncludeDone] = useState(false);
   const [includeSubtasks, setIncludeSubtasks] = useState(true);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
   const isDragging = useRef(false);
   const dragNode = useRef<string | null>(null);
 
