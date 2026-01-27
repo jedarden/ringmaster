@@ -1,6 +1,7 @@
 """File browser API routes."""
 
 import mimetypes
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -9,6 +10,13 @@ from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
 from ringmaster.db import Database, ProjectRepository
+from ringmaster.git import (
+    GitError,
+    get_file_at_commit,
+    get_file_diff,
+    get_file_history,
+    is_git_repo,
+)
 
 router = APIRouter()
 
@@ -253,3 +261,228 @@ async def get_file_content(
         mime_type=mime_type,
         is_binary=False,
     )
+
+
+# Git History & Diff Models
+
+
+class CommitInfo(BaseModel):
+    """Git commit information."""
+
+    hash: str
+    short_hash: str
+    message: str
+    author_name: str
+    author_email: str
+    date: datetime
+    additions: int
+    deletions: int
+
+
+class FileHistoryResponse(BaseModel):
+    """Response for file git history."""
+
+    path: str
+    commits: list[CommitInfo]
+    is_git_repo: bool
+
+
+class DiffHunkInfo(BaseModel):
+    """A hunk of changes in a diff."""
+
+    old_start: int
+    old_count: int
+    new_start: int
+    new_count: int
+    header: str
+    lines: list[str]
+
+
+class FileDiffResponse(BaseModel):
+    """Response for file diff."""
+
+    path: str
+    old_path: str
+    new_path: str
+    is_new: bool
+    is_deleted: bool
+    is_renamed: bool
+    hunks: list[DiffHunkInfo]
+    additions: int
+    deletions: int
+    raw: str
+
+
+class FileAtCommitResponse(BaseModel):
+    """Response for file content at a specific commit."""
+
+    path: str
+    commit: str
+    content: str | None
+    exists: bool
+
+
+# Git History & Diff Endpoints
+
+
+@router.get("/{project_id}/files/history")
+async def get_file_git_history(
+    project_id: str,
+    db: Annotated[Database, Depends(get_db)],
+    path: str = Query(..., description="Relative path to file"),
+    max_commits: int = Query(default=50, le=100, description="Maximum commits to return"),
+) -> FileHistoryResponse:
+    """Get the git history for a file."""
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Security check
+    target_path = project_root / path
+    if not is_safe_path(project_root, target_path):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        return FileHistoryResponse(
+            path=path,
+            commits=[],
+            is_git_repo=False,
+        )
+
+    try:
+        commits = await get_file_history(project_root, path, max_commits)
+        return FileHistoryResponse(
+            path=path,
+            commits=[
+                CommitInfo(
+                    hash=c.hash,
+                    short_hash=c.short_hash,
+                    message=c.message,
+                    author_name=c.author_name,
+                    author_email=c.author_email,
+                    date=c.date,
+                    additions=c.additions,
+                    deletions=c.deletions,
+                )
+                for c in commits
+            ],
+            is_git_repo=True,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/{project_id}/files/diff")
+async def get_file_git_diff(
+    project_id: str,
+    db: Annotated[Database, Depends(get_db)],
+    path: str = Query(..., description="Relative path to file"),
+    commit: str = Query(default="HEAD", description="Commit to show diff for"),
+    against: str | None = Query(default=None, description="Commit to diff against"),
+) -> FileDiffResponse:
+    """Get the git diff for a file.
+
+    If commit is HEAD and against is None, shows uncommitted changes.
+    If commit is specified and against is None, shows diff against parent.
+    If both are specified, shows diff between the two commits.
+    """
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Security check
+    target_path = project_root / path
+    if not is_safe_path(project_root, target_path):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    try:
+        diff = await get_file_diff(project_root, path, commit, against)
+        return FileDiffResponse(
+            path=path,
+            old_path=diff.old_path,
+            new_path=diff.new_path,
+            is_new=diff.is_new,
+            is_deleted=diff.is_deleted,
+            is_renamed=diff.is_renamed,
+            hunks=[
+                DiffHunkInfo(
+                    old_start=h.old_start,
+                    old_count=h.old_count,
+                    new_start=h.new_start,
+                    new_count=h.new_count,
+                    header=h.header,
+                    lines=h.lines,
+                )
+                for h in diff.hunks
+            ],
+            additions=diff.additions,
+            deletions=diff.deletions,
+            raw=diff.raw,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@router.get("/{project_id}/files/at-commit")
+async def get_file_content_at_commit(
+    project_id: str,
+    db: Annotated[Database, Depends(get_db)],
+    path: str = Query(..., description="Relative path to file"),
+    commit: str = Query(..., description="Commit hash or ref"),
+) -> FileAtCommitResponse:
+    """Get the content of a file at a specific commit."""
+    repo = ProjectRepository(db)
+    project = await repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    project_root = get_project_root(project.settings, project.repo_url)
+    if not project_root:
+        raise HTTPException(
+            status_code=400,
+            detail="Project has no configured working directory.",
+        )
+
+    # Security check
+    target_path = project_root / path
+    if not is_safe_path(project_root, target_path):
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    # Check if git repo
+    is_repo = await is_git_repo(project_root)
+    if not is_repo:
+        raise HTTPException(status_code=400, detail="Not a git repository")
+
+    try:
+        content = await get_file_at_commit(project_root, path, commit)
+        return FileAtCommitResponse(
+            path=path,
+            commit=commit,
+            content=content,
+            exists=content is not None,
+        )
+    except GitError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
