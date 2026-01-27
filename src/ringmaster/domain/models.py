@@ -94,6 +94,9 @@ class Task(TaskBase):
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
+    # Blocking reason (when status=BLOCKED due to NEEDS_DECISION outcome)
+    blocked_reason: str | None = None
+
     # Graph metrics (cached from prioritization)
     pagerank_score: float = 0.0
     betweenness_score: float = 0.0

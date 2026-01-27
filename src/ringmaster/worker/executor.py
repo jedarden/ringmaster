@@ -17,6 +17,7 @@ from ringmaster.worker.monitor import (
     WorkerMonitor,
     recommend_recovery,
 )
+from ringmaster.worker.outcome import Outcome, OutcomeResult, detect_outcome
 from ringmaster.worker.output_buffer import output_buffer
 from ringmaster.worker.platforms import get_worker
 
@@ -307,12 +308,42 @@ class WorkerExecutor:
                     error=f"Interrupted: {recovery.reason}",  # type: ignore
                 )
 
-            # Update task
+            # Determine outcome using multi-signal detection
+            outcome_result = detect_outcome(
+                output=result.output,
+                exit_code=result.exit_code,
+            )
+
+            logger.info(
+                f"Task {task.id} outcome: {outcome_result.outcome.value} "
+                f"(confidence: {outcome_result.confidence:.2f}, reason: {outcome_result.reason})"
+            )
+
+            # Update task based on detected outcome
             task.output_path = str(output_file)
-            if result.success:
+
+            if outcome_result.outcome == Outcome.NEEDS_DECISION:
+                # Worker needs human input - block the task
+                task.status = TaskStatus.BLOCKED
+                task.blocked_reason = outcome_result.decision_question or outcome_result.reason
+                # Emit event for UI notification
+                if self.event_bus:
+                    await self.event_bus.emit(
+                        EventType.TASK_STATUS,
+                        {
+                            "task_id": task.id,
+                            "status": task.status.value,
+                            "outcome": outcome_result.outcome.value,
+                            "decision_question": outcome_result.decision_question,
+                            "needs_human_input": True,
+                        },
+                        project_id=task.project_id,
+                    )
+            elif outcome_result.is_success:
                 task.status = TaskStatus.REVIEW  # Go to review before done
                 task.completed_at = datetime.now(UTC)
             else:
+                # Failure - retry if attempts remaining
                 if task.attempts >= task.max_attempts:
                     task.status = TaskStatus.FAILED
                 else:
@@ -321,17 +352,18 @@ class WorkerExecutor:
             await self.task_repo.update_task(task)
 
             # Update worker
-            if result.success:
+            if outcome_result.is_success:
                 worker.tasks_completed += 1
-            else:
+            elif outcome_result.is_failure:
                 worker.tasks_failed += 1
+            # NEEDS_DECISION doesn't count as completed or failed
             worker.status = WorkerStatus.IDLE
             worker.current_task_id = None
             worker.last_active_at = datetime.now(UTC)
             await self.worker_repo.update(worker)
 
             # Record metrics
-            await self._record_metrics(task, worker, result)
+            await self._record_metrics(task, worker, result, outcome_result)
 
             return result
 
@@ -428,16 +460,22 @@ class WorkerExecutor:
         task: Task,
         worker: Worker,
         result: SessionResult,
+        outcome_result: "OutcomeResult | None" = None,
     ) -> None:
         """Record session metrics to the database."""
+        # Use outcome parser result if available
+        success = outcome_result.is_success if outcome_result else result.success
+        outcome_value = outcome_result.outcome.value if outcome_result else None
+        outcome_confidence = outcome_result.confidence if outcome_result else None
+
         await self.db.execute(
             """
             INSERT INTO session_metrics (
                 task_id, worker_id, iteration, input_tokens, output_tokens,
                 estimated_cost_usd, started_at, ended_at, duration_seconds,
-                success, error_message
+                success, error_message, outcome, outcome_confidence
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
@@ -449,8 +487,10 @@ class WorkerExecutor:
                 result.started_at.isoformat() if result.started_at else None,
                 result.ended_at.isoformat() if result.ended_at else None,
                 result.duration_seconds,
-                result.success,
+                success,
                 result.error,
+                outcome_value,
+                outcome_confidence,
             ),
         )
         await self.db.commit()

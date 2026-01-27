@@ -471,6 +471,22 @@ Implemented shortcuts:
   - GET /api/workers/capable/{cap} - List workers with a capability
 - ✅ 7 new integration tests
 
+### Worker Output Parsing (`src/ringmaster/worker/outcome.py`)
+- ✅ Multi-signal outcome detection per docs/09-remaining-decisions.md Section 6
+- ✅ Outcome enum: SUCCESS, LIKELY_SUCCESS, FAILED, LIKELY_FAILED, NEEDS_DECISION, UNKNOWN
+- ✅ OutcomeSignals dataclass tracking exit_code, markers, test results, completion signal
+- ✅ OutcomeResult with outcome, signals, confidence (0.0-1.0), reason, decision_question
+- ✅ SUCCESS_MARKERS: completion signal, checkmarks, "successfully completed", etc.
+- ✅ FAILURE_MARKERS: "Error:", "FAILED", "Build failed", etc.
+- ✅ DECISION_MARKERS: "? Decision needed", "BLOCKED:", "Should I", etc.
+- ✅ Test result detection: pytest, Jest, Mocha patterns
+- ✅ Decision question extraction from output
+- ✅ blocked_reason field on Task model for NEEDS_DECISION outcomes
+- ✅ outcome/outcome_confidence columns in session_metrics (migration 007)
+- ✅ Executor integration: uses detect_outcome() for task status determination
+- ✅ BLOCKED status with event emission when human input needed
+- ✅ 31 new tests covering all detection scenarios
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -518,6 +534,7 @@ Implemented shortcuts:
 | 37 | 2026-01-27 | Fix sqlite3.Row compatibility bug: capabilities and required_capabilities columns were not being read due to sqlite3.Row not supporting 'in' operator, switched to row.keys() checks, all 256 tests passing |
 | 38 | 2026-01-27 | Add real-time worker output streaming: OutputBuffer class for buffering worker output with pub/sub support, SSE stream endpoint for real-time output, polling endpoint for recent output, WORKER_OUTPUT event type, WorkerOutputPanel React component with live/polling modes, auto-scroll detection, 6 new tests, total 262 tests passing |
 | 39 | 2026-01-27 | Add long-running task monitoring: WorkerMonitor class with heartbeat-based liveness detection (ACTIVE/THINKING/SLOW/LIKELY_HUNG), context degradation detection (repetition, apologies, retry loops), n-gram analysis for repetition scoring, recovery action recommendations, executor integration for real-time monitoring, 21 new tests, total 283 tests passing |
+| 40 | 2026-01-27 | Add worker output parsing with multi-signal detection: Outcome enum (SUCCESS, LIKELY_SUCCESS, FAILED, LIKELY_FAILED, NEEDS_DECISION, UNKNOWN), detect_outcome() with exit codes + markers + test results, SUCCESS_MARKERS, FAILURE_MARKERS, DECISION_MARKERS, blocked_reason field on Task model, outcome/outcome_confidence fields in metrics, migration 007, executor integration, 31 new tests, total 314 tests passing |
 
 ## Blockers
 

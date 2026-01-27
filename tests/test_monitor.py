@@ -1,15 +1,11 @@
 """Tests for worker monitoring and long-running task detection."""
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from ringmaster.worker.monitor import (
-    DegradationSignals,
     LivenessStatus,
-    MonitorState,
-    RecoveryAction,
     WorkerMonitor,
     recommend_recovery,
 )
