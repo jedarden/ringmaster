@@ -1,14 +1,11 @@
 """Tests for git worktree management."""
 
-import asyncio
-import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from ringmaster.git.worktrees import (
-    Worktree,
     WorktreeConfig,
     _generate_branch_name,
     clean_stale_worktrees,

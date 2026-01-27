@@ -653,6 +653,16 @@ Implemented shortcuts:
 - ✅ Layout: `/workspace/project-main.worktrees/worker-<id>/`
 - ✅ 20 new tests covering all worktree operations
 
+### Worker Executor Worktree Integration (`src/ringmaster/worker/executor.py`)
+- ✅ `use_worktrees` parameter to enable/disable worktree isolation
+- ✅ `_get_working_directory()` method determines execution directory
+  - Creates worktree for git-based projects when enabled
+  - Falls back to project directory for non-git repos
+  - Reuses existing worktree for same worker
+- ✅ `_report_worktree_status()` logs worktree state after task completion
+- ✅ Graceful fallback on worktree creation failure
+- ✅ 4 new integration tests for worktree execution paths
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -713,6 +723,7 @@ Implemented shortcuts:
 | 50 | 2026-01-27 | Add worker control buttons: POST /api/workers/{id}/cancel and /pause endpoints, WORKER_TASK_CANCELLED and WORKER_PAUSED event types, View Output/Pause/Cancel buttons in WorkersPage for busy workers, WorkerOutputPanel integration, CSS styling for control buttons, 4 new tests, total 395 tests passing |
 | 51 | 2026-01-27 | Add task resubmission for decomposition: NEEDS_DECOMPOSITION status, POST /api/tasks/{id}/resubmit endpoint for workers to mark tasks as too large, immediate decomposition via BeadCreator, TASK_RESUBMITTED event, migration 009, 7 new tests, total 402 tests passing |
 | 52 | 2026-01-27 | Add git worktree support for worker isolation: Worktree/WorktreeConfig dataclasses, list_worktrees(), get_or_create_worktree(), remove_worktree(), get_worktree_status(), commit_worktree_changes(), merge_worktree_to_main(), clean_stale_worktrees(); handles both repos with origin remote and local-only repos; 20 new tests, total 422 tests passing |
+| 53 | 2026-01-27 | Integrate git worktrees into WorkerExecutor: use_worktrees parameter, _get_working_directory() creates worktree for git repos, falls back for non-git, reuses worktree per worker, _report_worktree_status() for debugging; 4 new tests, total 426 tests passing |
 
 ## Blockers
 

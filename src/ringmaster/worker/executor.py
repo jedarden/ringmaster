@@ -11,6 +11,13 @@ from ringmaster.db import Database, ProjectRepository, TaskRepository, WorkerRep
 from ringmaster.domain import Project, Task, TaskStatus, Worker, WorkerStatus
 from ringmaster.enricher import EnrichmentPipeline
 from ringmaster.events import EventBus, EventType
+from ringmaster.git import (
+    GitError,
+    WorktreeConfig,
+    get_or_create_worktree,
+    get_worktree_status,
+    is_git_repo,
+)
 from ringmaster.worker.interface import SessionConfig, SessionResult, SessionStatus
 from ringmaster.worker.monitor import (
     RecoveryAction,
@@ -57,6 +64,7 @@ class WorkerExecutor:
     - Handle completion and failure
     - Record metrics
     - Enrich prompts with project/code/history context
+    - Isolate workers using git worktrees for parallel execution
     """
 
     def __init__(
@@ -65,6 +73,7 @@ class WorkerExecutor:
         output_dir: Path | None = None,
         project_dir: Path | None = None,
         event_bus: EventBus | None = None,
+        use_worktrees: bool = True,
     ):
         self.db = db
         self.task_repo = TaskRepository(db)
@@ -73,6 +82,7 @@ class WorkerExecutor:
         self.output_dir = output_dir or Path.home() / ".ringmaster" / "tasks"
         self.project_dir = project_dir or Path.cwd()
         self.event_bus = event_bus
+        self.use_worktrees = use_worktrees
         self._active_sessions: dict[str, asyncio.Task] = {}
         self._enrichment_pipeline: EnrichmentPipeline | None = None
         self._monitors: dict[str, WorkerMonitor] = {}  # worker_id -> monitor
@@ -87,6 +97,110 @@ class WorkerExecutor:
                 db=self.db,
             )
         return self._enrichment_pipeline
+
+    async def _get_working_directory(
+        self,
+        task: Task,
+        worker: Worker,
+        project: Project,
+    ) -> Path:
+        """Determine the working directory for task execution.
+
+        Uses git worktrees for worker isolation when:
+        1. use_worktrees is enabled
+        2. Project has a valid repo_url pointing to a git repository
+
+        Each worker gets a dedicated worktree so multiple workers can
+        execute tasks in parallel without file conflicts.
+
+        Args:
+            task: The task being executed.
+            worker: The worker executing the task.
+            project: The project containing the task.
+
+        Returns:
+            Path to the working directory for task execution.
+        """
+        # Determine base project directory
+        if project.repo_url and Path(project.repo_url).is_dir():
+            project_dir = Path(project.repo_url)
+        elif worker.working_dir:
+            project_dir = Path(worker.working_dir)
+        else:
+            project_dir = Path.cwd()
+
+        # Check if we should use worktrees
+        if not self.use_worktrees:
+            return project_dir
+
+        # Check if the project directory is a git repo
+        is_repo = await is_git_repo(project_dir)
+        if not is_repo:
+            logger.debug(
+                f"Project {project.id} at {project_dir} is not a git repo, "
+                "skipping worktree"
+            )
+            return project_dir
+
+        # Get or create worktree for this worker
+        try:
+            config = WorktreeConfig(
+                worker_id=worker.id,
+                task_id=task.id,
+            )
+
+            worktree = await get_or_create_worktree(
+                repo_path=project_dir,
+                config=config,
+                base_branch="main",  # TODO: Make configurable per project
+            )
+
+            logger.info(
+                f"Using worktree at {worktree.path} (branch: {worktree.branch}) "
+                f"for worker {worker.id} task {task.id}"
+            )
+            return worktree.path
+
+        except GitError as e:
+            logger.warning(
+                f"Failed to create worktree for worker {worker.id}: {e}, "
+                "falling back to project directory"
+            )
+            return project_dir
+
+    async def _report_worktree_status(
+        self,
+        task: Task,
+        worker: Worker,
+        project_dir: Path,
+    ) -> dict | None:
+        """Get and log worktree status after task execution.
+
+        Args:
+            task: The completed task.
+            worker: The worker that executed the task.
+            project_dir: The project's base directory.
+
+        Returns:
+            Worktree status dict, or None if not using worktrees.
+        """
+        if not self.use_worktrees:
+            return None
+
+        try:
+            status = await get_worktree_status(project_dir, worker.id)
+            if status.get("exists"):
+                logger.info(
+                    f"Worktree status for worker {worker.id}: "
+                    f"branch={status.get('branch')}, "
+                    f"changes={status.get('has_uncommitted_changes')}, "
+                    f"commits_ahead={status.get('commits_ahead')}"
+                )
+                return status
+        except GitError as e:
+            logger.warning(f"Failed to get worktree status: {e}")
+
+        return None
 
     def _get_monitor(self, worker_id: str, task_id: str | None = None) -> WorkerMonitor:
         """Get or create a monitor for a worker.
@@ -232,13 +346,8 @@ class WorkerExecutor:
         task_output_dir = self.output_dir / task.id
         task_output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Prepare working directory - use project repo_url if set, else worker dir
-        if project.repo_url and Path(project.repo_url).is_dir():
-            working_dir = Path(project.repo_url)
-        elif worker.working_dir:
-            working_dir = Path(worker.working_dir)
-        else:
-            working_dir = Path.cwd()
+        # Prepare working directory - use worktree for worker isolation if available
+        working_dir = await self._get_working_directory(task, worker, project)
 
         # Build the enriched prompt with context
         prompt = await self._build_enriched_prompt(task, project, task_output_dir)
@@ -417,6 +526,10 @@ class WorkerExecutor:
 
             # Record metrics
             await self._record_metrics(task, worker, result, outcome_result)
+
+            # Report worktree status (for debugging/auditing)
+            if project.repo_url and Path(project.repo_url).is_dir():
+                await self._report_worktree_status(task, worker, Path(project.repo_url))
 
             return result
 

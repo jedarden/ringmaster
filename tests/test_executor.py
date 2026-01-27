@@ -1,6 +1,7 @@
 """Tests for worker executor with enrichment pipeline integration."""
 
 import contextlib
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -297,3 +298,194 @@ class TestFallbackPrompt:
 
         assert "Test Task" in prompt
         assert "No description provided" in prompt
+
+
+@pytest.fixture
+def git_repo():
+    """Create a temporary git repository for worktree testing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir) / "test-repo"
+        repo_path.mkdir()
+
+        # Initialize git repo
+        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@example.com"],
+            cwd=repo_path, check=True, capture_output=True
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Test User"],
+            cwd=repo_path, check=True, capture_output=True
+        )
+
+        # Create initial commit
+        (repo_path / "README.md").write_text("# Test Repo\n")
+        subprocess.run(["git", "add", "."], cwd=repo_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "Initial commit"],
+            cwd=repo_path, check=True, capture_output=True
+        )
+
+        yield repo_path
+
+
+class TestWorktreeIntegration:
+    """Tests for worktree integration in executor."""
+
+    @pytest.mark.asyncio
+    async def test_executor_uses_worktree_when_enabled(self, db, git_repo):
+        """Test that executor creates and uses worktree for worker isolation."""
+        # Create project with git repo as repo_url
+        project = Project(
+            name="Git Test Project",
+            repo_url=str(git_repo),
+        )
+        project_repo = ProjectRepository(db)
+        project = await project_repo.create(project)
+
+        # Create worker
+        worker = Worker(
+            name="Test Worker",
+            type="claude-code",
+            command="claude",
+            status=WorkerStatus.IDLE,
+        )
+        worker_repo = WorkerRepository(db)
+        worker = await worker_repo.create(worker)
+
+        # Create task
+        task = Task(
+            project_id=project.id,
+            title="Test worktree task",
+            description="Testing worktree integration",
+        )
+        task_repo = TaskRepository(db)
+        task = await task_repo.create_task(task)
+
+        # Create executor with worktrees enabled (default)
+        executor = WorkerExecutor(db, use_worktrees=True)
+
+        # Get working directory
+        working_dir = await executor._get_working_directory(task, worker, project)
+
+        # Should be a worktree path, not the main repo
+        assert working_dir != git_repo
+        assert "worktrees" in str(working_dir)
+        assert f"worker-{worker.id}" in str(working_dir)
+
+        # Worktree should exist
+        assert working_dir.exists()
+        assert (working_dir / ".git").exists()
+
+    @pytest.mark.asyncio
+    async def test_executor_falls_back_without_worktrees(self, db, git_repo):
+        """Test that executor uses project dir when worktrees disabled."""
+        # Create project with git repo as repo_url
+        project = Project(
+            name="Git Test Project",
+            repo_url=str(git_repo),
+        )
+        project_repo = ProjectRepository(db)
+        project = await project_repo.create(project)
+
+        # Create worker and task
+        worker = Worker(
+            name="Test Worker",
+            type="claude-code",
+            command="claude",
+            status=WorkerStatus.IDLE,
+        )
+        worker_repo = WorkerRepository(db)
+        worker = await worker_repo.create(worker)
+
+        task = Task(
+            project_id=project.id,
+            title="Test no worktree",
+        )
+        task_repo = TaskRepository(db)
+        task = await task_repo.create_task(task)
+
+        # Create executor with worktrees disabled
+        executor = WorkerExecutor(db, use_worktrees=False)
+
+        # Get working directory
+        working_dir = await executor._get_working_directory(task, worker, project)
+
+        # Should be the project repo directly
+        assert working_dir == git_repo
+
+    @pytest.mark.asyncio
+    async def test_executor_falls_back_for_non_git_dir(self, db):
+        """Test that executor uses project dir for non-git directories."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_dir = Path(tmpdir)
+            (project_dir / "README.md").write_text("Not a git repo")
+
+            # Create project with non-git directory
+            project = Project(
+                name="Non-Git Project",
+                repo_url=str(project_dir),
+            )
+            project_repo = ProjectRepository(db)
+            project = await project_repo.create(project)
+
+            worker = Worker(
+                name="Test Worker",
+                type="claude-code",
+                command="claude",
+            )
+            worker_repo = WorkerRepository(db)
+            worker = await worker_repo.create(worker)
+
+            task = Task(
+                project_id=project.id,
+                title="Test non-git",
+            )
+            task_repo = TaskRepository(db)
+            task = await task_repo.create_task(task)
+
+            # Create executor with worktrees enabled
+            executor = WorkerExecutor(db, use_worktrees=True)
+
+            # Get working directory
+            working_dir = await executor._get_working_directory(task, worker, project)
+
+            # Should fall back to project directory (not a git repo)
+            assert working_dir == project_dir
+
+    @pytest.mark.asyncio
+    async def test_worktree_reused_for_same_worker(self, db, git_repo):
+        """Test that same worktree is reused for same worker."""
+        project = Project(
+            name="Test Project",
+            repo_url=str(git_repo),
+        )
+        project_repo = ProjectRepository(db)
+        project = await project_repo.create(project)
+
+        worker = Worker(
+            name="Test Worker",
+            type="claude-code",
+            command="claude",
+        )
+        worker_repo = WorkerRepository(db)
+        worker = await worker_repo.create(worker)
+
+        task_repo = TaskRepository(db)
+        task1 = await task_repo.create_task(Task(
+            project_id=project.id,
+            title="First task",
+        ))
+        task2 = await task_repo.create_task(Task(
+            project_id=project.id,
+            title="Second task",
+        ))
+
+        executor = WorkerExecutor(db, use_worktrees=True)
+
+        # Get working directories for both tasks
+        working_dir1 = await executor._get_working_directory(task1, worker, project)
+        working_dir2 = await executor._get_working_directory(task2, worker, project)
+
+        # Both should use the same worktree location for the worker
+        assert working_dir1 == working_dir2
