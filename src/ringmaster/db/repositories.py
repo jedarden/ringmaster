@@ -24,6 +24,7 @@ from ringmaster.domain import (
     Subtask,
     Summary,
     Task,
+    TaskOutcome,
     TaskStatus,
     TaskType,
     Worker,
@@ -1501,5 +1502,303 @@ class ContextAssemblyLogRepository:
             stages_applied=json.loads(row["stages_applied"]) if row["stages_applied"] else [],
             assembly_time_ms=row["assembly_time_ms"] or 0,
             context_hash=row["context_hash"],
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+
+class ReasoningBankRepository:
+    """Repository for TaskOutcome entities - the Reasoning Bank.
+
+    Per docs/08-open-architecture.md "Reflexion-Based Learning" section:
+    Stores and retrieves task execution outcomes to enable model routing
+    optimization based on learned experience.
+    """
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    async def record(self, outcome: TaskOutcome) -> TaskOutcome:
+        """Record a task outcome to the reasoning bank."""
+        cursor = await self.db.execute(
+            """
+            INSERT INTO task_outcomes (
+                task_id, project_id, file_count, keywords, bead_type, has_dependencies,
+                model_used, worker_type, iterations, duration_seconds,
+                success, outcome, confidence, failure_reason, reflection, created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                outcome.task_id,
+                str(outcome.project_id),
+                outcome.file_count,
+                json.dumps(outcome.keywords),
+                outcome.bead_type,
+                outcome.has_dependencies,
+                outcome.model_used,
+                outcome.worker_type,
+                outcome.iterations,
+                outcome.duration_seconds,
+                outcome.success,
+                outcome.outcome,
+                outcome.confidence,
+                outcome.failure_reason,
+                outcome.reflection,
+                outcome.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        outcome.id = cursor.lastrowid
+        return outcome
+
+    async def get(self, outcome_id: int) -> TaskOutcome | None:
+        """Get a task outcome by ID."""
+        row = await self.db.fetchone(
+            "SELECT * FROM task_outcomes WHERE id = ?",
+            (outcome_id,),
+        )
+        if not row:
+            return None
+        return self._row_to_outcome(row)
+
+    async def get_for_task(self, task_id: str) -> TaskOutcome | None:
+        """Get the outcome for a specific task."""
+        row = await self.db.fetchone(
+            "SELECT * FROM task_outcomes WHERE task_id = ? ORDER BY created_at DESC LIMIT 1",
+            (task_id,),
+        )
+        if not row:
+            return None
+        return self._row_to_outcome(row)
+
+    async def list_for_project(
+        self,
+        project_id: UUID,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[TaskOutcome]:
+        """List task outcomes for a project."""
+        rows = await self.db.fetchall(
+            """
+            SELECT * FROM task_outcomes
+            WHERE project_id = ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            (str(project_id), limit, offset),
+        )
+        return [self._row_to_outcome(row) for row in rows]
+
+    async def find_similar(
+        self,
+        keywords: list[str],
+        bead_type: str,
+        file_count: int | None = None,
+        min_similarity: float = 0.3,
+        limit: int = 20,
+        project_id: UUID | None = None,
+    ) -> list[tuple[TaskOutcome, float]]:
+        """Find similar past task outcomes using keyword-based similarity.
+
+        Uses Jaccard similarity between keyword sets to find related tasks.
+        Returns list of (outcome, similarity_score) tuples sorted by similarity.
+
+        Args:
+            keywords: Keywords from the current task
+            bead_type: Type of bead (task, subtask, epic)
+            file_count: Optional file count to factor in similarity
+            min_similarity: Minimum similarity threshold (0.0-1.0)
+            limit: Maximum results to return
+            project_id: Optional project scope for similarity search
+
+        Returns:
+            List of (TaskOutcome, similarity_score) tuples
+        """
+        # Query outcomes with same bead type
+        query = """
+            SELECT * FROM task_outcomes
+            WHERE bead_type = ?
+        """
+        params: list[Any] = [bead_type]
+
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(str(project_id))
+
+        query += " ORDER BY created_at DESC LIMIT 200"  # Sample recent outcomes
+
+        rows = await self.db.fetchall(query, tuple(params))
+
+        # Calculate similarity for each outcome
+        keyword_set = {k.lower() for k in keywords}
+        results: list[tuple[TaskOutcome, float]] = []
+
+        for row in rows:
+            outcome = self._row_to_outcome(row)
+            outcome_keywords = {k.lower() for k in outcome.keywords}
+
+            # Jaccard similarity
+            if keyword_set or outcome_keywords:
+                intersection = len(keyword_set & outcome_keywords)
+                union = len(keyword_set | outcome_keywords)
+                keyword_similarity = intersection / union if union > 0 else 0.0
+            else:
+                keyword_similarity = 0.0
+
+            # File count similarity (if provided)
+            file_similarity = 1.0
+            if file_count is not None and outcome.file_count > 0:
+                # Use ratio of smaller to larger
+                min_count = min(file_count, outcome.file_count)
+                max_count = max(file_count, outcome.file_count)
+                file_similarity = min_count / max_count if max_count > 0 else 1.0
+
+            # Combined similarity (keywords weighted higher)
+            similarity = keyword_similarity * 0.7 + file_similarity * 0.3
+
+            if similarity >= min_similarity:
+                results.append((outcome, similarity))
+
+        # Sort by similarity descending
+        results.sort(key=lambda x: x[1], reverse=True)
+
+        return results[:limit]
+
+    async def get_model_success_rates(
+        self,
+        bead_type: str | None = None,
+        project_id: UUID | None = None,
+        min_samples: int = 3,
+    ) -> dict[str, dict[str, Any]]:
+        """Get success rates per model.
+
+        Returns:
+            Dictionary mapping model_used to stats:
+            {
+                "claude-sonnet": {
+                    "total": 50,
+                    "success": 45,
+                    "success_rate": 0.9,
+                    "avg_iterations": 2.3,
+                    "avg_duration_seconds": 120
+                }
+            }
+        """
+        query = """
+            SELECT
+                model_used,
+                COUNT(*) as total,
+                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+                AVG(iterations) as avg_iterations,
+                AVG(duration_seconds) as avg_duration
+            FROM task_outcomes
+            WHERE 1=1
+        """
+        params: list[Any] = []
+
+        if bead_type:
+            query += " AND bead_type = ?"
+            params.append(bead_type)
+
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(str(project_id))
+
+        query += " GROUP BY model_used HAVING COUNT(*) >= ?"
+        params.append(min_samples)
+
+        rows = await self.db.fetchall(query, tuple(params))
+
+        result = {}
+        for row in rows:
+            model = row["model_used"]
+            total = row["total"]
+            success = row["success_count"]
+            result[model] = {
+                "total": total,
+                "success": success,
+                "success_rate": success / total if total > 0 else 0.0,
+                "avg_iterations": round(row["avg_iterations"] or 0, 2),
+                "avg_duration_seconds": round(row["avg_duration"] or 0, 1),
+            }
+
+        return result
+
+    async def get_stats(self, project_id: UUID | None = None) -> dict[str, Any]:
+        """Get aggregated statistics for the reasoning bank.
+
+        Returns:
+            Dictionary with stats like total_outcomes, success_rate, etc.
+        """
+        query = """
+            SELECT
+                COUNT(*) as total_outcomes,
+                SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+                AVG(iterations) as avg_iterations,
+                AVG(duration_seconds) as avg_duration,
+                AVG(confidence) as avg_confidence
+            FROM task_outcomes
+        """
+        params: list[Any] = []
+
+        if project_id:
+            query += " WHERE project_id = ?"
+            params.append(str(project_id))
+
+        row = await self.db.fetchone(query, tuple(params) if params else ())
+
+        if not row or row["total_outcomes"] == 0:
+            return {
+                "total_outcomes": 0,
+                "success_count": 0,
+                "success_rate": 0.0,
+                "avg_iterations": 0.0,
+                "avg_duration_seconds": 0.0,
+                "avg_confidence": 0.0,
+            }
+
+        total = row["total_outcomes"]
+        success = row["success_count"] or 0
+        return {
+            "total_outcomes": total,
+            "success_count": success,
+            "success_rate": success / total if total > 0 else 0.0,
+            "avg_iterations": round(row["avg_iterations"] or 0, 2),
+            "avg_duration_seconds": round(row["avg_duration"] or 0, 1),
+            "avg_confidence": round(row["avg_confidence"] or 0, 3),
+        }
+
+    async def cleanup_old(self, days: int = 90) -> int:
+        """Delete task outcomes older than the specified number of days."""
+        from datetime import timedelta
+
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+
+        cursor = await self.db.execute(
+            "DELETE FROM task_outcomes WHERE created_at < ?",
+            (cutoff.isoformat(),),
+        )
+        await self.db.commit()
+        return cursor.rowcount
+
+    def _row_to_outcome(self, row: Any) -> TaskOutcome:
+        """Convert a database row to a TaskOutcome."""
+        return TaskOutcome(
+            id=row["id"],
+            task_id=row["task_id"],
+            project_id=UUID(row["project_id"]),
+            file_count=row["file_count"] or 0,
+            keywords=json.loads(row["keywords"]) if row["keywords"] else [],
+            bead_type=row["bead_type"],
+            has_dependencies=bool(row["has_dependencies"]),
+            model_used=row["model_used"],
+            worker_type=row["worker_type"],
+            iterations=row["iterations"] or 1,
+            duration_seconds=row["duration_seconds"] or 0,
+            success=bool(row["success"]),
+            outcome=row["outcome"],
+            confidence=row["confidence"] or 1.0,
+            failure_reason=row["failure_reason"],
+            reflection=row["reflection"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )

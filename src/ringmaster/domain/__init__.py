@@ -21,6 +21,7 @@ from ringmaster.domain.models import (
     Subtask,
     Summary,
     Task,
+    TaskOutcome,
     Worker,
 )
 
@@ -37,6 +38,7 @@ __all__ = [
     "Project",
     "Epic",
     "Task",
+    "TaskOutcome",
     "Subtask",
     "Decision",
     "Question",

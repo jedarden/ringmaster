@@ -772,10 +772,36 @@ Implemented shortcuts:
   - Signals breakdown for transparency
 - ✅ 33 unit tests + 5 API integration tests
 
+### Reasoning Bank (`src/ringmaster/db/repositories.py`, `src/ringmaster/queue/routing.py`)
+- ✅ task_outcomes database table (migration 011) for reflexion-based learning
+- ✅ TaskOutcome domain model with task signals (file_count, keywords, bead_type, has_dependencies)
+- ✅ ReasoningBankRepository with CRUD and learning queries:
+  - record(): Store task outcome
+  - get(), get_for_task(): Retrieve outcomes
+  - find_similar(): Keyword-based Jaccard similarity for learning
+  - get_model_success_rates(): Per-model performance stats
+  - get_stats(): Aggregated statistics
+  - cleanup_old(): Prune old outcomes
+- ✅ Learning-enhanced model routing:
+  - LearnedSignals dataclass for learning metadata
+  - extract_keywords(): Extract task keywords for similarity
+  - select_model_with_learning(): Blend static heuristics with learned experience
+  - generate_success_reflection(): Create task reflections
+  - MIN_SAMPLES_FOR_LEARNING=10, LEARNING_SUCCESS_THRESHOLD=0.1
+- ✅ Executor integration: _record_outcome() stores outcomes after task completion
+- ✅ API endpoints for outcomes:
+  - GET /api/outcomes - List outcomes with project filter
+  - GET /api/outcomes/{id} - Get specific outcome
+  - GET /api/outcomes/for-task/{task_id} - Get outcome for task
+  - POST /api/outcomes/find-similar - Find similar outcomes for learning
+  - GET /api/outcomes/model-stats - Model success rates
+  - GET /api/outcomes/stats - Aggregated statistics
+  - DELETE /api/outcomes/cleanup - Prune old outcomes
+- ✅ 25 new tests (15 reasoning bank + 10 learning routing)
+
 ## Next Steps
 
-1. **Reasoning Bank**: Add task_outcomes database table for reflexion-based learning from task results
-2. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
 
 ## Iteration Log
 
@@ -848,6 +874,7 @@ Implemented shortcuts:
 | 65 | 2026-01-27 | Code cleanup: fix linting errors in test_documentation_context.py (remove unused tempfile import and unused variable), remove stale TODO comment from enricher pipeline (code context already implemented via CodeContextExtractor); all 539 tests passing |
 | 66 | 2026-01-27 | Make worktree base branch configurable per project: uses project.settings.get("base_branch", "main") allowing projects to specify their default branch (e.g., "master", "develop"); all 539 tests passing |
 | 67 | 2026-01-27 | Add model routing based on task complexity: deterministic heuristics for complexity estimation (file count, keywords, task type, priority), TaskComplexity/ModelTier enums, select_model_for_task(), GET /api/tasks/{id}/routing endpoint with worker_type param; per docs/08-open-architecture.md section 11; 38 new tests, total 577 tests passing |
+| 68 | 2026-01-27 | Add Reasoning Bank for reflexion-based learning: TaskOutcome model, task_outcomes table (migration 011), ReasoningBankRepository with find_similar() using Jaccard similarity, select_model_with_learning() blending static heuristics with learned experience, executor integration via _record_outcome(), API endpoints for outcomes/model-stats/find-similar; per docs/08-open-architecture.md Reflexion-Based Learning; 25 new tests, total 602 tests passing |
 
 ## Blockers
 

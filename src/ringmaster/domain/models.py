@@ -327,3 +327,42 @@ class ContextAssemblyLog(BaseModel):
 
     # Timestamps
     created_at: datetime = Field(default_factory=utc_now)
+
+
+class TaskOutcome(BaseModel):
+    """Recorded task outcome for reflexion-based learning.
+
+    Per docs/08-open-architecture.md "Reflexion-Based Learning" section:
+    Stores task execution results to enable model routing optimization
+    based on learned experience rather than static heuristics alone.
+    """
+
+    id: int | None = None
+
+    # Task reference
+    task_id: str
+    project_id: UUID
+
+    # Task signals (for similarity matching)
+    file_count: int = 0
+    keywords: list[str] = Field(default_factory=list)  # From task description
+    bead_type: str  # task, subtask, epic
+    has_dependencies: bool = False
+
+    # Execution context
+    model_used: str
+    worker_type: str | None = None  # claude-code, aider, codex, goose, generic
+    iterations: int = 1
+    duration_seconds: int = 0
+
+    # Outcome
+    success: bool
+    outcome: str | None = None  # SUCCESS, LIKELY_SUCCESS, FAILED, etc.
+    confidence: float = 1.0  # Outcome confidence 0.0-1.0
+    failure_reason: str | None = None
+
+    # Reflection (generated post-task for learning)
+    reflection: str | None = None
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=utc_now)

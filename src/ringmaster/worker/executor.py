@@ -8,7 +8,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ringmaster.db import Database, ProjectRepository, TaskRepository, WorkerRepository
-from ringmaster.domain import Project, Task, TaskStatus, Worker, WorkerStatus
+from ringmaster.db.repositories import ReasoningBankRepository
+from ringmaster.domain import Project, Task, TaskOutcome, TaskStatus, Worker, WorkerStatus
 from ringmaster.enricher import EnrichmentPipeline
 from ringmaster.events import EventBus, EventType
 from ringmaster.git import (
@@ -18,6 +19,7 @@ from ringmaster.git import (
     get_worktree_status,
     is_git_repo,
 )
+from ringmaster.queue.routing import extract_keywords, generate_success_reflection
 from ringmaster.worker.interface import SessionConfig, SessionResult, SessionStatus
 from ringmaster.worker.monitor import (
     RecoveryAction,
@@ -79,6 +81,7 @@ class WorkerExecutor:
         self.task_repo = TaskRepository(db)
         self.worker_repo = WorkerRepository(db)
         self.project_repo = ProjectRepository(db)
+        self.reasoning_bank = ReasoningBankRepository(db)
         self.output_dir = output_dir or Path.home() / ".ringmaster" / "tasks"
         self.project_dir = project_dir or Path.cwd()
         self.event_bus = event_bus
@@ -663,6 +666,78 @@ class WorkerExecutor:
             ),
         )
         await self.db.commit()
+
+        # Record outcome to reasoning bank for reflexion-based learning
+        if outcome_result:
+            await self._record_outcome(task, worker, result, outcome_result)
+
+    async def _record_outcome(
+        self,
+        task: Task,
+        worker: Worker,
+        result: SessionResult,
+        outcome_result: OutcomeResult,
+    ) -> None:
+        """Record task outcome to the reasoning bank for learning.
+
+        Per docs/08-open-architecture.md "Reflexion-Based Learning" section:
+        Store task execution results to enable model routing optimization
+        based on learned experience.
+        """
+        # Check if the task has dependencies
+        dependencies = await self.task_repo.get_dependencies(task.id)
+        has_dependencies = len(dependencies) > 0
+
+        # Extract keywords for similarity matching
+        keywords = extract_keywords(task)
+
+        # Estimate file count from task description
+        from ringmaster.queue.routing import _count_suggested_files
+        file_count = _count_suggested_files(task)
+
+        # Generate reflection based on outcome
+        if outcome_result.is_success:
+            reflection = generate_success_reflection(
+                task=task,
+                model_used=worker.type,  # TODO: Track actual model used
+                iterations=task.attempts,
+                file_count=file_count,
+            )
+        else:
+            # For failures, include the failure reason
+            reflection = (
+                f"Failed on {task.type.value if hasattr(task.type, 'value') else task.type} task. "
+                f"Reason: {outcome_result.reason or 'Unknown'}. "
+                f"Model {worker.type} attempted {task.attempts} iterations."
+            )
+
+        outcome = TaskOutcome(
+            task_id=task.id,
+            project_id=task.project_id,
+            file_count=file_count,
+            keywords=keywords,
+            bead_type=task.type.value if hasattr(task.type, "value") else str(task.type),
+            has_dependencies=has_dependencies,
+            model_used=worker.type,  # TODO: Track actual model used (e.g., claude-sonnet-4)
+            worker_type=worker.type,
+            iterations=task.attempts,
+            duration_seconds=int(result.duration_seconds or 0),
+            success=outcome_result.is_success,
+            outcome=outcome_result.outcome.value,
+            confidence=outcome_result.confidence,
+            failure_reason=outcome_result.reason if not outcome_result.is_success else None,
+            reflection=reflection,
+        )
+
+        try:
+            await self.reasoning_bank.record(outcome)
+            logger.debug(
+                f"Recorded outcome for task {task.id}: "
+                f"{outcome_result.outcome.value} (confidence: {outcome_result.confidence:.2f})"
+            )
+        except Exception as e:
+            # Don't fail the task execution if outcome recording fails
+            logger.warning(f"Failed to record outcome for task {task.id}: {e}")
 
     @property
     def active_tasks(self) -> list[str]:

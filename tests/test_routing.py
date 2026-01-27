@@ -4,10 +4,15 @@ from uuid import uuid4
 
 import pytest
 
+from ringmaster.db import Database
+from ringmaster.db.repositories import ReasoningBankRepository
+from ringmaster.domain import TaskOutcome
 from ringmaster.domain.enums import Priority
 from ringmaster.domain.models import Epic, Subtask, Task
 from ringmaster.queue.routing import (
     COMPLEX_KEYWORDS,
+    LEARNING_SUCCESS_THRESHOLD,
+    MIN_SAMPLES_FOR_LEARNING,
     MODEL_SUGGESTIONS,
     SIMPLE_KEYWORDS,
     ComplexitySignals,
@@ -15,8 +20,11 @@ from ringmaster.queue.routing import (
     TaskComplexity,
     complexity_from_score,
     estimate_complexity,
+    extract_keywords,
+    generate_success_reflection,
     get_model_for_worker_type,
     select_model_for_task,
+    select_model_with_learning,
     tier_from_complexity,
 )
 
@@ -304,3 +312,238 @@ class TestIntegration:
         # Simple keywords (comments, typos) -> simple
         assert result.complexity == TaskComplexity.SIMPLE
         assert result.tier == ModelTier.FAST
+
+
+class TestExtractKeywords:
+    """Tests for keyword extraction."""
+
+    def test_extract_simple_keywords(self, project_id):
+        """Extract simple keywords from task description."""
+        task = Task(
+            project_id=project_id,
+            title="Fix typo in code",
+            description="There's a typo that needs cleanup",
+        )
+        keywords = extract_keywords(task)
+
+        assert "typo" in keywords
+        assert "cleanup" in keywords
+
+    def test_extract_complex_keywords(self, project_id):
+        """Extract complex keywords from task description."""
+        task = Task(
+            project_id=project_id,
+            title="Refactor authentication",
+            description="Need to migrate the auth module and update security",
+        )
+        keywords = extract_keywords(task)
+
+        assert "refactor" in keywords
+        assert "auth" in keywords or "authentication" in keywords
+        assert "security" in keywords
+
+    def test_extract_title_words(self, project_id):
+        """Extract significant words from task title."""
+        task = Task(
+            project_id=project_id,
+            title="Implement user dashboard",
+            description="Create a dashboard",
+        )
+        keywords = extract_keywords(task)
+
+        assert "implement" in keywords or "user" in keywords or "dashboard" in keywords
+
+
+class TestGenerateSuccessReflection:
+    """Tests for reflection generation."""
+
+    def test_generate_reflection(self, project_id):
+        """Generate a success reflection."""
+        task = Task(
+            project_id=project_id,
+            title="Implement API endpoint",
+            description="Add GET /users endpoint",
+        )
+        reflection = generate_success_reflection(
+            task=task,
+            model_used="claude-sonnet-4",
+            iterations=2,
+            file_count=3,
+        )
+
+        assert "Succeeded" in reflection
+        assert "task" in reflection
+        assert "3 files" in reflection
+        assert "2 iterations" in reflection
+
+
+@pytest.fixture
+async def db():
+    """Create a test database."""
+    import tempfile
+    from pathlib import Path as PathLib
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        db_path = PathLib(tmpdir) / "test.db"
+        database = Database(db_path)
+        await database.connect()
+        yield database
+        await database.disconnect()
+
+
+@pytest.fixture
+async def reasoning_bank(db: Database):
+    """Create a reasoning bank repository."""
+    return ReasoningBankRepository(db)
+
+
+class TestSelectModelWithLearning:
+    """Tests for learning-enhanced model selection."""
+
+    async def test_uses_static_when_insufficient_samples(self, project_id, reasoning_bank):
+        """Should use static heuristics when not enough learning data."""
+        task = Task(
+            project_id=project_id,
+            title="Fix typo in README",
+            description="Simple typo fix",
+        )
+
+        # No outcomes in the bank yet
+        result = await select_model_with_learning(task, reasoning_bank)
+
+        # Should have learned_signals but learning_used=False
+        assert result.learned_signals is not None
+        assert result.learned_signals.learning_used is False
+        assert result.learned_signals.similar_outcomes_count == 0
+
+    async def test_uses_learning_when_enough_samples(self, project_id, reasoning_bank):
+        """Should use learning when enough similar outcomes exist."""
+        # Create 15 similar outcomes for one model type
+        for i in range(15):
+            outcome = TaskOutcome(
+                task_id=f"bd-learn{i}",
+                project_id=project_id,
+                file_count=2,
+                keywords=["api", "endpoint"],
+                bead_type="task",
+                has_dependencies=False,
+                model_used="claude-opus-4",  # High success with opus
+                iterations=1,
+                duration_seconds=60,
+                success=True,  # 100% success rate
+                outcome="SUCCESS",
+                confidence=0.95,
+            )
+            await reasoning_bank.record(outcome)
+
+        # Create task with similar keywords
+        task = Task(
+            project_id=project_id,
+            title="Add API endpoint",
+            description="Create new endpoint for users",
+        )
+
+        result = await select_model_with_learning(task, reasoning_bank)
+
+        assert result.learned_signals is not None
+        assert result.learned_signals.similar_outcomes_count >= MIN_SAMPLES_FOR_LEARNING
+        assert "claude-opus-4" in result.learned_signals.model_success_rates
+
+    async def test_prefers_higher_success_rate_model(self, project_id, reasoning_bank):
+        """Should prefer model with higher success rate."""
+        # Create outcomes with different success rates
+        # Model A: 80% success rate (8/10)
+        for i in range(10):
+            outcome = TaskOutcome(
+                task_id=f"bd-modelA{i}",
+                project_id=project_id,
+                file_count=2,
+                keywords=["database", "query"],
+                bead_type="task",
+                has_dependencies=False,
+                model_used="model-A",
+                iterations=1,
+                duration_seconds=60,
+                success=i < 8,  # 8 successes
+                outcome="SUCCESS" if i < 8 else "FAILED",
+                confidence=0.9,
+            )
+            await reasoning_bank.record(outcome)
+
+        # Model B: 50% success rate (5/10)
+        for i in range(10):
+            outcome = TaskOutcome(
+                task_id=f"bd-modelB{i}",
+                project_id=project_id,
+                file_count=2,
+                keywords=["database", "query"],
+                bead_type="task",
+                has_dependencies=False,
+                model_used="model-B",
+                iterations=1,
+                duration_seconds=60,
+                success=i < 5,  # 5 successes
+                outcome="SUCCESS" if i < 5 else "FAILED",
+                confidence=0.9,
+            )
+            await reasoning_bank.record(outcome)
+
+        task = Task(
+            project_id=project_id,
+            title="Optimize database query",
+            description="Fix slow database query",
+        )
+
+        result = await select_model_with_learning(task, reasoning_bank)
+
+        assert result.learned_signals is not None
+        # Model A should have higher success rate
+        rates = result.learned_signals.model_success_rates
+        if "model-A" in rates and "model-B" in rates:
+            assert rates["model-A"] > rates["model-B"]
+
+    async def test_learned_signals_include_model_stats(self, project_id, reasoning_bank):
+        """Learned signals should include model statistics."""
+        # Create outcomes for multiple models
+        for model, count in [("claude-sonnet-4", 5), ("claude-opus-4", 5)]:
+            for i in range(count):
+                outcome = TaskOutcome(
+                    task_id=f"bd-{model}-{i}",
+                    project_id=project_id,
+                    file_count=2,
+                    keywords=["refactor", "code"],
+                    bead_type="task",
+                    has_dependencies=False,
+                    model_used=model,
+                    iterations=1,
+                    duration_seconds=60,
+                    success=True,
+                    outcome="SUCCESS",
+                    confidence=0.9,
+                )
+                await reasoning_bank.record(outcome)
+
+        task = Task(
+            project_id=project_id,
+            title="Refactor code module",
+            description="Clean up the code",
+        )
+
+        result = await select_model_with_learning(task, reasoning_bank)
+
+        assert result.learned_signals is not None
+        assert len(result.learned_signals.models_considered) >= 2
+
+
+class TestLearningConstants:
+    """Tests for learning configuration constants."""
+
+    def test_min_samples_is_reasonable(self):
+        """MIN_SAMPLES_FOR_LEARNING should be a reasonable value."""
+        assert MIN_SAMPLES_FOR_LEARNING >= 5
+        assert MIN_SAMPLES_FOR_LEARNING <= 50
+
+    def test_success_threshold_is_reasonable(self):
+        """LEARNING_SUCCESS_THRESHOLD should be a reasonable margin."""
+        assert LEARNING_SUCCESS_THRESHOLD >= 0.05
+        assert LEARNING_SUCCESS_THRESHOLD <= 0.25
