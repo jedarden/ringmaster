@@ -779,6 +779,7 @@ Implemented shortcuts:
 | 53 | 2026-01-27 | Integrate git worktrees into WorkerExecutor: use_worktrees parameter, _get_working_directory() creates worktree for git repos, falls back for non-git, reuses worktree per worker, _report_worktree_status() for debugging; 4 new tests, total 426 tests passing |
 | 54 | 2026-01-27 | Add worker CLI commands for external scripts: `pull-bead` (claim task matching capabilities), `build-prompt` (enriched prompt to stdout/file), `report-result` (completion/failure with retry backoff); enables bash-based worker scripts per docs/09-remaining-decisions.md section 4; 7 new tests, total 433 tests passing |
 | 55 | 2026-01-27 | Add tmux-based worker spawning: WorkerSpawner class with spawn/kill/list_sessions, worker script generation for claude-code/aider/codex/goose/generic; CLI commands `worker spawn/attach/kill/sessions/output`; API endpoints POST /spawn, POST /kill, GET /session, GET /sessions/list, GET /log; enables on-demand worker management per docs/09-remaining-decisions.md section 4; 21 new tests, total 454 tests passing |
+| 56 | 2026-01-27 | Fix test portability: use sys.executable instead of hardcoded 'python' in test_cli_worker.py subprocess calls, fix linting issues in test_spawner.py (combine nested with statements, remove unused imports/variables), all 454 tests passing |
 
 ## Blockers
 
