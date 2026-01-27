@@ -4790,3 +4790,93 @@ button:disabled {
   border: 1px solid var(--color-border);
   border-radius: 3px;
 }
+
+/* ===========================================
+   Task Complexity Badge
+   =========================================== */
+
+.complexity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  margin-left: 4px;
+  cursor: help;
+  position: relative;
+  min-width: 14px;
+}
+
+.complexity-badge.loading {
+  color: var(--color-text-muted);
+}
+
+.complexity-badge.complexity-simple {
+  color: var(--color-success);
+}
+
+.complexity-badge.complexity-moderate {
+  color: var(--color-warning);
+}
+
+.complexity-badge.complexity-complex {
+  color: var(--color-error);
+}
+
+.complexity-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  min-width: 220px;
+  z-index: 1000;
+  font-size: 11px;
+  font-weight: normal;
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+  text-align: left;
+  margin-top: 4px;
+}
+
+.complexity-tooltip .tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.complexity-tooltip .tier-badge {
+  background: var(--color-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.complexity-tooltip .tooltip-reasoning {
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
+.complexity-tooltip .tooltip-models {
+  color: var(--color-info);
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+
+.complexity-tooltip .tooltip-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.complexity-tooltip .signal {
+  background: var(--color-bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}

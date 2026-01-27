@@ -71,6 +71,7 @@ import type {
   ApproveResponse,
   RejectResponse,
   WorkerHealthResponse,
+  RoutingRecommendation,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -1191,6 +1192,26 @@ export async function rejectTask(
     { method: "POST" }
   );
   return handleResponse<RejectResponse>(response);
+}
+
+// Task Routing API
+
+/**
+ * Get model routing recommendation for a task.
+ * Analyzes task complexity and suggests appropriate model tier.
+ */
+export async function getTaskRouting(
+  taskId: string,
+  workerType?: string
+): Promise<RoutingRecommendation> {
+  const params = new URLSearchParams();
+  if (workerType) {
+    params.set("worker_type", workerType);
+  }
+  const response = await fetch(
+    `${API_BASE}/tasks/${taskId}/routing${params.toString() ? "?" + params : ""}`
+  );
+  return handleResponse<RoutingRecommendation>(response);
 }
 
 export { ApiError };

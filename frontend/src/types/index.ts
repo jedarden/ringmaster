@@ -827,3 +827,41 @@ export interface WorkerHealthResponse {
   idle_seconds: number;
   total_output_lines: number;
 }
+
+// Model Routing types
+
+export const TaskComplexity = {
+  SIMPLE: "simple",
+  MODERATE: "moderate",
+  COMPLEX: "complex",
+} as const;
+export type TaskComplexity =
+  (typeof TaskComplexity)[keyof typeof TaskComplexity];
+
+export const ModelTier = {
+  FAST: "fast",
+  BALANCED: "balanced",
+  POWERFUL: "powerful",
+} as const;
+export type ModelTier = (typeof ModelTier)[keyof typeof ModelTier];
+
+export interface RoutingSignals {
+  file_count: number;
+  dependency_count: number;
+  description_length: number;
+  simple_keyword_matches: number;
+  complex_keyword_matches: number;
+  is_epic: boolean;
+  is_subtask: boolean;
+  is_critical: boolean;
+  raw_score: number;
+}
+
+export interface RoutingRecommendation {
+  task_id: string;
+  complexity: TaskComplexity;
+  tier: ModelTier;
+  reasoning: string;
+  suggested_models: string[];
+  signals: RoutingSignals;
+}

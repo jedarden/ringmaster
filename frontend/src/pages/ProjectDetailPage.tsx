@@ -10,6 +10,7 @@ import { TaskInput } from "../components/TaskInput";
 import { DecisionPanel } from "../components/DecisionPanel";
 import { QuestionPanel } from "../components/QuestionPanel";
 import { ValidationPanel } from "../components/ValidationPanel";
+import { TaskComplexityBadge } from "../components/TaskComplexityBadge";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -573,6 +574,7 @@ export function ProjectDetailPage() {
                             <span className={`priority priority-${task.priority.toLowerCase()}`}>
                               {task.priority}
                             </span>
+                            <TaskComplexityBadge taskId={task.id} />
                             <span className="task-id">{task.id}</span>
                             {showIterations && (
                               <span className="task-iteration" title={`Attempt ${taskAttempts + 1} of ${taskMaxAttempts}`}>
