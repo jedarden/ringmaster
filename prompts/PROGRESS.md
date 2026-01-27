@@ -663,6 +663,23 @@ Implemented shortcuts:
 - ✅ Graceful fallback on worktree creation failure
 - ✅ 4 new integration tests for worktree execution paths
 
+### Worker CLI Commands (`src/ringmaster/cli.py`)
+- ✅ `pull-bead` - Workers pull next available task matching capabilities
+  - Claims task atomically (sets status=assigned, worker_id)
+  - Filters by worker capabilities vs task required_capabilities
+  - Returns JSON task data for bash script consumption
+  - Marks worker as busy
+- ✅ `build-prompt` - Build enriched prompt for a task
+  - Uses full EnrichmentPipeline (task, project, code, deployment, history context)
+  - Outputs to stdout or file (-o flag)
+  - Includes context hash and token estimate
+- ✅ `report-result` - Report task completion/failure
+  - Supports --status completed/failed
+  - Handles retry backoff on failure
+  - Updates worker to idle
+  - Unblocks dependent tasks on success
+- ✅ 7 new tests covering all CLI commands
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -724,6 +741,7 @@ Implemented shortcuts:
 | 51 | 2026-01-27 | Add task resubmission for decomposition: NEEDS_DECOMPOSITION status, POST /api/tasks/{id}/resubmit endpoint for workers to mark tasks as too large, immediate decomposition via BeadCreator, TASK_RESUBMITTED event, migration 009, 7 new tests, total 402 tests passing |
 | 52 | 2026-01-27 | Add git worktree support for worker isolation: Worktree/WorktreeConfig dataclasses, list_worktrees(), get_or_create_worktree(), remove_worktree(), get_worktree_status(), commit_worktree_changes(), merge_worktree_to_main(), clean_stale_worktrees(); handles both repos with origin remote and local-only repos; 20 new tests, total 422 tests passing |
 | 53 | 2026-01-27 | Integrate git worktrees into WorkerExecutor: use_worktrees parameter, _get_working_directory() creates worktree for git repos, falls back for non-git, reuses worktree per worker, _report_worktree_status() for debugging; 4 new tests, total 426 tests passing |
+| 54 | 2026-01-27 | Add worker CLI commands for external scripts: `pull-bead` (claim task matching capabilities), `build-prompt` (enriched prompt to stdout/file), `report-result` (completion/failure with retry backoff); enables bash-based worker scripts per docs/09-remaining-decisions.md section 4; 7 new tests, total 433 tests passing |
 
 ## Blockers
 
