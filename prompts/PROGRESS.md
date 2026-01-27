@@ -519,6 +519,26 @@ Implemented shortcuts:
 - ✅ Task status transitions: BLOCKED when decision created, READY when resolved
 - ✅ 14 new integration tests
 
+### Decision & Question Frontend (`frontend/src/components/`)
+- ✅ DecisionPanel component for human-in-the-loop decisions
+  - Displays pending decisions with question and context
+  - Predefined options with recommendation badges
+  - Custom answer input for "Other" option
+  - Decision stats display (pending/total)
+  - Time-ago formatting for decision age
+  - Real-time refresh on resolve
+- ✅ QuestionPanel component for clarification questions
+  - Urgency-based display (low/medium/high) with color coding
+  - Default answer display with "Use Default" button
+  - Custom answer textarea
+  - Show/hide answered questions toggle
+  - Question stats with urgency breakdown
+  - Time-ago formatting for question age
+- ✅ TypeScript types (Decision, Question, related DTOs)
+- ✅ API client functions for all endpoints
+- ✅ CSS styles for decision-panel and question-panel
+- ✅ Integrated in ProjectDetailPage sidebar above ChatPanel
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -569,6 +589,7 @@ Implemented shortcuts:
 | 40 | 2026-01-27 | Add worker output parsing with multi-signal detection: Outcome enum (SUCCESS, LIKELY_SUCCESS, FAILED, LIKELY_FAILED, NEEDS_DECISION, UNKNOWN), detect_outcome() with exit codes + markers + test results, SUCCESS_MARKERS, FAILURE_MARKERS, DECISION_MARKERS, blocked_reason field on Task model, outcome/outcome_confidence fields in metrics, migration 007, executor integration, 31 new tests, total 314 tests passing |
 | 41 | 2026-01-27 | Add priority inheritance for blocked task queues: blockers inherit priority from high-priority blocked tasks, transitive inheritance, completed/failed tasks excluded, only BLOCKED status triggers inheritance, prevents queue starvation, 9 new tests, total 323 tests passing |
 | 42 | 2026-01-27 | Add Decision & Question API for human-in-the-loop workflows: Decision model (blocks task), Question model (non-blocking), repository methods, 12 API endpoints for CRUD/resolve/answer, event types (DECISION_CREATED/RESOLVED, QUESTION_CREATED/ANSWERED), task blocking integration, 14 new tests, total 337 tests passing |
+| 43 | 2026-01-27 | Add Decision & Question frontend UI: DecisionPanel component with option buttons and custom answers, QuestionPanel component with urgency badges and default answer support, TypeScript types and API client functions, CSS styles, integrated in ProjectDetailPage sidebar, fixed unused import in WorkersPage |
 
 ## Blockers
 
