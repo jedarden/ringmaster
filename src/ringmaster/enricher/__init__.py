@@ -16,8 +16,11 @@ from ringmaster.enricher.rlm import (
 from ringmaster.enricher.stages import (
     BaseStage,
     CodeContextStage,
+    DeploymentContextStage,
     HistoryContextStage,
+    LogsContextStage,
     ProjectContextStage,
+    RefinementStage,
     TaskContextStage,
 )
 
@@ -29,7 +32,10 @@ __all__ = [
     "ProjectContextStage",
     "TaskContextStage",
     "CodeContextStage",
+    "DeploymentContextStage",
     "HistoryContextStage",
+    "LogsContextStage",
+    "RefinementStage",
     "RLMSummarizer",
     "CompressionConfig",
     "HistoryContext",

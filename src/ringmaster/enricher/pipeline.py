@@ -9,6 +9,7 @@ Based on docs/04-context-enrichment.md:
 import hashlib
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ringmaster.db import Database
@@ -119,7 +120,13 @@ class EnrichmentPipeline:
             context_parts.append(history_context)
             metrics.stages_applied.append("history_context")
 
-        # Layer 6: Refinement Context
+        # Layer 6: Logs Context (for debugging tasks)
+        logs_context = await self._build_logs_context(task, project)
+        if logs_context:
+            context_parts.append(logs_context)
+            metrics.stages_applied.append("logs_context")
+
+        # Layer 7: Refinement Context
         refinement_context = self._build_refinement_context(task)
         context_parts.append(refinement_context)
         metrics.stages_applied.append("refinement_context")
@@ -301,6 +308,120 @@ class EnrichmentPipeline:
         except Exception as e:
             logger.warning("Failed to build history context: %s", e)
             return None
+
+    async def _build_logs_context(self, task: Task, project: Project) -> str | None:
+        """Build logs context layer for debugging tasks.
+
+        Per docs/04-context-enrichment.md section 6, this stage provides:
+        - Error logs from the last 24 hours
+        - Service logs filtered by relevance
+        - Stack traces when debugging crashes
+
+        Only fetches logs when the task appears to be debugging-related.
+        """
+        if self.db is None:
+            logger.debug("No database configured, skipping logs context")
+            return None
+
+        # Check if task is debugging-related
+        debug_keywords = {
+            "error", "bug", "fix", "debug", "crash", "fail", "failing",
+            "broken", "issue", "problem", "exception", "traceback",
+            "stack trace", "500", "404", "timeout", "investigate", "diagnose",
+        }
+
+        text = f"{task.title} {task.description or ''}".lower()
+        if not any(keyword in text for keyword in debug_keywords):
+            logger.debug("Task %s doesn't appear debugging-related", task.id)
+            return None
+
+        try:
+            from datetime import timedelta
+
+            cutoff = datetime.now(UTC) - timedelta(hours=24)
+            cutoff_str = cutoff.isoformat()
+
+            # First, try to get task-specific logs
+            task_logs = await self.db.fetchall(
+                """
+                SELECT * FROM logs
+                WHERE task_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 50
+                """,
+                (task.id,),
+            )
+
+            # Also get project-level error logs
+            project_logs = await self.db.fetchall(
+                """
+                SELECT * FROM logs
+                WHERE project_id = ? AND level IN ('error', 'critical') AND timestamp >= ?
+                ORDER BY timestamp DESC
+                LIMIT 30
+                """,
+                (str(project.id), cutoff_str),
+            )
+
+            # Combine and dedupe
+            seen_ids = set()
+            logs = []
+            for row in list(task_logs) + list(project_logs):
+                if row["id"] not in seen_ids:
+                    seen_ids.add(row["id"])
+                    logs.append(row)
+
+            if not logs:
+                logger.debug("No relevant logs found for task %s", task.id)
+                return None
+
+            # Format logs for context
+            formatted = self._format_logs_for_context(logs)
+
+            logger.info(
+                "Built logs context: %d entries for task %s",
+                len(logs),
+                task.id,
+            )
+
+            return formatted
+
+        except Exception as e:
+            logger.warning("Failed to build logs context: %s", e)
+            return None
+
+    def _format_logs_for_context(self, logs: list) -> str:
+        """Format log entries for prompt inclusion."""
+        import json
+
+        parts = ["## Relevant Logs", ""]
+
+        for log in logs[:50]:  # Limit to 50 entries
+            timestamp = log["timestamp"]
+            level = log["level"].upper()
+            component = log["component"]
+            message = log["message"]
+
+            # Format the log entry
+            entry = f"[{timestamp}] {level} ({component}): {message}"
+
+            # Include extra data if present and relevant
+            if log["data"]:
+                try:
+                    data = json.loads(log["data"])
+                    # Check for stack traces or error details
+                    if "traceback" in data or "stack_trace" in data:
+                        trace = data.get("traceback") or data.get("stack_trace")
+                        entry += f"\n  Traceback: {trace[:500]}"
+                    elif "error" in data or "exception" in data:
+                        error_detail = data.get("error") or data.get("exception")
+                        entry += f"\n  Error: {error_detail}"
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            parts.append(entry)
+
+        return "\n".join(parts)
 
     def _build_refinement_context(self, task: Task) -> str:
         """Build refinement context with safety guardrails."""
