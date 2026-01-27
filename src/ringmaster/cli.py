@@ -424,6 +424,296 @@ def doctor() -> None:
         console.print(f"  [red]✗[/red] Database: {e}")
 
 
+# =============================================================================
+# Worker Script Commands (for bash-based workers)
+# =============================================================================
+
+
+@cli.command("pull-bead")
+@click.argument("worker_id")
+@click.option(
+    "--capabilities",
+    "-c",
+    multiple=True,
+    help="Capabilities this worker has (e.g., python, rust)",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON")
+def pull_bead(worker_id: str, capabilities: tuple[str, ...], as_json: bool) -> None:
+    """Pull the next available task for a worker.
+
+    Used by external worker scripts to claim tasks from the queue.
+    Outputs task JSON if available, or nothing if no tasks ready.
+    """
+    import json as json_lib
+
+    from ringmaster.db import (
+        ProjectRepository,
+        TaskRepository,
+        WorkerRepository,
+        get_database,
+    )
+    from ringmaster.domain import TaskStatus, WorkerStatus
+
+    async def do_pull() -> None:
+        db = await get_database()
+        worker_repo = WorkerRepository(db)
+        task_repo = TaskRepository(db)
+        project_repo = ProjectRepository(db)
+
+        # Get or verify worker
+        worker = await worker_repo.get(worker_id)
+        if not worker:
+            if not as_json:
+                console.print(f"[red]Worker {worker_id} not found[/red]", err=True)
+            return
+
+        # Worker must be idle to pull
+        if worker.status != WorkerStatus.IDLE:
+            if not as_json:
+                console.print(
+                    f"[yellow]Worker {worker_id} is not idle[/yellow]", err=True
+                )
+            return
+
+        # Get worker capabilities
+        worker_caps = set(capabilities) if capabilities else set(worker.capabilities or [])
+
+        # Get ready tasks ordered by priority
+        ready_tasks = await task_repo.get_ready_tasks()
+        if not ready_tasks:
+            return  # No output means no tasks
+
+        # Find first task matching capabilities
+        for task in ready_tasks:
+            required_caps = set(task.required_capabilities or [])
+            if required_caps.issubset(worker_caps):
+                # Claim the task
+                from datetime import UTC, datetime
+
+                task.status = TaskStatus.ASSIGNED
+                task.worker_id = worker_id
+                task.updated_at = datetime.now(UTC)
+                await task_repo.update_task(task)
+
+                # Update worker
+                worker.status = WorkerStatus.BUSY
+                worker.current_task_id = task.id
+                worker.last_active_at = datetime.now(UTC)
+                await worker_repo.update(worker)
+
+                # Get project info
+                project = await project_repo.get(task.project_id)
+
+                # Output task info
+                task_data = {
+                    "id": task.id,
+                    "title": task.title,
+                    "description": task.description,
+                    "priority": task.priority.value,
+                    "type": task.type.value,
+                    "attempt": task.attempts + 1,
+                    "max_attempts": task.max_attempts,
+                    "project_id": str(task.project_id),
+                    "project_name": project.name if project else None,
+                }
+
+                if as_json:
+                    print(json_lib.dumps(task_data))
+                else:
+                    console.print(f"[green]Claimed task:[/green] {task.id}")
+                    console.print(f"  Title: {task.title}")
+                    console.print(f"  Attempt: {task.attempts + 1}/{task.max_attempts}")
+                    if project:
+                        console.print(f"  Project: {project.name}")
+                return
+
+        # No matching task found
+        if not as_json:
+            console.print("[yellow]No tasks matching capabilities[/yellow]", err=True)
+
+    asyncio.run(do_pull())
+
+
+@cli.command("build-prompt")
+@click.argument("task_id")
+@click.option("--output", "-o", type=click.Path(), help="Write prompt to file")
+@click.option("--project-dir", "-d", type=click.Path(exists=True), help="Project directory")
+def build_prompt(task_id: str, output: str | None, project_dir: str | None) -> None:
+    """Build an enriched prompt for a task.
+
+    Assembles the full context including:
+    - Task details and requirements
+    - Project context
+    - Relevant code files
+    - Deployment context (if applicable)
+    - Chat history (if available)
+    - Instructions and completion signals
+    """
+    from ringmaster.db import ProjectRepository, TaskRepository, get_database
+    from ringmaster.enricher.pipeline import EnrichmentPipeline
+
+    async def do_build() -> None:
+        db = await get_database()
+        task_repo = TaskRepository(db)
+        project_repo = ProjectRepository(db)
+
+        # Get task
+        task = await task_repo.get_task(task_id)
+        if not task:
+            console.print(f"[red]Task {task_id} not found[/red]", err=True)
+            raise SystemExit(1)
+
+        # Get project
+        project = await project_repo.get(task.project_id)
+        if not project:
+            console.print("[red]Project not found for task[/red]", err=True)
+            raise SystemExit(1)
+
+        # Determine project directory
+        proj_dir = Path(project_dir) if project_dir else None
+        if proj_dir is None and project.repo_url:
+            # Try common paths
+            for base in [Path("/workspace"), Path.home() / "workspace", Path.cwd()]:
+                candidate = base / project.name.lower().replace(" ", "-")
+                if candidate.exists():
+                    proj_dir = candidate
+                    break
+        if proj_dir is None:
+            proj_dir = Path.cwd()
+
+        # Create pipeline and enrich
+        pipeline = EnrichmentPipeline(project_dir=proj_dir, db=db)
+        assembled = await pipeline.enrich(task, project)
+
+        # Format full prompt
+        full_prompt = f"""# System Prompt
+
+{assembled.system_prompt}
+
+# User Prompt
+
+{assembled.user_prompt}
+"""
+
+        # Output
+        if output:
+            output_path = Path(output)
+            output_path.write_text(full_prompt)
+            console.print(f"[green]Prompt written to {output_path}[/green]")
+            console.print(f"  Context hash: {assembled.context_hash}")
+            console.print(f"  Estimated tokens: ~{assembled.metrics.estimated_tokens}")
+        else:
+            print(full_prompt)
+
+    asyncio.run(do_build())
+
+
+@cli.command("report-result")
+@click.argument("task_id")
+@click.option("--status", "-s", required=True, type=click.Choice(["completed", "failed"]))
+@click.option("--exit-code", "-e", type=int, default=0, help="Exit code from worker")
+@click.option("--output-path", "-o", type=click.Path(), help="Path to output file")
+@click.option("--reason", "-r", help="Failure reason (for failed status)")
+def report_result(
+    task_id: str,
+    status: str,
+    exit_code: int,
+    output_path: str | None,
+    reason: str | None,
+) -> None:
+    """Report task completion result.
+
+    Called by external workers to report success or failure.
+    """
+    from datetime import UTC, datetime
+
+    from ringmaster.db import TaskRepository, WorkerRepository, get_database
+    from ringmaster.domain import TaskStatus, WorkerStatus
+
+    async def do_report() -> None:
+        db = await get_database()
+        task_repo = TaskRepository(db)
+        worker_repo = WorkerRepository(db)
+
+        # Get task
+        task = await task_repo.get_task(task_id)
+        if not task:
+            console.print(f"[red]Task {task_id} not found[/red]", err=True)
+            raise SystemExit(1)
+
+        # Get worker if assigned
+        worker = None
+        if task.worker_id:
+            worker = await worker_repo.get(task.worker_id)
+
+        success = status == "completed"
+
+        if success:
+            task.status = TaskStatus.DONE
+            task.completed_at = datetime.now(UTC)
+            # Clear retry tracking on success
+            task.retry_after = None
+            task.last_failure_reason = None
+            if worker:
+                worker.tasks_completed += 1
+            console.print(f"[green]Task {task_id} marked as completed[/green]")
+        else:
+            task.attempts += 1
+            task.last_failure_reason = reason
+
+            if task.attempts >= task.max_attempts:
+                task.status = TaskStatus.FAILED
+                console.print(f"[red]Task {task_id} failed after {task.attempts} attempts[/red]")
+            else:
+                # Calculate retry backoff
+                from ringmaster.worker.executor import calculate_retry_backoff
+
+                task.retry_after = calculate_retry_backoff(task.attempts)
+                task.status = TaskStatus.READY  # Retry
+                console.print(
+                    f"[yellow]Task {task_id} failed, will retry after backoff[/yellow]"
+                )
+
+            if worker:
+                worker.tasks_failed += 1
+
+        task.output_path = output_path
+        task.worker_id = None
+        task.updated_at = datetime.now(UTC)
+        await task_repo.update_task(task)
+
+        # Update worker to idle
+        if worker:
+            worker.status = WorkerStatus.IDLE
+            worker.current_task_id = None
+            worker.last_active_at = datetime.now(UTC)
+            await worker_repo.update(worker)
+            console.print(f"  Worker {worker.name} returned to idle")
+
+        # Check if dependent tasks can be enqueued
+        if success:
+            dependents = await task_repo.get_dependents(task_id)
+            for dep in dependents:
+                # Check if all dependencies are done
+                dep_task = await task_repo.get_task(dep.child_id)
+                if dep_task:
+                    all_deps_done = True
+                    parent_deps = await task_repo.get_dependencies(dep.child_id)
+                    for parent_dep in parent_deps:
+                        parent = await task_repo.get_task(parent_dep.parent_id)
+                        if parent and parent.status != TaskStatus.DONE:
+                            all_deps_done = False
+                            break
+
+                    if all_deps_done and dep_task.status == TaskStatus.DRAFT:
+                        dep_task.status = TaskStatus.READY
+                        dep_task.updated_at = datetime.now(UTC)
+                        await task_repo.update_task(dep_task)
+                        console.print(f"  [green]Unblocked dependent task: {dep_task.title}[/green]")
+
+    asyncio.run(do_report())
+
+
 def main() -> None:
     """Main entry point."""
     cli()
