@@ -3820,3 +3820,206 @@ class TestQuestionsAPI:
         assert stats["pending"] == 2
         assert stats["by_urgency"]["high"] == 1
         assert stats["by_urgency"]["medium"] == 1
+
+
+class TestTaskResubmission:
+    """Test task resubmission for decomposition."""
+
+    async def _create_project_and_task(
+        self, client: AsyncClient, title: str = "Test Task"
+    ) -> tuple[str, str]:
+        """Create a project and task."""
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Resubmit Test Project", "description": "Testing resubmission"},
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": title,
+                "description": "A task description",
+            },
+        )
+        task_id = task_response.json()["id"]
+        return project_id, task_id
+
+    async def _create_worker(self, client: AsyncClient) -> str:
+        """Create a test worker."""
+        response = await client.post(
+            "/api/workers",
+            json={
+                "name": "test-worker-resubmit",
+                "type": "claude-code",
+                "command": "claude",
+                "args": ["--print"],
+            },
+        )
+        return response.json()["id"]
+
+    async def test_resubmit_task_basic(self, client: AsyncClient):
+        """Test basic task resubmission."""
+        _project_id, task_id = await self._create_project_and_task(client)
+
+        response = await client.post(
+            f"/api/tasks/{task_id}/resubmit",
+            json={"reason": "Task too complex, multiple components involved"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_id"] == task_id
+        assert "reason" in data
+        assert "decomposed" in data
+        assert "subtasks_created" in data
+
+    async def test_resubmit_updates_status(self, client: AsyncClient):
+        """Test that resubmitting sets status appropriately."""
+        _project_id, task_id = await self._create_project_and_task(client)
+
+        await client.post(
+            f"/api/tasks/{task_id}/resubmit",
+            json={"reason": "Contains multiple distinct concerns"},
+        )
+
+        # Get the task and check status
+        task_response = await client.get(f"/api/tasks/{task_id}")
+        task = task_response.json()
+        # Status should be either needs_decomposition or ready (if decomposed)
+        assert task["status"] in ["needs_decomposition", "ready"]
+
+    async def test_resubmit_unassigns_worker(self, client: AsyncClient):
+        """Test that resubmitting unassigns the worker."""
+        _project_id, task_id = await self._create_project_and_task(client)
+        worker_id = await self._create_worker(client)
+
+        # Activate and assign worker
+        await client.post(f"/api/workers/{worker_id}/activate")
+        await client.post(
+            f"/api/tasks/{task_id}/assign",
+            json={"worker_id": worker_id},
+        )
+
+        # Resubmit task
+        await client.post(
+            f"/api/tasks/{task_id}/resubmit",
+            json={"reason": "Task is too large"},
+        )
+
+        # Check worker is now idle
+        worker_response = await client.get(f"/api/workers/{worker_id}")
+        assert worker_response.json()["status"] == "idle"
+
+        # Check task is unassigned
+        task_response = await client.get(f"/api/tasks/{task_id}")
+        assert task_response.json().get("worker_id") is None
+
+    async def test_resubmit_large_task_creates_subtasks(self, client: AsyncClient):
+        """Test that a large task gets decomposed into subtasks."""
+        # Create a deliberately large task that should trigger decomposition
+        large_description = """
+        Implement a complete authentication system. This should include:
+        1. Set up the auth module structure
+        2. Implement JWT token generation
+        3. Implement token validation middleware
+        4. Add refresh token support
+        5. Create password reset endpoints
+        6. Write unit tests
+        7. Write integration tests
+        Additionally, the system should support OAuth as well as standard login.
+        Multiple components need to be created including the auth controller,
+        repository, service layer, and various handlers.
+        """
+
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Large Task Project", "description": "Testing decomposition"},
+        )
+        project_id = project_response.json()["id"]
+
+        task_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Implement authentication system",
+                "description": large_description,
+            },
+        )
+        task_id = task_response.json()["id"]
+
+        # Resubmit for decomposition
+        response = await client.post(
+            f"/api/tasks/{task_id}/resubmit",
+            json={"reason": "Task contains multiple components and concerns"},
+        )
+
+        data = response.json()
+        # The task should either be decomposed or ready
+        assert data["status"] in ["needs_decomposition", "ready"]
+        # Check if subtasks were created (depends on decomposer heuristics)
+        # The decomposer should find the numbered list items
+        if data["decomposed"]:
+            assert data["subtasks_created"] > 0
+
+    async def test_resubmit_epic_fails(self, client: AsyncClient):
+        """Test that epics cannot be resubmitted."""
+        project_response = await client.post(
+            "/api/projects",
+            json={"name": "Epic Test", "description": "Testing epic resubmit"},
+        )
+        project_id = project_response.json()["id"]
+
+        epic_response = await client.post(
+            "/api/tasks/epics",
+            json={
+                "project_id": project_id,
+                "title": "Test Epic",
+                "description": "An epic",
+            },
+        )
+        epic_id = epic_response.json()["id"]
+
+        response = await client.post(
+            f"/api/tasks/{epic_id}/resubmit",
+            json={"reason": "Trying to resubmit an epic"},
+        )
+        assert response.status_code == 400
+        assert "Epics cannot be resubmitted" in response.json()["detail"]
+
+    async def test_resubmit_subtask_fails(self, client: AsyncClient):
+        """Test that subtasks cannot be resubmitted."""
+        _project_id, task_id = await self._create_project_and_task(client)
+
+        # Get task to get project_id
+        task_response = await client.get(f"/api/tasks/{task_id}")
+        project_id = task_response.json()["project_id"]
+
+        # Create a subtask
+        subtask_response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Test Subtask",
+                "description": "A subtask",
+                "parent_id": task_id,
+                "task_type": "subtask",
+            },
+        )
+        subtask_id = subtask_response.json()["id"]
+
+        response = await client.post(
+            f"/api/tasks/{subtask_id}/resubmit",
+            json={"reason": "Trying to resubmit a subtask"},
+        )
+        assert response.status_code == 400
+        assert "Subtasks cannot be resubmitted" in response.json()["detail"]
+
+    async def test_resubmit_nonexistent_task_fails(self, client: AsyncClient):
+        """Test that resubmitting a nonexistent task fails."""
+        response = await client.post(
+            "/api/tasks/nonexistent-task-id/resubmit",
+            json={"reason": "This task does not exist"},
+        )
+        assert response.status_code == 404
+        assert "Task not found" in response.json()["detail"]

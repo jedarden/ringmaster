@@ -21,6 +21,7 @@ class TaskStatus(str, Enum):
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
     BLOCKED = "blocked"
+    NEEDS_DECOMPOSITION = "needs_decomposition"  # Task too large, sent to bead-creator
     REVIEW = "review"
     DONE = "done"
     FAILED = "failed"

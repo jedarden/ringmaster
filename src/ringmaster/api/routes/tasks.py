@@ -493,6 +493,22 @@ class BulkDeleteRequest(BaseModel):
     task_ids: list[str]
 
 
+class ResubmitRequest(BaseModel):
+    """Request body for resubmitting a task for decomposition."""
+
+    reason: str  # Why the worker is resubmitting the task
+
+
+class ResubmitResponse(BaseModel):
+    """Response for task resubmission."""
+
+    task_id: str
+    status: str  # The new status (needs_decomposition)
+    reason: str
+    decomposed: bool  # Whether the task was immediately decomposed
+    subtasks_created: int  # Number of subtasks created (if decomposed)
+
+
 @router.post("/bulk-delete")
 async def bulk_delete_tasks(
     db: Annotated[Database, Depends(get_db)],
@@ -532,3 +548,137 @@ async def bulk_delete_tasks(
             failed += 1
 
     return BulkUpdateResponse(updated=deleted, failed=failed, errors=errors)
+
+
+@router.post("/{task_id}/resubmit")
+async def resubmit_task(
+    db: Annotated[Database, Depends(get_db)],
+    task_id: str,
+    body: ResubmitRequest,
+) -> ResubmitResponse:
+    """Resubmit a task for decomposition.
+
+    Workers can call this when they determine a task is too large to
+    complete in a single session. The task will be marked as
+    NEEDS_DECOMPOSITION and sent to the BeadCreator for breakdown.
+
+    Args:
+        task_id: The task ID to resubmit.
+        body: Reason for resubmission.
+
+    Returns:
+        ResubmitResponse with decomposition results.
+    """
+    from ringmaster.creator.decomposer import decompose_candidate
+    from ringmaster.creator.parser import TaskCandidate, detect_action_type, extract_target
+
+    task_repo = TaskRepository(db)
+    worker_repo = WorkerRepository(db)
+
+    task = await task_repo.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Only tasks (not epics or subtasks) can be resubmitted
+    if task.type == TaskType.EPIC:
+        raise HTTPException(status_code=400, detail="Epics cannot be resubmitted")
+    if task.type == TaskType.SUBTASK:
+        raise HTTPException(status_code=400, detail="Subtasks cannot be resubmitted")
+
+    # Get the worker if assigned
+    worker = None
+    if hasattr(task, "worker_id") and task.worker_id:
+        worker = await worker_repo.get(task.worker_id)
+
+    # Mark task as needs decomposition
+    old_status = task.status
+    task.status = TaskStatus.NEEDS_DECOMPOSITION
+
+    # Store resubmit reason in description
+    if body.reason:
+        task.description = (task.description or "") + f"\n\n[Resubmitted: {body.reason}]"
+
+    # Unassign from worker
+    if hasattr(task, "worker_id") and task.worker_id:
+        task.worker_id = None
+
+    await task_repo.update_task(task)
+
+    # Mark worker as idle if it was assigned
+    if worker:
+        worker.status = WorkerStatus.IDLE
+        worker.current_task_id = None
+        await worker_repo.update(worker)
+
+    # Emit resubmitted event
+    await event_bus.emit(
+        EventType.TASK_RESUBMITTED,
+        data={
+            "task_id": task_id,
+            "previous_status": old_status.value,
+            "reason": body.reason,
+        },
+        project_id=str(task.project_id),
+    )
+
+    # Try to decompose immediately
+    decomposed = False
+    subtasks_created = 0
+
+    # Create a TaskCandidate from the task description
+    text = f"{task.title}. {task.description or ''}"
+    action_type, _confidence = detect_action_type(text)
+    target = extract_target(text, action_type)
+
+    candidate = TaskCandidate(
+        raw_text=text,
+        action_type=action_type,
+        target=target or task.title[:50],
+        order_hint=0,
+        confidence=0.8,
+    )
+
+    decomp = decompose_candidate(candidate)
+
+    if decomp.should_decompose and decomp.subtasks:
+        # Create subtasks
+        subtask_ids: list[str] = []
+        for subtask_candidate in decomp.subtasks:
+            subtask = Subtask(
+                project_id=task.project_id,
+                title=subtask_candidate.to_title(),
+                description=subtask_candidate.raw_text,
+                priority=task.priority,
+                parent_id=task.id,
+                status=TaskStatus.READY,
+            )
+            created_subtask = await task_repo.create_task(subtask)
+            subtask_ids.append(created_subtask.id)
+
+            await event_bus.emit(
+                EventType.TASK_CREATED,
+                data={
+                    "task_id": created_subtask.id,
+                    "title": created_subtask.title,
+                    "type": "subtask",
+                    "parent_id": task.id,
+                    "from_resubmission": True,
+                },
+                project_id=str(task.project_id),
+            )
+
+        # Update task with subtask IDs and set status back to READY
+        task.subtask_ids = subtask_ids
+        task.status = TaskStatus.READY
+        await task_repo.update_task(task)
+
+        decomposed = True
+        subtasks_created = len(subtask_ids)
+
+    return ResubmitResponse(
+        task_id=task_id,
+        status=task.status.value,
+        reason=body.reason,
+        decomposed=decomposed,
+        subtasks_created=subtasks_created,
+    )

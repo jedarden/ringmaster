@@ -19,6 +19,7 @@ class EventType(str, Enum):
     TASK_COMPLETED = "task.completed"
     TASK_FAILED = "task.failed"
     TASK_RETRY = "task.retry"  # Task scheduled for retry with backoff
+    TASK_RESUBMITTED = "task.resubmitted"  # Task too large, sent for decomposition
 
     # Worker events
     WORKER_CREATED = "worker.created"
