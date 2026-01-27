@@ -86,6 +86,10 @@ class Task(TaskBase):
     attempts: int = 0
     max_attempts: int = 5
 
+    # Required capabilities for worker matching
+    # Workers must have ALL required capabilities to work on this task
+    required_capabilities: list[str] = Field(default_factory=list)
+
     # Execution tracking
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -108,6 +112,9 @@ class Subtask(TaskBase):
     worker_id: str | None = None
     attempts: int = 0
     max_attempts: int = 3
+
+    # Required capabilities for worker matching
+    required_capabilities: list[str] = Field(default_factory=list)
 
 
 class Decision(BaseModel):
@@ -153,6 +160,10 @@ class Worker(BaseModel):
     type: str  # claude-code, aider, codex, etc.
     status: WorkerStatus = WorkerStatus.OFFLINE
     current_task_id: str | None = None
+
+    # Capabilities for task-worker matching
+    # e.g., ["python", "typescript", "security", "refactoring"]
+    capabilities: list[str] = Field(default_factory=list)
 
     # Configuration
     command: str  # CLI command to invoke

@@ -128,11 +128,11 @@ class TaskRepository:
             """
             INSERT INTO tasks (
                 id, project_id, parent_id, type, title, description, priority, status,
-                worker_id, attempts, max_attempts, pagerank_score, betweenness_score,
+                worker_id, attempts, max_attempts, required_capabilities, pagerank_score, betweenness_score,
                 on_critical_path, combined_priority, created_at, updated_at, started_at,
                 completed_at, prompt_path, output_path, context_hash, acceptance_criteria, context
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
@@ -146,6 +146,7 @@ class TaskRepository:
                 getattr(task, "worker_id", None),
                 getattr(task, "attempts", 0),
                 getattr(task, "max_attempts", 5),
+                json.dumps(getattr(task, "required_capabilities", [])),
                 getattr(task, "pagerank_score", 0),
                 getattr(task, "betweenness_score", 0),
                 getattr(task, "on_critical_path", False),
@@ -216,7 +217,7 @@ class TaskRepository:
             """
             UPDATE tasks SET
                 title = ?, description = ?, priority = ?, status = ?,
-                worker_id = ?, attempts = ?, max_attempts = ?,
+                worker_id = ?, attempts = ?, max_attempts = ?, required_capabilities = ?,
                 pagerank_score = ?, betweenness_score = ?, on_critical_path = ?,
                 combined_priority = ?, updated_at = ?, started_at = ?, completed_at = ?,
                 prompt_path = ?, output_path = ?, context_hash = ?,
@@ -231,6 +232,7 @@ class TaskRepository:
                 getattr(task, "worker_id", None),
                 getattr(task, "attempts", 0),
                 getattr(task, "max_attempts", 5),
+                json.dumps(getattr(task, "required_capabilities", [])),
                 getattr(task, "pagerank_score", 0),
                 getattr(task, "betweenness_score", 0),
                 getattr(task, "on_critical_path", False),
@@ -330,6 +332,12 @@ class TaskRepository:
     def _row_to_task(self, row: Any) -> Task | Epic | Subtask:
         """Convert a database row to the appropriate task type."""
         task_type = TaskType(row["type"])
+
+        # Handle required_capabilities column - may not exist in older DBs before migration
+        required_capabilities = []
+        if "required_capabilities" in row:
+            required_capabilities = json.loads(row["required_capabilities"]) if row["required_capabilities"] else []
+
         base_kwargs = {
             "id": row["id"],
             "project_id": UUID(row["project_id"]),
@@ -357,6 +365,7 @@ class TaskRepository:
                 worker_id=row["worker_id"],
                 attempts=row["attempts"],
                 max_attempts=row["max_attempts"],
+                required_capabilities=required_capabilities,
             )
         else:  # TASK
             return Task(
@@ -365,6 +374,7 @@ class TaskRepository:
                 worker_id=row["worker_id"],
                 attempts=row["attempts"],
                 max_attempts=row["max_attempts"],
+                required_capabilities=required_capabilities,
                 started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,
                 pagerank_score=row["pagerank_score"],
@@ -385,12 +395,12 @@ class WorkerRepository:
         await self.db.execute(
             """
             INSERT INTO workers (
-                id, name, type, status, current_task_id, command, args,
+                id, name, type, status, current_task_id, capabilities, command, args,
                 prompt_flag, working_dir, timeout_seconds, env_vars,
                 tasks_completed, tasks_failed, avg_completion_seconds,
                 created_at, last_active_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 worker.id,
@@ -398,6 +408,7 @@ class WorkerRepository:
                 worker.type,
                 worker.status.value,
                 worker.current_task_id,
+                json.dumps(worker.capabilities),
                 worker.command,
                 json.dumps(worker.args),
                 worker.prompt_flag,
@@ -474,7 +485,7 @@ class WorkerRepository:
         await self.db.execute(
             """
             UPDATE workers SET
-                name = ?, type = ?, status = ?, current_task_id = ?,
+                name = ?, type = ?, status = ?, current_task_id = ?, capabilities = ?,
                 command = ?, args = ?, prompt_flag = ?, working_dir = ?,
                 timeout_seconds = ?, env_vars = ?, tasks_completed = ?,
                 tasks_failed = ?, avg_completion_seconds = ?, last_active_at = ?
@@ -485,6 +496,7 @@ class WorkerRepository:
                 worker.type,
                 worker.status.value,
                 worker.current_task_id,
+                json.dumps(worker.capabilities),
                 worker.command,
                 json.dumps(worker.args),
                 worker.prompt_flag,
@@ -507,14 +519,84 @@ class WorkerRepository:
         await self.db.commit()
         return cursor.rowcount > 0
 
+    async def get_capable_workers(
+        self, required_capabilities: list[str], worker_type: str | None = None
+    ) -> list[Worker]:
+        """Get idle workers that have all the required capabilities.
+
+        Args:
+            required_capabilities: List of capabilities that workers must have.
+            worker_type: Optional filter by worker type.
+
+        Returns:
+            List of workers that can handle the task (have all required capabilities).
+        """
+        conditions = ["status = 'idle'"]
+        params: list[Any] = []
+
+        if worker_type:
+            conditions.append("type = ?")
+            params.append(worker_type)
+
+        query = f"""
+            SELECT * FROM workers
+            WHERE {' AND '.join(conditions)}
+            ORDER BY tasks_completed DESC
+        """
+
+        rows = await self.db.fetchall(query, tuple(params))
+        workers = [self._row_to_worker(row) for row in rows]
+
+        # Filter by capabilities (worker must have ALL required capabilities)
+        if not required_capabilities:
+            return workers
+
+        capable_workers = []
+        for worker in workers:
+            worker_caps = set(worker.capabilities)
+            if set(required_capabilities).issubset(worker_caps):
+                capable_workers.append(worker)
+
+        return capable_workers
+
+    async def add_capability(self, worker_id: str, capability: str) -> bool:
+        """Add a capability to a worker."""
+        worker = await self.get(worker_id)
+        if not worker:
+            return False
+
+        if capability not in worker.capabilities:
+            worker.capabilities.append(capability)
+            await self.update(worker)
+
+        return True
+
+    async def remove_capability(self, worker_id: str, capability: str) -> bool:
+        """Remove a capability from a worker."""
+        worker = await self.get(worker_id)
+        if not worker:
+            return False
+
+        if capability in worker.capabilities:
+            worker.capabilities.remove(capability)
+            await self.update(worker)
+
+        return True
+
     def _row_to_worker(self, row: Any) -> Worker:
         """Convert a database row to a Worker."""
+        # Handle capabilities column - may not exist in older DBs before migration
+        capabilities = []
+        if "capabilities" in row:
+            capabilities = json.loads(row["capabilities"]) if row["capabilities"] else []
+
         return Worker(
             id=row["id"],
             name=row["name"],
             type=row["type"],
             status=WorkerStatus(row["status"]),
             current_task_id=row["current_task_id"],
+            capabilities=capabilities,
             command=row["command"],
             args=json.loads(row["args"]) if row["args"] else [],
             prompt_flag=row["prompt_flag"],

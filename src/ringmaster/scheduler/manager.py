@@ -215,15 +215,15 @@ class Scheduler:
             await asyncio.sleep(self.poll_interval)
 
     async def _process_assignments(self) -> None:
-        """Process pending task assignments."""
+        """Process pending task assignments.
+
+        Uses capability matching to assign tasks to qualified workers:
+        - Workers must have ALL capabilities required by a task
+        - Tasks without required_capabilities can be assigned to any worker
+        """
         # Check capacity
         current_tasks = len(self._tasks)
         if current_tasks >= self.max_concurrent_tasks:
-            return
-
-        # Get idle workers
-        idle_workers = await self.worker_repo.get_idle_workers()
-        if not idle_workers:
             return
 
         # Get ready tasks
@@ -233,12 +233,29 @@ class Scheduler:
 
         # Assign tasks up to capacity
         available_slots = self.max_concurrent_tasks - current_tasks
-        for worker in idle_workers[:available_slots]:
-            if not ready_tasks:
+        assigned_count = 0
+
+        for task in ready_tasks:
+            if assigned_count >= available_slots:
                 break
 
-            task = ready_tasks.pop(0)
+            # Get task's required capabilities
+            required_caps = getattr(task, "required_capabilities", [])
+
+            # Find a capable worker for this task
+            capable_workers = await self.worker_repo.get_capable_workers(required_caps)
+            if not capable_workers:
+                # No worker with required capabilities is available
+                logger.debug(
+                    f"No capable worker for task {task.id} "
+                    f"(requires: {required_caps})"
+                )
+                continue
+
+            # Assign to first capable worker
+            worker = capable_workers[0]
             await self._start_task_execution(task, worker)
+            assigned_count += 1
 
     async def _start_task_execution(self, task: Task, worker: Worker) -> None:
         """Start executing a task with a worker."""

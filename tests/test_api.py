@@ -837,6 +837,148 @@ class TestWorkersAPI:
         assert response.status_code == 200
         assert response.json()["status"] == "offline"
 
+    async def test_create_worker_with_capabilities(self, client: AsyncClient):
+        """Test creating a worker with capabilities."""
+        response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Capable Worker",
+                "type": "claude-code",
+                "command": "claude",
+                "capabilities": ["python", "typescript", "security"],
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["name"] == "Capable Worker"
+        assert data["capabilities"] == ["python", "typescript", "security"]
+
+    async def test_update_worker_capabilities(self, client: AsyncClient):
+        """Test updating worker capabilities."""
+        # Create worker with initial capabilities
+        create_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Update Caps Worker",
+                "type": "aider",
+                "command": "aider",
+                "capabilities": ["python"],
+            },
+        )
+        worker_id = create_response.json()["id"]
+
+        # Update capabilities
+        response = await client.patch(
+            f"/api/workers/{worker_id}",
+            json={"capabilities": ["python", "rust", "refactoring"]},
+        )
+        assert response.status_code == 200
+        assert response.json()["capabilities"] == ["python", "rust", "refactoring"]
+
+    async def test_get_worker_capabilities(self, client: AsyncClient):
+        """Test getting worker capabilities."""
+        # Create worker with capabilities
+        create_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Get Caps Worker",
+                "type": "codex",
+                "command": "codex",
+                "capabilities": ["go", "kubernetes"],
+            },
+        )
+        worker_id = create_response.json()["id"]
+
+        # Get capabilities
+        response = await client.get(f"/api/workers/{worker_id}/capabilities")
+        assert response.status_code == 200
+        assert response.json() == ["go", "kubernetes"]
+
+    async def test_add_capability(self, client: AsyncClient):
+        """Test adding a capability to a worker."""
+        # Create worker with initial capabilities
+        create_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Add Cap Worker",
+                "type": "claude-code",
+                "command": "claude",
+                "capabilities": ["python"],
+            },
+        )
+        worker_id = create_response.json()["id"]
+
+        # Add capability
+        response = await client.post(
+            f"/api/workers/{worker_id}/capabilities",
+            json={"capability": "security"},
+        )
+        assert response.status_code == 201
+        assert "security" in response.json()["capabilities"]
+        assert "python" in response.json()["capabilities"]
+
+    async def test_add_duplicate_capability(self, client: AsyncClient):
+        """Test adding a duplicate capability doesn't create duplicates."""
+        # Create worker with python capability
+        create_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Dup Cap Worker",
+                "type": "claude-code",
+                "command": "claude",
+                "capabilities": ["python"],
+            },
+        )
+        worker_id = create_response.json()["id"]
+
+        # Add duplicate capability
+        response = await client.post(
+            f"/api/workers/{worker_id}/capabilities",
+            json={"capability": "python"},
+        )
+        assert response.status_code == 201
+        # Should still only have one "python"
+        assert response.json()["capabilities"].count("python") == 1
+
+    async def test_remove_capability(self, client: AsyncClient):
+        """Test removing a capability from a worker."""
+        # Create worker with multiple capabilities
+        create_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "Remove Cap Worker",
+                "type": "aider",
+                "command": "aider",
+                "capabilities": ["python", "typescript", "security"],
+            },
+        )
+        worker_id = create_response.json()["id"]
+
+        # Remove capability
+        response = await client.delete(f"/api/workers/{worker_id}/capabilities/typescript")
+        assert response.status_code == 200
+        assert "typescript" not in response.json()["capabilities"]
+        assert "python" in response.json()["capabilities"]
+        assert "security" in response.json()["capabilities"]
+
+    async def test_remove_nonexistent_capability(self, client: AsyncClient):
+        """Test removing a capability that doesn't exist returns 404."""
+        # Create worker
+        create_response = await client.post(
+            "/api/workers",
+            json={
+                "name": "No Cap Worker",
+                "type": "codex",
+                "command": "codex",
+                "capabilities": ["python"],
+            },
+        )
+        worker_id = create_response.json()["id"]
+
+        # Try to remove capability that doesn't exist
+        response = await client.delete(f"/api/workers/{worker_id}/capabilities/rust")
+        assert response.status_code == 404
+
 
 class TestQueueAPI:
     """Tests for queue API - testing routes/queue.py."""
