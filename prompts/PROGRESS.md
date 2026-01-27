@@ -965,6 +965,7 @@ Implemented shortcuts:
 | 77 | 2026-01-27 | Add git revert frontend UI: RevertResponse TypeScript type, API client functions (revertCommit, revertToCommit, revertFileInCommit, abortRevert), GitHistoryModal enhanced with Revert buttons for each commit, revert options dropdown (revert commit, revert file only, revert to point), revert result modal with success/failure/conflicts display, CSS styles for revert UI; completes the reversibility feature from docs/07-user-experience.md; all 638 tests passing |
 | 78 | 2026-01-27 | Add task search to command palette: fetch up to 50 recent tasks when palette opens, add task commands (filtered to exclude epics, limited to 30 results), clicking a task navigates to its project with task query param; populates the previously unused "task" category in command palette; all 638 tests passing |
 | 79 | 2026-01-27 | Add j/k keyboard navigation to QueuePage: j/k keys navigate ready tasks list, Enter opens selected task's project, keyboard-selected class for visual highlight, keyboard hint explaining shortcuts; aligns with ProjectsPage and WorkersPage navigation patterns; all 638 tests passing |
+| 80 | 2026-01-27 | Enhance project creation form: add repository URL field, add tech stack field with interactive tag input (Enter key adds, × removes), add Cancel button, form labels and better placeholder text, CSS styles for form groups/tech tags/cancel button; all 638 tests passing |
 
 ## Blockers
 
