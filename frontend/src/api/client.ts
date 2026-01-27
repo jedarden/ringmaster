@@ -62,6 +62,10 @@ import type {
   FileHistoryResponse,
   FileDiffResponse,
   FileAtCommitResponse,
+  SpawnWorkerRequest,
+  SpawnedWorkerResponse,
+  TmuxSessionResponse,
+  WorkerLogResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -1063,6 +1067,48 @@ export async function getFileAtCommit(
   });
   const response = await fetch(`${API_BASE}/projects/${projectId}/files/at-commit?${params}`);
   return handleResponse<FileAtCommitResponse>(response);
+}
+
+// Worker Spawner API
+
+export async function spawnWorker(
+  workerId: string,
+  request: SpawnWorkerRequest = {}
+): Promise<SpawnedWorkerResponse> {
+  const response = await fetch(`${API_BASE}/workers/${workerId}/spawn`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<SpawnedWorkerResponse>(response);
+}
+
+export async function killWorker(workerId: string): Promise<InterruptResponse> {
+  const response = await fetch(`${API_BASE}/workers/${workerId}/kill`, {
+    method: "POST",
+  });
+  return handleResponse<InterruptResponse>(response);
+}
+
+export async function getWorkerSession(
+  workerId: string
+): Promise<TmuxSessionResponse> {
+  const response = await fetch(`${API_BASE}/workers/${workerId}/session`);
+  return handleResponse<TmuxSessionResponse>(response);
+}
+
+export async function listWorkerSessions(): Promise<TmuxSessionResponse[]> {
+  const response = await fetch(`${API_BASE}/workers/sessions/list`);
+  return handleResponse<TmuxSessionResponse[]>(response);
+}
+
+export async function getWorkerLog(
+  workerId: string,
+  lines = 100
+): Promise<WorkerLogResponse> {
+  const params = new URLSearchParams({ lines: lines.toString() });
+  const response = await fetch(`${API_BASE}/workers/${workerId}/log?${params}`);
+  return handleResponse<WorkerLogResponse>(response);
 }
 
 export { ApiError };

@@ -692,3 +692,34 @@ export interface FileAtCommitResponse {
   content: string | null;
   exists: boolean;
 }
+
+// Worker Spawner types
+
+export interface SpawnWorkerRequest {
+  worker_type?: string; // claude-code, aider, codex, goose, generic
+  capabilities?: string[];
+  worktree_path?: string | null;
+  custom_command?: string | null;
+}
+
+export interface SpawnedWorkerResponse {
+  worker_id: string;
+  worker_type: string;
+  tmux_session: string;
+  log_path: string | null;
+  status: string;
+  attach_command: string;
+}
+
+export interface TmuxSessionResponse {
+  session_name: string;
+  worker_id: string;
+  attach_command: string;
+}
+
+export interface WorkerLogResponse {
+  worker_id: string;
+  log_path: string | null;
+  output: string | null;
+  lines_count: number;
+}

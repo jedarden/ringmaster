@@ -7,7 +7,11 @@ import {
   deleteWorker,
   cancelWorkerTask,
   pauseWorker,
+  spawnWorker,
+  killWorker,
+  listWorkerSessions,
 } from "../api/client";
+import type { TmuxSessionResponse, SpawnWorkerRequest } from "../types";
 import { WorkerOutputPanel } from "../components/WorkerOutputPanel";
 import type { Worker, WorkerCreate } from "../types";
 import { WorkerStatus } from "../types";
@@ -27,12 +31,22 @@ export function WorkersPage() {
   const listRef = useRef<HTMLDivElement>(null);
   const [outputPanelWorkerId, setOutputPanelWorkerId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [tmuxSessions, setTmuxSessions] = useState<TmuxSessionResponse[]>([]);
+  const [showSpawnModal, setShowSpawnModal] = useState<string | null>(null);
+  const [spawnConfig, setSpawnConfig] = useState<SpawnWorkerRequest>({
+    worker_type: "claude-code",
+    capabilities: [],
+  });
 
   const loadWorkers = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await listWorkers();
-      setWorkers(data);
+      const [workersData, sessionsData] = await Promise.all([
+        listWorkers(),
+        listWorkerSessions().catch(() => []),
+      ]);
+      setWorkers(workersData);
+      setTmuxSessions(sessionsData);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load workers");
@@ -144,6 +158,43 @@ export function WorkersPage() {
     }
   };
 
+  const handleSpawn = async (id: string) => {
+    try {
+      setActionLoading(id);
+      await spawnWorker(id, spawnConfig);
+      setShowSpawnModal(null);
+      setSpawnConfig({ worker_type: "claude-code", capabilities: [] });
+      await loadWorkers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to spawn worker");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleKill = async (id: string) => {
+    if (!confirm("Kill this worker's tmux session? This will terminate any running task.")) return;
+
+    try {
+      setActionLoading(id);
+      await killWorker(id);
+      await loadWorkers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to kill worker");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Check if a worker has an active tmux session
+  const hasSession = (workerId: string) => {
+    return tmuxSessions.some((s) => s.worker_id === workerId);
+  };
+
+  const getSession = (workerId: string) => {
+    return tmuxSessions.find((s) => s.worker_id === workerId);
+  };
+
   const getStatusColor = (status: WorkerStatus) => {
     switch (status) {
       case WorkerStatus.IDLE:
@@ -240,12 +291,38 @@ export function WorkersPage() {
                         <p>
                           Stats: {worker.tasks_completed} completed / {worker.tasks_failed} failed
                         </p>
+                        {hasSession(worker.id) && (
+                          <p className="tmux-info">
+                            <span className="tmux-badge">tmux</span>
+                            <code>{getSession(worker.id)?.attach_command}</code>
+                          </p>
+                        )}
                       </div>
                       <div className="worker-actions">
                         {worker.status === WorkerStatus.IDLE ? (
-                          <button onClick={() => handleDeactivate(worker.id)}>
-                            Deactivate
-                          </button>
+                          <>
+                            {hasSession(worker.id) ? (
+                              <button
+                                onClick={() => handleKill(worker.id)}
+                                disabled={actionLoading === worker.id}
+                                className="kill-btn"
+                                title="Kill tmux session"
+                              >
+                                {actionLoading === worker.id ? "..." : "Kill Session"}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setShowSpawnModal(worker.id)}
+                                className="spawn-btn"
+                                title="Spawn worker in tmux session"
+                              >
+                                Spawn
+                              </button>
+                            )}
+                            <button onClick={() => handleDeactivate(worker.id)}>
+                              Deactivate
+                            </button>
+                          </>
                         ) : worker.status === WorkerStatus.BUSY ? (
                           <>
                             <button
@@ -271,6 +348,16 @@ export function WorkersPage() {
                             >
                               {actionLoading === worker.id ? "..." : "Cancel"}
                             </button>
+                            {hasSession(worker.id) && (
+                              <button
+                                onClick={() => handleKill(worker.id)}
+                                disabled={actionLoading === worker.id}
+                                className="kill-btn"
+                                title="Kill tmux session"
+                              >
+                                {actionLoading === worker.id ? "..." : "Kill"}
+                              </button>
+                            )}
                           </>
                         ) : null}
                         <button
@@ -307,6 +394,13 @@ export function WorkersPage() {
                         <span className="worker-type">{worker.type}</span>
                       </div>
                       <div className="worker-actions">
+                        <button
+                          onClick={() => setShowSpawnModal(worker.id)}
+                          className="spawn-btn"
+                          title="Spawn worker in tmux session"
+                        >
+                          Spawn in Tmux
+                        </button>
                         <button onClick={() => handleActivate(worker.id)}>
                           Activate
                         </button>
@@ -323,6 +417,97 @@ export function WorkersPage() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Spawn Worker Modal */}
+      {showSpawnModal && (
+        <div className="modal-overlay" onClick={() => setShowSpawnModal(null)}>
+          <div className="modal spawn-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Spawn Worker: {showSpawnModal}</h2>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSpawn(showSpawnModal);
+              }}
+            >
+              <div className="form-group">
+                <label>Worker Type</label>
+                <select
+                  value={spawnConfig.worker_type}
+                  onChange={(e) =>
+                    setSpawnConfig({ ...spawnConfig, worker_type: e.target.value })
+                  }
+                >
+                  <option value="claude-code">Claude Code</option>
+                  <option value="aider">Aider</option>
+                  <option value="codex">Codex</option>
+                  <option value="goose">Goose</option>
+                  <option value="generic">Generic (custom command)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Capabilities (comma-separated)</label>
+                <input
+                  type="text"
+                  placeholder="python, typescript, security"
+                  value={spawnConfig.capabilities?.join(", ") || ""}
+                  onChange={(e) =>
+                    setSpawnConfig({
+                      ...spawnConfig,
+                      capabilities: e.target.value
+                        .split(",")
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+              </div>
+              {spawnConfig.worker_type === "generic" && (
+                <div className="form-group">
+                  <label>Custom Command</label>
+                  <input
+                    type="text"
+                    placeholder="my-tool --auto"
+                    value={spawnConfig.custom_command || ""}
+                    onChange={(e) =>
+                      setSpawnConfig({ ...spawnConfig, custom_command: e.target.value })
+                    }
+                  />
+                </div>
+              )}
+              <div className="form-group">
+                <label>Worktree Path (optional)</label>
+                <input
+                  type="text"
+                  placeholder="/workspace/project"
+                  value={spawnConfig.worktree_path || ""}
+                  onChange={(e) =>
+                    setSpawnConfig({
+                      ...spawnConfig,
+                      worktree_path: e.target.value || null,
+                    })
+                  }
+                />
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => setShowSpawnModal(null)}
+                  className="secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={actionLoading === showSpawnModal}
+                  className="primary spawn-btn"
+                >
+                  {actionLoading === showSpawnModal ? "Spawning..." : "Spawn Worker"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
