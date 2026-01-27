@@ -581,10 +581,29 @@ Implemented shortcuts:
 - ✅ Path traversal security checks
 - ✅ 17 new tests (10 git operations + 7 API integration)
 
+### Git History Frontend UI (`frontend/src/components/`)
+- ✅ GitHistoryModal component
+  - Displays commit history for selected file
+  - Commit list with hash, message, author, time-ago display
+  - Color-coded additions/deletions stats per commit
+  - Click commit to view diff
+  - Escape key to close modal
+- ✅ FileDiffViewer component
+  - Unified diff display with syntax highlighting
+  - Color-coded lines: green for additions, red for deletions
+  - Hunk headers with line range info
+  - Special handling for new/deleted/renamed files
+  - Diff stats summary
+- ✅ FileBrowser integration
+  - "History" button in file preview header
+  - Opens GitHistoryModal for selected file
+- ✅ TypeScript types: CommitInfo, FileHistoryResponse, DiffHunkInfo, FileDiffResponse, FileAtCommitResponse
+- ✅ API client functions: getFileHistory(), getFileDiff(), getFileAtCommit()
+
 ## Next Steps
 
-1. **Git History Frontend UI**: Add GitHistoryModal and FileDiffViewer components to FileBrowser
-2. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
+2. **Task Iteration Auto-Retry**: Implement automatic retry logic when tasks fail (up to max_attempts)
 
 ## Iteration Log
 
@@ -637,6 +656,7 @@ Implemented shortcuts:
 | 45 | 2026-01-27 | Add task iteration progress display: shows attempt count (e.g., "2/5") in task cards, epic child tasks, and subtasks when tasks are in-progress; CSS styling for iteration badge; aligns with docs/07-user-experience.md iteration display spec |
 | 46 | 2026-01-27 | Add deployment context source for enrichment pipeline: DeploymentContextExtractor class with env file loading (.env with secret redaction), Docker Compose configs, K8s manifests (with YAML parsing and secret value redaction), Helm values, CI/CD workflow files (GitHub Actions, GitLab CI), GitHub Actions status via gh CLI; task relevance scoring for deployment keywords; token budgeting with file limits; DeploymentContextStage integrated into 6-layer pipeline; 22 new tests, total 364 tests passing |
 | 47 | 2026-01-27 | Add Git file history and diff API: Git operations module (get_file_history, get_file_diff, get_file_at_commit, is_git_repo), 3 new API endpoints for file git operations with path traversal protection, response models for commit info and diff hunks, 17 new tests, total 381 tests passing |
+| 48 | 2026-01-27 | Add Git History Frontend UI: GitHistoryModal component with commit list and time-ago formatting, FileDiffViewer with unified diff display and color-coded lines, TypeScript types for git API responses, API client functions (getFileHistory, getFileDiff, getFileAtCommit), History button integrated into FileBrowser file preview, CSS styles for modal and diff viewer |
 
 ## Blockers
 
