@@ -492,6 +492,97 @@ textarea {
   font-weight: 500;
 }
 
+/* Worker Health Status */
+.worker-health-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.health-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.health-active {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--color-success);
+}
+
+.health-thinking {
+  background: rgba(96, 165, 250, 0.2);
+  color: var(--color-info);
+}
+
+.health-slow {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--color-warning);
+}
+
+.health-hung {
+  background: rgba(251, 146, 60, 0.3);
+  color: #f97316;
+}
+
+.health-degraded {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+}
+
+.health-unknown {
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.degraded-badge {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  cursor: help;
+}
+
+.recovery-badge {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  cursor: help;
+}
+
+.urgency-low {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--color-success);
+}
+
+.urgency-medium {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--color-warning);
+}
+
+.urgency-high {
+  background: rgba(251, 146, 60, 0.3);
+  color: #f97316;
+}
+
+.urgency-critical {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+}
+
+.health-meta {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
 /* Status Badges */
 .status-badge {
   padding: 0.25rem 0.5rem;

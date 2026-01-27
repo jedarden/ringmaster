@@ -70,6 +70,7 @@ import type {
   ValidationResponse,
   ApproveResponse,
   RejectResponse,
+  WorkerHealthResponse,
 } from "../types";
 
 // Use relative path in dev mode (Vite proxy), absolute URL in production
@@ -1126,6 +1127,17 @@ export async function getWorkerLog(
   const params = new URLSearchParams({ lines: lines.toString() });
   const response = await fetch(`${API_BASE}/workers/${workerId}/log?${params}`);
   return handleResponse<WorkerLogResponse>(response);
+}
+
+/**
+ * Get health status for a worker.
+ * Analyzes worker output for liveness, degradation signals, and recovery recommendations.
+ */
+export async function getWorkerHealth(
+  workerId: string
+): Promise<WorkerHealthResponse> {
+  const response = await fetch(`${API_BASE}/workers/${workerId}/health`);
+  return handleResponse<WorkerHealthResponse>(response);
 }
 
 // Task Validation API

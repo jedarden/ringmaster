@@ -10,11 +10,12 @@ import {
   spawnWorker,
   killWorker,
   listWorkerSessions,
+  getWorkerHealth,
 } from "../api/client";
-import type { TmuxSessionResponse, SpawnWorkerRequest } from "../types";
+import type { TmuxSessionResponse, SpawnWorkerRequest, WorkerHealthResponse } from "../types";
 import { WorkerOutputPanel } from "../components/WorkerOutputPanel";
 import type { WorkerWithTask, WorkerCreate } from "../types";
-import { WorkerStatus } from "../types";
+import { WorkerStatus, LivenessStatus, RecoveryUrgency } from "../types";
 import { useWebSocket, type WebSocketEvent } from "../hooks/useWebSocket";
 import { useListNavigation } from "../hooks/useKeyboardShortcuts";
 
@@ -61,6 +62,8 @@ export function WorkersPage() {
   });
   // Timer to update duration display for busy workers
   const [, setTick] = useState(0);
+  // Health status for busy workers
+  const [workerHealth, setWorkerHealth] = useState<Record<string, WorkerHealthResponse>>({});
 
   const loadWorkers = useCallback(async () => {
     try {
@@ -72,6 +75,24 @@ export function WorkersPage() {
       setWorkers(workersData);
       setTmuxSessions(sessionsData);
       setError(null);
+
+      // Fetch health data for busy workers
+      const busyWorkers = workersData.filter(w => w.status === WorkerStatus.BUSY);
+      if (busyWorkers.length > 0) {
+        const healthPromises = busyWorkers.map(w =>
+          getWorkerHealth(w.id).catch(() => null)
+        );
+        const healthResults = await Promise.all(healthPromises);
+        const healthMap: Record<string, WorkerHealthResponse> = {};
+        busyWorkers.forEach((w, i) => {
+          if (healthResults[i]) {
+            healthMap[w.id] = healthResults[i]!;
+          }
+        });
+        setWorkerHealth(healthMap);
+      } else {
+        setWorkerHealth({});
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load workers");
     } finally {
@@ -242,6 +263,55 @@ export function WorkersPage() {
     }
   };
 
+  const getLivenessColor = (status: string) => {
+    switch (status) {
+      case LivenessStatus.ACTIVE:
+        return "health-active";
+      case LivenessStatus.THINKING:
+        return "health-thinking";
+      case LivenessStatus.SLOW:
+        return "health-slow";
+      case LivenessStatus.LIKELY_HUNG:
+        return "health-hung";
+      case LivenessStatus.DEGRADED:
+        return "health-degraded";
+      default:
+        return "health-unknown";
+    }
+  };
+
+  const getLivenessIcon = (status: string) => {
+    switch (status) {
+      case LivenessStatus.ACTIVE:
+        return "🟢";
+      case LivenessStatus.THINKING:
+        return "🤔";
+      case LivenessStatus.SLOW:
+        return "🐢";
+      case LivenessStatus.LIKELY_HUNG:
+        return "⚠️";
+      case LivenessStatus.DEGRADED:
+        return "🔴";
+      default:
+        return "❓";
+    }
+  };
+
+  const getRecoveryUrgencyColor = (urgency: string) => {
+    switch (urgency) {
+      case RecoveryUrgency.LOW:
+        return "urgency-low";
+      case RecoveryUrgency.MEDIUM:
+        return "urgency-medium";
+      case RecoveryUrgency.HIGH:
+        return "urgency-high";
+      case RecoveryUrgency.CRITICAL:
+        return "urgency-critical";
+      default:
+        return "";
+    }
+  };
+
   if (loading) {
     return <div className="loading">Loading workers...</div>;
   }
@@ -336,6 +406,26 @@ export function WorkersPage() {
                                 </span>
                               )}
                             </p>
+                            {workerHealth[worker.id] && (
+                              <div className="worker-health-status">
+                                <span className={`health-badge ${getLivenessColor(workerHealth[worker.id].liveness_status)}`}>
+                                  {getLivenessIcon(workerHealth[worker.id].liveness_status)} {workerHealth[worker.id].liveness_status}
+                                </span>
+                                {workerHealth[worker.id].degradation.is_degraded && (
+                                  <span className="degraded-badge" title={`Repetition: ${workerHealth[worker.id].degradation.repetition_score.toFixed(2)}, Apologies: ${workerHealth[worker.id].degradation.apology_count}, Retries: ${workerHealth[worker.id].degradation.retry_count}`}>
+                                    Degraded
+                                  </span>
+                                )}
+                                {workerHealth[worker.id].recommended_action.action !== "none" && (
+                                  <span className={`recovery-badge ${getRecoveryUrgencyColor(workerHealth[worker.id].recommended_action.urgency)}`} title={workerHealth[worker.id].recommended_action.reason}>
+                                    {workerHealth[worker.id].recommended_action.action.replace("_", " ")}
+                                  </span>
+                                )}
+                                <span className="health-meta">
+                                  {workerHealth[worker.id].total_output_lines} lines
+                                </span>
+                              </div>
+                            )}
                           </div>
                         )}
                         {!worker.current_task && worker.current_task_id && (

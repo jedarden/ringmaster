@@ -780,3 +780,50 @@ export interface RejectResponse {
   rejected: boolean;
   reason: string | null;
 }
+
+// Worker Health types
+
+export const LivenessStatus = {
+  ACTIVE: "active",
+  THINKING: "thinking",
+  SLOW: "slow",
+  LIKELY_HUNG: "likely_hung",
+  DEGRADED: "degraded",
+  UNKNOWN: "unknown",
+} as const;
+export type LivenessStatus =
+  (typeof LivenessStatus)[keyof typeof LivenessStatus];
+
+export const RecoveryUrgency = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  CRITICAL: "critical",
+} as const;
+export type RecoveryUrgency =
+  (typeof RecoveryUrgency)[keyof typeof RecoveryUrgency];
+
+export interface DegradationSignals {
+  repetition_score: number;
+  apology_count: number;
+  retry_count: number;
+  contradiction_count: number;
+  is_degraded: boolean;
+}
+
+export interface RecoveryAction {
+  action: string; // "none", "log_warning", "interrupt", "checkpoint_restart", "escalate"
+  reason: string;
+  urgency: RecoveryUrgency;
+}
+
+export interface WorkerHealthResponse {
+  worker_id: string;
+  task_id: string | null;
+  liveness_status: LivenessStatus;
+  degradation: DegradationSignals;
+  recommended_action: RecoveryAction;
+  runtime_seconds: number;
+  idle_seconds: number;
+  total_output_lines: number;
+}
