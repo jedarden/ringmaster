@@ -113,8 +113,7 @@ class EnrichmentPipeline:
             context_parts.append(deployment_context)
             metrics.stages_applied.append("deployment_context")
 
-        # Layer 5: History Context (placeholder)
-        # TODO: Implement RLM summarization
+        # Layer 5: History Context (RLM-summarized conversation history)
         history_context = await self._build_history_context(task, project)
         if history_context:
             context_parts.append(history_context)

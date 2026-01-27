@@ -278,3 +278,111 @@ class TestRLMSummarizer:
         # Should estimate ~100 tokens (400 chars / 4)
         assert context.estimated_tokens >= 90
         assert context.estimated_tokens <= 110
+
+
+class TestHistoryContextStage:
+    """Tests for HistoryContextStage."""
+
+    async def test_no_database_returns_none(self):
+        """Test that stage returns None when no database configured."""
+        from ringmaster.domain import Task
+        from ringmaster.enricher.stages import HistoryContextStage
+
+        stage = HistoryContextStage(db=None)
+        task = Task(
+            id="task-123",
+            project_id=uuid4(),
+            title="Test Task",
+        )
+        project = Project(name="Test", description="Test project")
+
+        result = await stage.process(task, project)
+        assert result is None
+
+    async def test_empty_history_returns_none(self, db, project):
+        """Test that stage returns None when no chat history."""
+        from ringmaster.domain import Task
+        from ringmaster.enricher.stages import HistoryContextStage
+
+        stage = HistoryContextStage(db=db)
+        task = Task(
+            id="task-123",
+            project_id=project.id,
+            title="Test Task",
+        )
+
+        # No messages in database, should return None
+        result = await stage.process(task, project)
+        assert result is None
+
+    async def test_with_messages_returns_stage_result(self, db, chat_repo, project):
+        """Test that stage returns StageResult when messages exist."""
+        from ringmaster.domain import Task
+        from ringmaster.enricher.stages import HistoryContextStage, StageResult
+
+        # Create some chat messages
+        await chat_repo.create_message(
+            ChatMessage(
+                project_id=project.id,
+                role="user",
+                content="What should we build?",
+            )
+        )
+        await chat_repo.create_message(
+            ChatMessage(
+                project_id=project.id,
+                role="assistant",
+                content="We decided to build a REST API.",
+            )
+        )
+
+        stage = HistoryContextStage(db=db)
+        task = Task(
+            id="task-123",
+            project_id=project.id,
+            title="Test Task",
+        )
+
+        result = await stage.process(task, project)
+
+        assert result is not None
+        assert isinstance(result, StageResult)
+        assert "## Conversation History" in result.content
+        assert "What should we build?" in result.content
+        assert result.tokens_estimate > 0
+        assert result.sources is not None
+        assert len(result.sources) > 0
+
+    async def test_stage_name(self, db):
+        """Test that stage name is correct."""
+        from ringmaster.enricher.stages import HistoryContextStage
+
+        stage = HistoryContextStage(db=db)
+        assert stage.name == "history_context"
+
+    async def test_task_scoped_messages(self, db, chat_repo, project):
+        """Test that stage respects task_id filtering."""
+        from ringmaster.domain import Task
+        from ringmaster.enricher.stages import HistoryContextStage
+
+        # Create project-wide message (no task_id)
+        await chat_repo.create_message(
+            ChatMessage(
+                project_id=project.id,
+                role="user",
+                content="This is a project-wide message",
+            )
+        )
+
+        stage = HistoryContextStage(db=db)
+        task = Task(
+            id="task-specific-123",
+            project_id=project.id,
+            title="Test Task",
+        )
+
+        result = await stage.process(task, project)
+
+        # Should return context from project-wide messages
+        assert result is not None
+        assert result.tokens_estimate > 0

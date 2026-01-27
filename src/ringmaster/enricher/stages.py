@@ -1,11 +1,18 @@
 """Individual enrichment stages."""
 
+from __future__ import annotations
+
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ringmaster.domain import Project, Task
+
+if TYPE_CHECKING:
+    from ringmaster.db import Database
+    from ringmaster.enricher.rlm import RLMSummarizer
 from ringmaster.enricher.code_context import (
     CodeContextExtractor,
     format_code_context,
@@ -195,20 +202,69 @@ class DeploymentContextStage(BaseStage):
 class HistoryContextStage(BaseStage):
     """Stage 5: Conversation history with RLM summarization."""
 
+    def __init__(self, db: Database | None = None):
+        """Initialize with optional database connection.
+
+        Args:
+            db: Database connection for chat history access.
+                If None, this stage will be skipped.
+        """
+        self._db = db
+        self._rlm_summarizer: RLMSummarizer | None = None
+
     @property
     def name(self) -> str:
         return "history_context"
 
+    @property
+    def rlm_summarizer(self) -> RLMSummarizer | None:
+        """Lazy initialization of RLM summarizer."""
+        if self._rlm_summarizer is None and self._db is not None:
+            from ringmaster.enricher.rlm import RLMSummarizer
+
+            self._rlm_summarizer = RLMSummarizer(self._db)
+        return self._rlm_summarizer
+
     async def process(self, task: Task, project: Project) -> StageResult | None:
         """Build history context with RLM compression.
 
-        TODO: Implement RLM summarization:
-        - Fetch chat history from database
-        - Apply hierarchical summarization
-        - Include key decisions
+        Fetches chat history from database, applies hierarchical
+        summarization to older messages, and preserves key decisions
+        for context continuity.
+
+        Note: Uses project-level chat history (task_id=None) since
+        conversations are typically at the project level, not task level.
         """
-        # Placeholder - skip for now
-        return None
+        if self.rlm_summarizer is None:
+            # No database configured, skip this stage
+            return None
+
+        try:
+            # Get compressed history context for the project
+            # We use task_id=None to get all project-level conversation history,
+            # which provides the most relevant context for workers
+            context = await self.rlm_summarizer.get_history_context(
+                project_id=project.id,
+                task_id=None,
+            )
+
+            # If no messages, skip this stage
+            if context.total_messages == 0:
+                return None
+
+            # Format for prompt inclusion
+            content = self.rlm_summarizer.format_for_prompt(context)
+            sources = [f"chat:{context.total_messages} messages"]
+
+            return StageResult(
+                content=content,
+                tokens_estimate=context.estimated_tokens,
+                sources=sources,
+            )
+
+        except Exception as e:
+            logger.warning("Failed to build history context: %s", e)
+            return None
 
 
 class RefinementStage(BaseStage):
