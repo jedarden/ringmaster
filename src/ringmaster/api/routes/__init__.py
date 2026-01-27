@@ -2,6 +2,7 @@
 
 from ringmaster.api.routes import (
     chat,
+    decisions,
     files,
     graph,
     input,
@@ -15,4 +16,4 @@ from ringmaster.api.routes import (
     ws,
 )
 
-__all__ = ["chat", "files", "graph", "input", "logs", "metrics", "projects", "queue", "tasks", "undo", "workers", "ws"]
+__all__ = ["chat", "decisions", "files", "graph", "input", "logs", "metrics", "projects", "queue", "tasks", "undo", "workers", "ws"]

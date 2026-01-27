@@ -496,6 +496,29 @@ Implemented shortcuts:
 - ✅ Iterative propagation until no changes (handles cycles)
 - ✅ 9 new tests for priority inheritance scenarios
 
+### Decision & Question API (`src/ringmaster/api/routes/decisions.py`)
+- ✅ Human-in-the-loop decision points that block task progress
+- ✅ Non-blocking clarification questions with urgency levels
+- ✅ Decision model: blocks_id, question, options, recommendation, resolution
+- ✅ Question model: related_id, question, urgency, default_answer, answer
+- ✅ Repository methods: create, get, list, resolve/answer
+- ✅ API endpoints:
+  - POST /api/decisions - Create decision (blocks task)
+  - GET /api/decisions - List decisions with filters
+  - GET /api/decisions/{id} - Get specific decision
+  - POST /api/decisions/{id}/resolve - Resolve with chosen option
+  - GET /api/decisions/for-task/{task_id} - Get decisions blocking a task
+  - GET /api/projects/{id}/decisions/stats - Decision statistics
+  - POST /api/questions - Create question (non-blocking)
+  - GET /api/questions - List questions with filters (ordered by urgency)
+  - GET /api/questions/{id} - Get specific question
+  - POST /api/questions/{id}/answer - Answer question
+  - GET /api/questions/for-task/{task_id} - Get questions for a task
+  - GET /api/projects/{id}/questions/stats - Question statistics
+- ✅ Event types: DECISION_CREATED, DECISION_RESOLVED, QUESTION_CREATED, QUESTION_ANSWERED
+- ✅ Task status transitions: BLOCKED when decision created, READY when resolved
+- ✅ 14 new integration tests
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
@@ -545,6 +568,7 @@ Implemented shortcuts:
 | 39 | 2026-01-27 | Add long-running task monitoring: WorkerMonitor class with heartbeat-based liveness detection (ACTIVE/THINKING/SLOW/LIKELY_HUNG), context degradation detection (repetition, apologies, retry loops), n-gram analysis for repetition scoring, recovery action recommendations, executor integration for real-time monitoring, 21 new tests, total 283 tests passing |
 | 40 | 2026-01-27 | Add worker output parsing with multi-signal detection: Outcome enum (SUCCESS, LIKELY_SUCCESS, FAILED, LIKELY_FAILED, NEEDS_DECISION, UNKNOWN), detect_outcome() with exit codes + markers + test results, SUCCESS_MARKERS, FAILURE_MARKERS, DECISION_MARKERS, blocked_reason field on Task model, outcome/outcome_confidence fields in metrics, migration 007, executor integration, 31 new tests, total 314 tests passing |
 | 41 | 2026-01-27 | Add priority inheritance for blocked task queues: blockers inherit priority from high-priority blocked tasks, transitive inheritance, completed/failed tasks excluded, only BLOCKED status triggers inheritance, prevents queue starvation, 9 new tests, total 323 tests passing |
+| 42 | 2026-01-27 | Add Decision & Question API for human-in-the-loop workflows: Decision model (blocks task), Question model (non-blocking), repository methods, 12 API endpoints for CRUD/resolve/answer, event types (DECISION_CREATED/RESOLVED, QUESTION_CREATED/ANSWERED), task blocking integration, 14 new tests, total 337 tests passing |
 
 ## Blockers
 

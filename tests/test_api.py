@@ -3113,3 +3113,433 @@ class TestUndoAPI:
         response = await client.get("/api/undo/history")
         data = response.json()
         assert len(data["actions"]) == 2
+
+
+class TestDecisionsAPI:
+    """Tests for the decisions API."""
+
+    async def _create_project_and_task(self, client: AsyncClient):
+        """Helper to create a project and task for decision tests."""
+        # Create project
+        response = await client.post(
+            "/api/projects",
+            json={"name": "Decision Test Project"},
+        )
+        project_id = response.json()["id"]
+
+        # Create task
+        response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Test Task",
+                "description": "A task that may need decisions",
+            },
+        )
+        task_id = response.json()["id"]
+
+        return project_id, task_id
+
+    async def test_create_decision(self, client: AsyncClient):
+        """Test creating a decision that blocks a task."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        response = await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Should we use PostgreSQL or MySQL?",
+                "context": "Database selection needed",
+                "options": ["PostgreSQL", "MySQL", "SQLite"],
+                "recommendation": "PostgreSQL",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["question"] == "Should we use PostgreSQL or MySQL?"
+        assert data["blocks_id"] == task_id
+        assert data["options"] == ["PostgreSQL", "MySQL", "SQLite"]
+        assert data["recommendation"] == "PostgreSQL"
+        assert data["resolution"] is None
+
+        # Verify task is now blocked
+        task_response = await client.get(f"/api/tasks/{task_id}")
+        assert task_response.json()["status"] == "blocked"
+
+    async def test_list_decisions(self, client: AsyncClient):
+        """Test listing decisions with filters."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        # Create two decisions
+        await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Decision 1?",
+                "options": ["A", "B"],
+            },
+        )
+        await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Decision 2?",
+                "options": ["X", "Y"],
+            },
+        )
+
+        # List all pending decisions
+        response = await client.get(f"/api/decisions?project_id={project_id}")
+        assert response.status_code == 200
+        decisions = response.json()
+        assert len(decisions) == 2
+
+        # List by blocks_id
+        response = await client.get(f"/api/decisions?blocks_id={task_id}")
+        assert len(response.json()) == 2
+
+    async def test_get_decision(self, client: AsyncClient):
+        """Test getting a specific decision."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        create_response = await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Which framework?",
+                "options": ["FastAPI", "Flask"],
+            },
+        )
+        decision_id = create_response.json()["id"]
+
+        response = await client.get(f"/api/decisions/{decision_id}")
+        assert response.status_code == 200
+        assert response.json()["question"] == "Which framework?"
+
+    async def test_resolve_decision(self, client: AsyncClient):
+        """Test resolving a decision."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        create_response = await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Deploy to cloud?",
+                "options": ["AWS", "GCP", "Azure"],
+            },
+        )
+        decision_id = create_response.json()["id"]
+
+        # Resolve the decision
+        response = await client.post(
+            f"/api/decisions/{decision_id}/resolve",
+            json={"resolution": "AWS"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["resolution"] == "AWS"
+        assert data["resolved_at"] is not None
+
+        # Verify task is unblocked
+        task_response = await client.get(f"/api/tasks/{task_id}")
+        assert task_response.json()["status"] == "ready"
+
+    async def test_resolve_already_resolved_decision(self, client: AsyncClient):
+        """Test that resolving an already resolved decision fails."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        create_response = await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Deploy to cloud?",
+                "options": ["AWS", "GCP"],
+            },
+        )
+        decision_id = create_response.json()["id"]
+
+        # Resolve first time
+        await client.post(
+            f"/api/decisions/{decision_id}/resolve",
+            json={"resolution": "AWS"},
+        )
+
+        # Try to resolve again
+        response = await client.post(
+            f"/api/decisions/{decision_id}/resolve",
+            json={"resolution": "GCP"},
+        )
+        assert response.status_code == 400
+        assert "already resolved" in response.json()["detail"]
+
+    async def test_get_decisions_for_task(self, client: AsyncClient):
+        """Test getting decisions blocking a specific task."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Decision A?",
+            },
+        )
+
+        response = await client.get(f"/api/decisions/for-task/{task_id}")
+        assert response.status_code == 200
+        assert len(response.json()) >= 1
+
+    async def test_decision_stats(self, client: AsyncClient):
+        """Test getting decision statistics."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        # Create and resolve one decision
+        create_response = await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Resolved decision?",
+            },
+        )
+        await client.post(
+            f"/api/decisions/{create_response.json()['id']}/resolve",
+            json={"resolution": "Yes"},
+        )
+
+        # Create another pending decision
+        await client.post(
+            "/api/decisions",
+            json={
+                "project_id": project_id,
+                "blocks_id": task_id,
+                "question": "Pending decision?",
+            },
+        )
+
+        response = await client.get(f"/api/projects/{project_id}/decisions/stats")
+        assert response.status_code == 200
+        stats = response.json()
+        assert stats["total"] == 2
+        assert stats["resolved"] == 1
+        assert stats["pending"] == 1
+
+
+class TestQuestionsAPI:
+    """Tests for the questions API."""
+
+    async def _create_project_and_task(self, client: AsyncClient):
+        """Helper to create a project and task for question tests."""
+        # Create project
+        response = await client.post(
+            "/api/projects",
+            json={"name": "Question Test Project"},
+        )
+        project_id = response.json()["id"]
+
+        # Create task
+        response = await client.post(
+            "/api/tasks",
+            json={
+                "project_id": project_id,
+                "title": "Test Task",
+                "description": "A task with questions",
+            },
+        )
+        task_id = response.json()["id"]
+
+        return project_id, task_id
+
+    async def test_create_question(self, client: AsyncClient):
+        """Test creating a question."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        response = await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "What is the expected date format?",
+                "urgency": "high",
+                "default_answer": "ISO 8601",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["question"] == "What is the expected date format?"
+        assert data["related_id"] == task_id
+        assert data["urgency"] == "high"
+        assert data["default_answer"] == "ISO 8601"
+        assert data["answer"] is None
+
+    async def test_list_questions(self, client: AsyncClient):
+        """Test listing questions with filters."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        # Create questions with different urgency
+        await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "High urgency question?",
+                "urgency": "high",
+            },
+        )
+        await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "Low urgency question?",
+                "urgency": "low",
+            },
+        )
+
+        response = await client.get(f"/api/questions?project_id={project_id}")
+        assert response.status_code == 200
+        questions = response.json()
+        assert len(questions) == 2
+        # High urgency should come first
+        assert questions[0]["urgency"] == "high"
+
+    async def test_get_question(self, client: AsyncClient):
+        """Test getting a specific question."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        create_response = await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "What encoding to use?",
+            },
+        )
+        question_id = create_response.json()["id"]
+
+        response = await client.get(f"/api/questions/{question_id}")
+        assert response.status_code == 200
+        assert response.json()["question"] == "What encoding to use?"
+
+    async def test_answer_question(self, client: AsyncClient):
+        """Test answering a question."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        create_response = await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "Max file size limit?",
+            },
+        )
+        question_id = create_response.json()["id"]
+
+        # Answer the question
+        response = await client.post(
+            f"/api/questions/{question_id}/answer",
+            json={"answer": "10MB"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["answer"] == "10MB"
+        assert data["answered_at"] is not None
+
+    async def test_answer_already_answered_question(self, client: AsyncClient):
+        """Test that answering an already answered question fails."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        create_response = await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "Max connections?",
+            },
+        )
+        question_id = create_response.json()["id"]
+
+        # Answer first time
+        await client.post(
+            f"/api/questions/{question_id}/answer",
+            json={"answer": "100"},
+        )
+
+        # Try to answer again
+        response = await client.post(
+            f"/api/questions/{question_id}/answer",
+            json={"answer": "200"},
+        )
+        assert response.status_code == 400
+        assert "already answered" in response.json()["detail"]
+
+    async def test_get_questions_for_task(self, client: AsyncClient):
+        """Test getting questions related to a specific task."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "Question A?",
+            },
+        )
+
+        response = await client.get(f"/api/questions/for-task/{task_id}")
+        assert response.status_code == 200
+        assert len(response.json()) >= 1
+
+    async def test_question_stats(self, client: AsyncClient):
+        """Test getting question statistics."""
+        project_id, task_id = await self._create_project_and_task(client)
+
+        # Create and answer one question
+        create_response = await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "Answered question?",
+                "urgency": "low",
+            },
+        )
+        await client.post(
+            f"/api/questions/{create_response.json()['id']}/answer",
+            json={"answer": "Yes"},
+        )
+
+        # Create pending questions with different urgency
+        await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "High pending?",
+                "urgency": "high",
+            },
+        )
+        await client.post(
+            "/api/questions",
+            json={
+                "project_id": project_id,
+                "related_id": task_id,
+                "question": "Medium pending?",
+                "urgency": "medium",
+            },
+        )
+
+        response = await client.get(f"/api/projects/{project_id}/questions/stats")
+        assert response.status_code == 200
+        stats = response.json()
+        assert stats["total"] == 3
+        assert stats["answered"] == 1
+        assert stats["pending"] == 2
+        assert stats["by_urgency"]["high"] == 1
+        assert stats["by_urgency"]["medium"] == 1

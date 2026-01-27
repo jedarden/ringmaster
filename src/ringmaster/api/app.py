@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from ringmaster.api.routes import (
     chat,
+    decisions,
     files,
     graph,
     input,
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(input.router, prefix="/api/input", tags=["input"])
     app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
     app.include_router(graph.router, prefix="/api/graph", tags=["graph"])
+    app.include_router(decisions.router, prefix="/api", tags=["decisions"])
     app.include_router(undo.router, tags=["undo"])  # Already has /api/undo prefix
     app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 

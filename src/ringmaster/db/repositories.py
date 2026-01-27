@@ -13,11 +13,13 @@ from ringmaster.domain import (
     ActionType,
     ActorType,
     ChatMessage,
+    Decision,
     Dependency,
     EntityType,
     Epic,
     Priority,
     Project,
+    Question,
     Subtask,
     Summary,
     Task,
@@ -383,6 +385,213 @@ class TaskRepository:
                 on_critical_path=bool(row["on_critical_path"]),
                 combined_priority=row["combined_priority"],
             )
+
+    # --- Decision methods ---
+
+    async def create_decision(self, decision: Decision, project_id: UUID) -> Decision:
+        """Create a new decision that blocks a task."""
+        await self.db.execute(
+            """
+            INSERT INTO tasks (
+                id, project_id, type, title, description, status, blocks_id,
+                question, options, recommendation, created_at, updated_at
+            )
+            VALUES (?, ?, 'decision', ?, ?, 'ready', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                decision.id,
+                str(project_id),
+                f"Decision: {decision.question[:50]}...",  # Title
+                decision.context,  # Description
+                decision.blocks_id,
+                decision.question,
+                json.dumps(decision.options),
+                decision.recommendation,
+                decision.created_at.isoformat(),
+                decision.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        return decision
+
+    async def get_decision(self, decision_id: str) -> Decision | None:
+        """Get a decision by ID."""
+        row = await self.db.fetchone(
+            "SELECT * FROM tasks WHERE id = ? AND type = 'decision'", (decision_id,)
+        )
+        if not row:
+            return None
+        return self._row_to_decision(row)
+
+    async def list_decisions(
+        self,
+        project_id: UUID | None = None,
+        blocks_id: str | None = None,
+        pending_only: bool = True,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Decision]:
+        """List decisions with optional filters."""
+        conditions = ["type = 'decision'"]
+        params: list[Any] = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+        if blocks_id:
+            conditions.append("blocks_id = ?")
+            params.append(blocks_id)
+        if pending_only:
+            conditions.append("resolution IS NULL")
+
+        query = f"""
+            SELECT * FROM tasks
+            WHERE {' AND '.join(conditions)}
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self._row_to_decision(row) for row in rows]
+
+    async def resolve_decision(
+        self, decision_id: str, resolution: str
+    ) -> Decision | None:
+        """Resolve a decision with the chosen option."""
+        resolved_at = datetime.now(UTC).isoformat()
+        cursor = await self.db.execute(
+            """
+            UPDATE tasks SET
+                resolution = ?, resolved_at = ?, status = 'done', updated_at = ?
+            WHERE id = ? AND type = 'decision' AND resolution IS NULL
+            """,
+            (resolution, resolved_at, resolved_at, decision_id),
+        )
+        await self.db.commit()
+
+        if cursor.rowcount == 0:
+            return None
+
+        return await self.get_decision(decision_id)
+
+    def _row_to_decision(self, row: Any) -> Decision:
+        """Convert a database row to a Decision."""
+        return Decision(
+            id=row["id"],
+            blocks_id=row["blocks_id"] or "",
+            question=row["question"] or "",
+            context=row["description"],
+            options=json.loads(row["options"]) if row["options"] else [],
+            recommendation=row["recommendation"],
+            resolution=row["resolution"],
+            resolved_at=datetime.fromisoformat(row["resolved_at"]) if row["resolved_at"] else None,
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
+
+    # --- Question methods ---
+
+    async def create_question(self, question: Question, project_id: UUID) -> Question:
+        """Create a new question related to a task."""
+        await self.db.execute(
+            """
+            INSERT INTO tasks (
+                id, project_id, type, title, description, status, related_id,
+                question, urgency, default_answer, created_at, updated_at
+            )
+            VALUES (?, ?, 'question', ?, ?, 'ready', ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                question.id,
+                str(project_id),
+                f"Question: {question.question[:50]}...",  # Title
+                None,  # Description
+                question.related_id,
+                question.question,
+                question.urgency,
+                question.default_answer,
+                question.created_at.isoformat(),
+                question.created_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        return question
+
+    async def get_question(self, question_id: str) -> Question | None:
+        """Get a question by ID."""
+        row = await self.db.fetchone(
+            "SELECT * FROM tasks WHERE id = ? AND type = 'question'", (question_id,)
+        )
+        if not row:
+            return None
+        return self._row_to_question(row)
+
+    async def list_questions(
+        self,
+        project_id: UUID | None = None,
+        related_id: str | None = None,
+        pending_only: bool = True,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[Question]:
+        """List questions with optional filters."""
+        conditions = ["type = 'question'"]
+        params: list[Any] = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+        if related_id:
+            conditions.append("related_id = ?")
+            params.append(related_id)
+        if pending_only:
+            conditions.append("answer IS NULL")
+
+        query = f"""
+            SELECT * FROM tasks
+            WHERE {' AND '.join(conditions)}
+            ORDER BY
+                CASE urgency WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                created_at DESC
+            LIMIT ? OFFSET ?
+        """
+        params.extend([limit, offset])
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self._row_to_question(row) for row in rows]
+
+    async def answer_question(
+        self, question_id: str, answer: str
+    ) -> Question | None:
+        """Answer a question."""
+        answered_at = datetime.now(UTC).isoformat()
+        cursor = await self.db.execute(
+            """
+            UPDATE tasks SET
+                answer = ?, answered_at = ?, status = 'done', updated_at = ?
+            WHERE id = ? AND type = 'question' AND answer IS NULL
+            """,
+            (answer, answered_at, answered_at, question_id),
+        )
+        await self.db.commit()
+
+        if cursor.rowcount == 0:
+            return None
+
+        return await self.get_question(question_id)
+
+    def _row_to_question(self, row: Any) -> Question:
+        """Convert a database row to a Question."""
+        return Question(
+            id=row["id"],
+            related_id=row["related_id"] or "",
+            question=row["question"] or "",
+            urgency=row["urgency"] or "medium",
+            default_answer=row["default_answer"],
+            answer=row["answer"],
+            answered_at=datetime.fromisoformat(row["answered_at"]) if row["answered_at"] else None,
+            created_at=datetime.fromisoformat(row["created_at"]),
+        )
 
 
 class WorkerRepository:
