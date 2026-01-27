@@ -423,10 +423,19 @@ Implemented shortcuts:
 - ✅ Project-scoped action filtering
 - ✅ 7 new integration tests
 
+### Frontend Undo UI (`frontend/src/hooks/useUndo.ts`, `frontend/src/components/Toast.tsx`)
+- ✅ useUndo hook for managing undo/redo state
+- ✅ Toast component for notification feedback
+- ✅ useToast hook with success/error/info methods
+- ✅ Cmd+Z keyboard shortcut for undo
+- ✅ Cmd+Shift+Z keyboard shortcut for redo
+- ✅ WebSocket refresh on undo/redo events
+- ✅ API client functions (performUndo, performRedo, getUndoHistory)
+- ✅ TypeScript types for undo/redo responses
+
 ## Next Steps
 
 1. **Real Worker Test**: Connect to actual Claude Code CLI in development environment
-2. **Frontend Undo UI**: Add Cmd+Z/Cmd+Shift+Z keyboard shortcuts connected to undo/redo API
 
 ## Iteration Log
 
@@ -466,6 +475,7 @@ Implemented shortcuts:
 | 32 | 2026-01-27 | Add interactive graph editing: drag-to-create dependencies via connector (+) points, right-click context menu to delete edges, DELETE dependency endpoint, visual feedback during drag, instructions bar, error notifications, 2 new tests, total 242 tests passing |
 | 33 | 2026-01-27 | Add keyboard shortcuts: useKeyboardShortcuts hook with sequence support (g m, g a), useListNavigation for j/k, CommandPalette (Cmd+K), ShortcutsHelp modal (?), pending sequence indicator, ProjectsPage/WorkersPage with j/k navigation |
 | 34 | 2026-01-27 | Add undo/redo system: Action domain model, ActionRepository, undo API routes, action_history migration, UNDO/REDO events, 7 new tests, total 249 tests passing |
+| 35 | 2026-01-27 | Add frontend undo UI: Cmd+Z/Cmd+Shift+Z keyboard shortcuts, useUndo hook, Toast notification component, undo/redo API client functions, WebSocket event refresh |
 
 ## Blockers
 
