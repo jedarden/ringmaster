@@ -828,6 +828,7 @@ Implemented shortcuts:
 | 63 | 2026-01-27 | Add DocumentationContextStage for project documentation: per docs/04-context-enrichment.md section 3, enrichment pipeline now includes README, coding conventions, ADRs (filtered by relevance), API specs (for API tasks), and architecture docs; keyword-based ADR filtering; 9-layer pipeline; 19 new tests, total 517 tests passing |
 | 64 | 2026-01-27 | Add Context Assembly observability: ContextAssemblyLog domain model, migration 010, ContextAssemblyLogRepository with CRUD and stats queries, EnrichmentPipeline logs assembly metrics (timing, tokens, stages), /api/enricher routes for logs/stats/budget-alerts, cleanup endpoint; enables debugging and analysis of enrichment pipeline per docs/04-context-enrichment.md; 22 new tests, total 539 tests passing |
 | 65 | 2026-01-27 | Code cleanup: fix linting errors in test_documentation_context.py (remove unused tempfile import and unused variable), remove stale TODO comment from enricher pipeline (code context already implemented via CodeContextExtractor); all 539 tests passing |
+| 66 | 2026-01-27 | Make worktree base branch configurable per project: uses project.settings.get("base_branch", "main") allowing projects to specify their default branch (e.g., "master", "develop"); all 539 tests passing |
 
 ## Blockers
 
