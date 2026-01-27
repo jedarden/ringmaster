@@ -57,7 +57,7 @@ The Python-based implementation is now functional with all core components in pl
   - Executor integration: writes to buffer and emits events
 
 ### Enricher (`src/ringmaster/enricher/`)
-- ✅ 8-layer prompt assembly pipeline
+- ✅ 9-layer prompt assembly pipeline
 - ✅ Stage-based architecture
 - ✅ Context hash for deduplication
 - ✅ RLM summarization with hierarchical compression
@@ -71,6 +71,13 @@ The Python-based implementation is now functional with all core components in pl
   - GitHub Actions run status via gh CLI
   - Task relevance scoring for deployment keywords
   - Token budgeting with file limits
+- ✅ **Documentation context extraction** (per docs/04-context-enrichment.md section 3)
+  - README files (always included)
+  - Coding conventions and .editorconfig
+  - Architecture Decision Records (ADRs) filtered by relevance
+  - API specifications (when task is API-related)
+  - Architecture documentation (when task is architecture-related)
+  - Token budgeting with file truncation
 - ✅ **Logs context extraction** (per docs/04-context-enrichment.md section 6)
   - Keyword-based debugging task detection (error, bug, fix, crash, etc.)
   - Task-specific logs (matching task_id)
@@ -811,6 +818,7 @@ Implemented shortcuts:
 | 60 | 2026-01-27 | Add worker health monitoring API: GET /api/workers/{id}/health endpoint exposing liveness status, degradation signals, and recovery recommendations from WorkerMonitor; 5 new tests, total 467 tests passing |
 | 61 | 2026-01-27 | Add LogsContextStage for debugging task context: per docs/04-context-enrichment.md section 6, enrichment pipeline now includes relevant logs for debugging-related tasks; keyword-based task detection (error, bug, fix, crash, etc.); fetches task-specific logs and project-level error/critical logs from last 24h; includes stack traces and error details; token budgeting with truncation; 14 new tests, total 481 tests passing |
 | 62 | 2026-01-27 | Add ResearchContextStage for prior agent outputs: per docs/04-context-enrichment.md section 2, enrichment pipeline now includes related completed task summaries; keyword-based relevance scoring with Jaccard similarity; queries session_metrics for output_summary from completed tasks; falls back to task description; token budgeting with truncation; 8-layer pipeline (task, project, code, deployment, history, logs, research, refinement); 17 new tests, total 498 tests passing |
+| 63 | 2026-01-27 | Add DocumentationContextStage for project documentation: per docs/04-context-enrichment.md section 3, enrichment pipeline now includes README, coding conventions, ADRs (filtered by relevance), API specs (for API tasks), and architecture docs; keyword-based ADR filtering; 9-layer pipeline; 19 new tests, total 517 tests passing |
 
 ## Blockers
 
