@@ -8,6 +8,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ringmaster.api.deps import get_db
@@ -352,4 +353,41 @@ async def get_uploaded_file(
         size=stat.st_size,
         mime_type=mime_type,
         media_type=get_media_type(mime_type),
+    )
+
+
+@router.get("/projects/{project_id}/uploads/{filename}/download")
+async def download_uploaded_file(
+    project_id: UUID,
+    filename: str,
+) -> FileResponse:
+    """Download an uploaded file.
+
+    Returns the actual file content with appropriate Content-Type header.
+    The Content-Disposition header is set to suggest the original filename.
+    """
+    file_path = UPLOAD_DIR / str(project_id) / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Security: ensure path is within upload directory
+    try:
+        file_path.resolve().relative_to((UPLOAD_DIR / str(project_id)).resolve())
+    except ValueError as err:
+        raise HTTPException(status_code=403, detail="Access denied") from err
+
+    # Determine MIME type
+    mime_type, _ = mimetypes.guess_type(str(file_path))
+    mime_type = mime_type or "application/octet-stream"
+
+    # Extract original filename from stored filename
+    # Format: {timestamp}_{hash}_{original_filename}
+    parts = filename.split("_", 2)
+    original_filename = parts[2] if len(parts) >= 3 else filename
+
+    return FileResponse(
+        path=file_path,
+        media_type=mime_type,
+        filename=original_filename,
     )

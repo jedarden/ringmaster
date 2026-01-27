@@ -1066,6 +1066,109 @@ class TestFileUploadAPI:
         )
         assert response.status_code == 404
 
+    async def test_download_uploaded_file(self, client: AsyncClient):
+        """Test downloading an uploaded file."""
+        import contextlib
+        import io
+        from pathlib import Path
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Download Test Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Upload a file
+        content = b"Hello, World! This is a test file."
+        files = {"file": ("hello.txt", io.BytesIO(content), "text/plain")}
+
+        upload_response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert upload_response.status_code == 201
+        upload_data = upload_response.json()
+
+        # Extract filename from path
+        filename = Path(upload_data["path"]).name
+
+        # Download the file
+        download_response = await client.get(
+            f"/api/chat/projects/{project_id}/uploads/{filename}/download"
+        )
+        assert download_response.status_code == 200
+        assert download_response.content == content
+        assert download_response.headers["content-type"] == "text/plain; charset=utf-8"
+        # Check Content-Disposition header for original filename
+        assert "hello.txt" in download_response.headers.get("content-disposition", "")
+
+        # Clean up
+        with contextlib.suppress(FileNotFoundError):
+            Path(upload_data["path"]).unlink()
+
+    async def test_download_uploaded_file_not_found(self, client: AsyncClient):
+        """Test downloading a non-existent file returns 404."""
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Download Not Found Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        response = await client.get(
+            f"/api/chat/projects/{project_id}/uploads/nonexistent.txt/download"
+        )
+        assert response.status_code == 404
+
+    async def test_download_uploaded_binary_file(self, client: AsyncClient):
+        """Test downloading a binary file (image)."""
+        import contextlib
+        import io
+        from pathlib import Path
+
+        # Create project
+        project_response = await client.post(
+            "/api/projects", json={"name": "Binary Download Project"}
+        )
+        project_id = project_response.json()["id"]
+
+        # Minimal PNG (1x1 transparent pixel)
+        png_data = bytes([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,  # IDAT chunk
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,  # IEND chunk
+            0x42, 0x60, 0x82,
+        ])
+        files = {"file": ("image.png", io.BytesIO(png_data), "image/png")}
+
+        upload_response = await client.post(
+            f"/api/chat/projects/{project_id}/upload",
+            files=files,
+        )
+        assert upload_response.status_code == 201
+        upload_data = upload_response.json()
+
+        # Extract filename from path
+        filename = Path(upload_data["path"]).name
+
+        # Download the file
+        download_response = await client.get(
+            f"/api/chat/projects/{project_id}/uploads/{filename}/download"
+        )
+        assert download_response.status_code == 200
+        assert download_response.content == png_data
+        assert download_response.headers["content-type"] == "image/png"
+        # Check original filename in content-disposition
+        assert "image.png" in download_response.headers.get("content-disposition", "")
+
+        # Clean up
+        with contextlib.suppress(FileNotFoundError):
+            Path(upload_data["path"]).unlink()
+
 
 class TestFileBrowserAPI:
     """Tests for file browser API."""
@@ -1807,6 +1910,7 @@ class TestLogsAPI:
     async def test_create_log_emits_websocket_event(self, client: AsyncClient):
         """Test that creating a log emits a WebSocket event."""
         import asyncio
+
         from ringmaster.events import event_bus
         from ringmaster.events.types import EventType
 
@@ -1854,6 +1958,7 @@ class TestLogsAPI:
     ):
         """Test that log events include project_id for filtering."""
         import asyncio
+
         from ringmaster.events import event_bus
         from ringmaster.events.types import EventType
 

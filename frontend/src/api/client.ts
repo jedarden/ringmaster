@@ -470,6 +470,48 @@ export async function getUploadedFileMetadata(
   return handleResponse<FileUploadResponse>(response);
 }
 
+/**
+ * Download an uploaded file.
+ * Returns the file URL for direct download. Use this to trigger browser downloads.
+ */
+export function getDownloadUrl(projectId: string, filename: string): string {
+  return `${API_BASE}/chat/projects/${projectId}/uploads/${encodeURIComponent(filename)}/download`;
+}
+
+/**
+ * Download an uploaded file as a Blob.
+ * Useful when you need to process the file content in JavaScript.
+ */
+export async function downloadFile(
+  projectId: string,
+  filename: string
+): Promise<Blob> {
+  const response = await fetch(getDownloadUrl(projectId, filename));
+  if (!response.ok) {
+    throw new ApiError(
+      response.status,
+      response.statusText,
+      `Failed to download file: ${filename}`
+    );
+  }
+  return response.blob();
+}
+
+/**
+ * Trigger browser download for an uploaded file.
+ * Opens the file in a new tab or triggers the download dialog.
+ */
+export function triggerDownload(projectId: string, filename: string): void {
+  const url = getDownloadUrl(projectId, filename);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.target = "_blank";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
 // File Browser API
 
 export async function listDirectory(
