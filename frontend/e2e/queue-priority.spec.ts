@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
 import {
   createTestProject,
   createTestTask,
@@ -51,7 +52,7 @@ test.describe('Queue & Priority', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/queue');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
   });
 
   test('should display queue page', async ({ page }) => {
@@ -72,7 +73,7 @@ test.describe('Queue & Priority', () => {
 
     // Reload page to see the task
     await page.goto('/queue');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Should see the queue page (tasks might be in a list or card format)
     await expect(page.getByRole('heading', { name: /queue/i })).toBeVisible();
@@ -94,7 +95,7 @@ test.describe('Queue & Priority', () => {
 
     // Reload page
     await page.goto('/queue');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Queue page should be visible
     await expect(page.getByRole('heading', { name: /queue/i })).toBeVisible();
@@ -115,7 +116,7 @@ test.describe('Queue & Priority', () => {
 
     // Reload page
     await page.goto('/queue');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // If there are ready tasks, clicking one should navigate to project
     // Since we just created data, let's just verify queue page loads

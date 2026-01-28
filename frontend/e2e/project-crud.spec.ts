@@ -5,6 +5,7 @@ import {
   cleanupTestProjects,
   waitForBackend,
 } from './helpers/test-api';
+import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
 
 /**
  * E2E tests for Project CRUD operations
@@ -23,9 +24,9 @@ test.describe('Project CRUD', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    // Navigate to the projects page
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Navigate to the projects page using robust navigation
+    await navigateWithRetry(page, '/');
+    await waitForPageStability(page);
   });
 
   test('should display projects mailbox', async ({ page }) => {
@@ -67,9 +68,9 @@ test.describe('Project CRUD', () => {
       name: `Detail Test Project ${Date.now()}`,
     });
 
-    // Reload page to see the new project
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Reload page to see the new project using robust navigation
+    await navigateWithRetry(page, '/');
+    await waitForPageStability(page);
 
     // Click on the project card
     const projectCard = page.locator('.project-card').filter({ hasText: project.name });
@@ -89,9 +90,9 @@ test.describe('Project CRUD', () => {
       name: `Kanban Test Project ${Date.now()}`,
     });
 
-    // Navigate directly to the project page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    // Navigate directly to the project page using robust navigation
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Should see kanban board columns (at least some columns should be visible)
     const kanbanColumns = page.locator('.kanban-column');
@@ -107,9 +108,9 @@ test.describe('Project CRUD', () => {
       name: `Summary Test Project ${Date.now()}`,
     });
 
-    // Navigate to the project page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    // Navigate to the project page using robust navigation
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Should see project header with project name
     await expect(page.getByRole('heading', { name: new RegExp(project.name, 'i') })).toBeVisible();

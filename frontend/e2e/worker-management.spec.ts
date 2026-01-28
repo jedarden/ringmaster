@@ -5,6 +5,7 @@ import {
   waitForBackend,
 } from './helpers/test-api';
 
+import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
 /**
  * E2E tests for Worker Management
  * Tests viewing workers, spawning workers, and monitoring worker status
@@ -23,7 +24,7 @@ test.describe('Worker Management', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto('/workers');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
   });
 
   test('should display workers dashboard', async ({ page }) => {
@@ -40,7 +41,7 @@ test.describe('Worker Management', () => {
 
     // Reload page to see the worker
     await page.goto('/workers');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Should see worker cards (at least the one we created)
     const workerCards = page.locator('.worker-card');
@@ -56,7 +57,7 @@ test.describe('Worker Management', () => {
 
     // Reload page
     await page.goto('/workers');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Worker cards should show status
     const workerCard = page.locator('.worker-card').first();
@@ -78,7 +79,7 @@ test.describe('Worker Management', () => {
 
     // Reload page
     await page.goto('/workers');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Should see worker card
     const workerCard = page.locator('.worker-card').first();
@@ -111,7 +112,7 @@ test.describe('Worker Management', () => {
 
     // Reload page
     await page.goto('/workers');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Check if there are active workers
     const activeWorkers = page.locator('.worker-card.busy');
@@ -132,7 +133,7 @@ test.describe('Worker Management', () => {
 
     // Reload page
     await page.goto('/workers');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Find a busy worker
     const busyWorker = page.locator('.worker-card.busy').first();

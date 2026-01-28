@@ -4,10 +4,11 @@ import { test, expect } from '@playwright/test';
  * E2E tests for Real-time Updates
  * Tests WebSocket integration for live updates
  */
+import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
 test.describe('Real-time Updates', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
   });
 
   test('should show WebSocket connection status', async ({ page }) => {
@@ -23,7 +24,7 @@ test.describe('Real-time Updates', () => {
 
   test('should update metrics dashboard in real-time', async ({ page }) => {
     await page.goto('/metrics');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Should see metrics page
     await expect(page.getByRole('heading', { name: /metrics/i })).toBeVisible();
@@ -35,7 +36,7 @@ test.describe('Real-time Updates', () => {
 
   test('should display logs viewer with live mode', async ({ page }) => {
     await page.goto('/logs');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Should see logs page
     await expect(page.getByRole('heading', { name: /logs/i })).toBeVisible();
@@ -51,7 +52,7 @@ test.describe('Real-time Updates', () => {
 
   test('should show recent events timeline', async ({ page }) => {
     await page.goto('/metrics');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
 
     // Should see metrics page
     await expect(page.getByRole('heading', { name: /metrics/i })).toBeVisible();
@@ -67,7 +68,7 @@ test.describe('Real-time Updates', () => {
 
     for (const path of pages) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      await waitForPageStability(page);
 
       // Should see page content
       await expect(page.locator('main, [role="main"], .container').first()).toBeVisible({ timeout: 5000 });

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 /**
+import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
  * E2E tests for Keyboard Shortcuts
  * Tests keyboard navigation and command palette functionality
  *
@@ -11,7 +12,7 @@ import { test, expect } from '@playwright/test';
 test.describe.skip('Keyboard Shortcuts', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await waitForPageStability(page);
   });
 
   test('should open command palette with Cmd+K', async ({ page }) => {

@@ -6,6 +6,7 @@ import {
   cleanupTestProjects,
   waitForBackend,
 } from './helpers/test-api';
+import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
 
 /**
  * Helper to clean up test tasks (not in test-api.ts to avoid circular deps)
@@ -44,9 +45,9 @@ test.describe('Task Management', () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    // Navigate to projects page
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    // Navigate to projects page using robust navigation
+    await navigateWithRetry(page, '/');
+    await waitForPageStability(page);
   });
 
   test('should display task input component', async ({ page }) => {
@@ -56,8 +57,8 @@ test.describe('Task Management', () => {
     });
 
     // Navigate to project detail page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Should see the task input area
     await expect(page.locator('textarea[placeholder*="Enter a task"]')).toBeVisible();
@@ -73,8 +74,8 @@ test.describe('Task Management', () => {
     });
 
     // Navigate to project detail page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Type a task description
     const taskTitle = 'Add user authentication feature';
@@ -101,8 +102,8 @@ test.describe('Task Management', () => {
     });
 
     // Navigate to project detail page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Find the task card in ready column
     const taskCard = page.locator('.kanban-column.ready .task-card').filter({ hasText: task.title });
@@ -132,8 +133,8 @@ test.describe('Task Management', () => {
     });
 
     // Navigate to project detail page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Click on a task card
     const taskCard = page.locator('.task-card').filter({ hasText: task.title });
@@ -157,8 +158,8 @@ test.describe('Task Management', () => {
     });
 
     // Navigate to project detail page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Should see complexity badge on at least one task card
     const taskCards = page.locator('.task-card');
@@ -184,8 +185,8 @@ test.describe('Task Management', () => {
     });
 
     // Navigate to project detail page
-    await page.goto(`/projects/${project.id}`);
-    await page.waitForLoadState('networkidle');
+    await navigateWithRetry(page, `/projects/${project.id}`);
+    await waitForPageStability(page);
 
     // Find task in in-progress column
     const inProgressTasks = page.locator('.kanban-column.in-progress .task-card');
