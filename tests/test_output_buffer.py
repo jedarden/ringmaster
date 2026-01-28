@@ -157,3 +157,59 @@ class TestWorkerOutputBuffer:
         # Check that overflow tracking was initialized
         assert "new-worker" in buffer._overflow_warnings
         assert buffer._overflow_warnings["new-worker"] is False
+
+    async def test_get_buffer_stats_return_type(self):
+        """Test that get_buffer_stats returns dict[str, dict[str, int]] as type hinted."""
+        buffer = WorkerOutputBuffer(max_lines=10)
+
+        # Test with empty buffer
+        stats = buffer.get_buffer_stats()
+        assert isinstance(stats, dict)
+        assert stats == {}
+
+        # Add some data for multiple workers
+        await buffer.write("worker-1", "Line 1")
+        await buffer.write("worker-1", "Line 2")
+        await buffer.write("worker-2", "Line A")
+
+        # Subscribe to one worker
+        await buffer.subscribe("worker-1", "sub-1")
+
+        # Get stats and verify structure and types
+        stats = buffer.get_buffer_stats()
+        assert isinstance(stats, dict)
+        assert len(stats) == 2
+
+        # Check worker-1 stats
+        worker1_stats = stats["worker-1"]
+        assert isinstance(worker1_stats, dict)
+        assert len(worker1_stats) == 4
+
+        # Verify all values are integers as type hinted
+        assert isinstance(worker1_stats["line_count"], int)
+        assert isinstance(worker1_stats["max_lines"], int)
+        assert isinstance(worker1_stats["total_lines"], int)
+        assert isinstance(worker1_stats["subscriber_count"], int)
+
+        # Verify actual values
+        assert worker1_stats["line_count"] == 2
+        assert worker1_stats["max_lines"] == 10
+        assert worker1_stats["total_lines"] == 2
+        assert worker1_stats["subscriber_count"] == 1
+
+        # Check worker-2 stats
+        worker2_stats = stats["worker-2"]
+        assert isinstance(worker2_stats, dict)
+        assert len(worker2_stats) == 4
+
+        # Verify all values are integers as type hinted
+        assert isinstance(worker2_stats["line_count"], int)
+        assert isinstance(worker2_stats["max_lines"], int)
+        assert isinstance(worker2_stats["total_lines"], int)
+        assert isinstance(worker2_stats["subscriber_count"], int)
+
+        # Verify actual values
+        assert worker2_stats["line_count"] == 1
+        assert worker2_stats["max_lines"] == 10
+        assert worker2_stats["total_lines"] == 1
+        assert worker2_stats["subscriber_count"] == 0

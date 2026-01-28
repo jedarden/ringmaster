@@ -151,7 +151,7 @@ class WorkerOutputBuffer:
                 self._buffers[worker_id].clear()
                 self._line_counters[worker_id] = 0
 
-    def get_buffer_stats(self) -> dict[str, dict]:
+    def get_buffer_stats(self) -> dict[str, dict[str, int]]:
         """Get statistics about current buffers.
 
         Returns:
