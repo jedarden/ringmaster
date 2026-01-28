@@ -15,6 +15,7 @@ This is designed to be safe and reversible:
 
 import contextlib
 import json
+import logging
 import os
 import platform
 import shutil
@@ -28,6 +29,8 @@ from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Final
+
+logger = logging.getLogger(__name__)
 
 # GitHub repository for releases
 GITHUB_REPO: Final = "jedarden/ringmaster"
@@ -97,15 +100,16 @@ def get_current_version() -> str:
             content = pyproject.read_text()
             data = tomli.loads(content)
             return data.get("project", {}).get("version", "0.1.0-dev")
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to read pyproject.toml: %s: %s", type(e).__name__, e)
 
     # Fallback to version from import
     try:
         import ringmaster
 
         return getattr(ringmaster, "__version__", "0.1.0-dev")
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to import ringmaster version: %s: %s", type(e).__name__, e)
         return "0.1.0-dev"
 
 
@@ -121,8 +125,8 @@ def _load_state() -> dict:
     if state_file.exists():
         try:
             return json.loads(state_file.read_text())
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("Failed to read JSON state file: %s: %s", type(e).__name__, e)
     return {}
 
 
@@ -212,8 +216,9 @@ def _fetch_github_release() -> ReleaseInfo | None:
                 prerelease=data.get("prerelease", False),
             )
 
-    except Exception:
+    except Exception as e:
         # Silently fail - network issues are common
+        logger.debug("Failed to fetch GitHub release: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -251,8 +256,8 @@ def check_for_updates(force: bool = False) -> SelfUpdateResult:
                         latest_version=cached_latest,
                         message="Ringmaster is up to date",
                     )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to parse cached update check date: %s: %s", type(e).__name__, e)
 
     # Fetch from GitHub
     release = _fetch_github_release()
@@ -334,7 +339,8 @@ def download_update(version: str | None = None) -> Path | None:
 
             return Path(tmp.name)
 
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to download update: %s: %s", type(e).__name__, e)
         return None
 
 
@@ -426,8 +432,9 @@ def restart_with_new_version(args: list[str] | None = None) -> None:
     # Replace the current process
     try:
         os.execv(sys.executable, [sys.executable] + args)
-    except Exception:
+    except Exception as e:
         # Fall back to subprocess
+        logger.debug("Failed to restart with execv, falling back to subprocess: %s: %s", type(e).__name__, e)
         subprocess.Popen([sys.executable] + args)
         sys.exit(0)
 
@@ -513,5 +520,6 @@ def rollback(backup_path: Path | None = None) -> bool:
         shutil.copy2(backup_path, executable_path)
         executable_path.chmod(0o755)
         return True
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to rollback to backup: %s: %s", type(e).__name__, e)
         return False
