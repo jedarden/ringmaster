@@ -1,5 +1,6 @@
 """Worker API routes."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,6 +12,7 @@ from ringmaster.db import Database, WorkerRepository
 from ringmaster.domain import TaskStatus, Worker, WorkerStatus
 from ringmaster.worker.output_buffer import output_buffer
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -92,8 +94,19 @@ async def list_workers(
     offset: int = Query(default=0, ge=0),
 ) -> list[Worker]:
     """List workers with optional filters."""
+    filter_params = {
+        "status": status.value if status else None,
+        "worker_type": worker_type,
+        "limit": limit,
+        "offset": offset,
+    }
+    logger.info(f"Listing workers with filters: {filter_params}")
+
     repo = WorkerRepository(db)
-    return await repo.list(status=status, worker_type=worker_type, limit=limit, offset=offset)
+    workers = await repo.list(status=status, worker_type=worker_type, limit=limit, offset=offset)
+
+    logger.info(f"Found {len(workers)} workers")
+    return workers
 
 
 @router.get("/with-tasks")
@@ -109,6 +122,14 @@ async def list_workers_with_tasks(
     For busy workers, includes task title, started_at, and iteration info.
     This enables the UI to show duration and task context.
     """
+    filter_params = {
+        "status": status.value if status else None,
+        "worker_type": worker_type,
+        "limit": limit,
+        "offset": offset,
+    }
+    logger.info(f"Listing workers with tasks with filters: {filter_params}")
+
     from ringmaster.db import TaskRepository
 
     repo = WorkerRepository(db)
@@ -144,6 +165,8 @@ async def list_workers_with_tasks(
             current_task=current_task,
         ))
 
+    workers_with_current_tasks = len([w for w in result if w.current_task is not None])
+    logger.info(f"Found {len(result)} workers, {workers_with_current_tasks} with current tasks")
     return result
 
 
@@ -153,6 +176,8 @@ async def create_worker(
     body: WorkerCreate,
 ) -> Worker:
     """Create a new worker."""
+    logger.info(f"Creating worker: name={body.name}, type={body.type}, capabilities={body.capabilities}")
+
     repo = WorkerRepository(db)
     worker = Worker(
         name=body.name,
@@ -165,7 +190,10 @@ async def create_worker(
         env_vars=body.env_vars,
         capabilities=body.capabilities,
     )
-    return await repo.create(worker)
+    created_worker = await repo.create(worker)
+
+    logger.info(f"Worker created: id={created_worker.id}, name={created_worker.name}")
+    return created_worker
 
 
 @router.get("/{worker_id}")
@@ -174,10 +202,15 @@ async def get_worker(
     worker_id: str,
 ) -> Worker:
     """Get a worker by ID."""
+    logger.info(f"Getting worker: worker_id={worker_id}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
+
+    logger.info(f"Worker retrieved: id={worker.id}, name={worker.name}, status={worker.status.value}")
     return worker
 
 
@@ -188,9 +221,13 @@ async def update_worker(
     body: WorkerUpdate,
 ) -> Worker:
     """Update a worker."""
+    update_fields = {k: v for k, v in body.model_dump(exclude_unset=True).items() if v is not None}
+    logger.info(f"Updating worker: worker_id={worker_id}, fields={list(update_fields.keys())}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for update: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     if body.name is not None:
@@ -212,7 +249,9 @@ async def update_worker(
     if body.capabilities is not None:
         worker.capabilities = body.capabilities
 
-    return await repo.update(worker)
+    updated_worker = await repo.update(worker)
+    logger.info(f"Worker updated: id={updated_worker.id}, name={updated_worker.name}, status={updated_worker.status.value}")
+    return updated_worker
 
 
 @router.delete("/{worker_id}", status_code=204)
@@ -221,10 +260,15 @@ async def delete_worker(
     worker_id: str,
 ) -> None:
     """Delete a worker."""
+    logger.info(f"Deleting worker: worker_id={worker_id}")
+
     repo = WorkerRepository(db)
     deleted = await repo.delete(worker_id)
     if not deleted:
+        logger.warning(f"Worker not found for deletion: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
+
+    logger.info(f"Worker deleted: worker_id={worker_id}")
 
 
 @router.post("/{worker_id}/activate", status_code=200)
@@ -233,13 +277,20 @@ async def activate_worker(
     worker_id: str,
 ) -> Worker:
     """Activate (mark as idle) a worker."""
+    logger.info(f"Activating worker: worker_id={worker_id}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for activation: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
+    previous_status = worker.status
     worker.status = WorkerStatus.IDLE
-    return await repo.update(worker)
+    updated_worker = await repo.update(worker)
+
+    logger.info(f"Worker activated: worker_id={worker_id}, previous_status={previous_status.value}, new_status={updated_worker.status.value}")
+    return updated_worker
 
 
 @router.post("/{worker_id}/deactivate", status_code=200)
@@ -248,14 +299,22 @@ async def deactivate_worker(
     worker_id: str,
 ) -> Worker:
     """Deactivate (mark as offline) a worker."""
+    logger.info(f"Deactivating worker: worker_id={worker_id}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for deactivation: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
+    previous_status = worker.status
+    current_task_id = worker.current_task_id
     worker.status = WorkerStatus.OFFLINE
     worker.current_task_id = None
-    return await repo.update(worker)
+    updated_worker = await repo.update(worker)
+
+    logger.info(f"Worker deactivated: worker_id={worker_id}, previous_status={previous_status.value}, cleared_task_id={current_task_id}")
+    return updated_worker
 
 
 @router.get("/{worker_id}/capabilities")
@@ -264,10 +323,15 @@ async def get_capabilities(
     worker_id: str,
 ) -> list[str]:
     """Get capabilities for a worker."""
+    logger.info(f"Getting capabilities for worker: worker_id={worker_id}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for capabilities: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
+
+    logger.info(f"Worker capabilities retrieved: worker_id={worker_id}, capabilities={worker.capabilities}")
     return worker.capabilities
 
 
@@ -278,12 +342,16 @@ async def add_capability(
     body: CapabilityUpdate,
 ) -> Worker:
     """Add a capability to a worker."""
+    logger.info(f"Adding capability to worker: worker_id={worker_id}, capability={body.capability}")
+
     repo = WorkerRepository(db)
     success = await repo.add_capability(worker_id, body.capability)
     if not success:
+        logger.warning(f"Worker not found for add capability: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     worker = await repo.get(worker_id)
+    logger.info(f"Capability added: worker_id={worker_id}, capability={body.capability}, total_capabilities={len(worker.capabilities) if worker else 0}")
     return worker  # type: ignore
 
 
@@ -294,16 +362,22 @@ async def remove_capability(
     capability: str,
 ) -> Worker:
     """Remove a capability from a worker."""
+    logger.info(f"Removing capability from worker: worker_id={worker_id}, capability={capability}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for remove capability: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     if capability not in worker.capabilities:
+        logger.warning(f"Capability not found on worker: worker_id={worker_id}, capability={capability}, current_capabilities={worker.capabilities}")
         raise HTTPException(status_code=404, detail="Capability not found")
 
     await repo.remove_capability(worker_id, capability)
-    return await repo.get(worker_id)  # type: ignore
+    updated_worker = await repo.get(worker_id)
+    logger.info(f"Capability removed: worker_id={worker_id}, capability={capability}, remaining_capabilities={updated_worker.capabilities if updated_worker else []}")
+    return updated_worker  # type: ignore
 
 
 @router.get("/capable/{capability}")
@@ -313,6 +387,8 @@ async def list_capable_workers(
     status: WorkerStatus | None = None,
 ) -> list[Worker]:
     """List workers that have a specific capability."""
+    logger.info(f"Listing workers with capability: capability={capability}, status_filter={status.value if status else None}")
+
     repo = WorkerRepository(db)
 
     # Get workers with the capability
@@ -322,6 +398,7 @@ async def list_capable_workers(
     if status:
         capable_workers = [w for w in capable_workers if w.status == status]
 
+    logger.info(f"Found {len(capable_workers)} workers with capability: capability={capability}")
     return capable_workers
 
 
@@ -358,15 +435,18 @@ async def get_worker_output(
     Returns:
         Recent output lines with metadata.
     """
+    logger.info(f"Getting worker output: worker_id={worker_id}, limit={limit}, since_line={since_line}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for output: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     lines = await output_buffer.get_recent(worker_id, limit=limit, since_line=since_line)
     stats = output_buffer.get_buffer_stats().get(worker_id, {"total_lines": 0})
 
-    return OutputResponse(
+    response = OutputResponse(
         worker_id=worker_id,
         lines=[
             OutputLineResponse(
@@ -378,6 +458,9 @@ async def get_worker_output(
         ],
         total_lines=stats.get("total_lines", 0),
     )
+
+    logger.info(f"Worker output retrieved: worker_id={worker_id}, lines_returned={len(lines)}, total_lines={response.total_lines}")
+    return response
 
 
 @router.get("/{worker_id}/output/stream")
@@ -400,12 +483,16 @@ async def stream_worker_output(
     import json
     from uuid import uuid4
 
+    logger.info(f"Starting SSE stream for worker: worker_id={worker_id}")
+
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for SSE stream: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     subscriber_id = f"sse-{uuid4().hex[:8]}"
+    logger.info(f"SSE stream initialized: worker_id={worker_id}, subscriber_id={subscriber_id}")
 
     async def event_generator():
         """Generate SSE events."""
@@ -445,7 +532,14 @@ async def get_output_stats() -> dict:
     Returns:
         Dict of worker_id -> buffer stats.
     """
-    return output_buffer.get_buffer_stats()
+    logger.info("Getting output buffer statistics for all workers")
+
+    stats = output_buffer.get_buffer_stats()
+    worker_count = len(stats)
+    total_lines = sum(stat.get("total_lines", 0) for stat in stats.values())
+
+    logger.info(f"Output stats retrieved: workers_with_output={worker_count}, total_lines_across_all={total_lines}")
+    return stats
 
 
 class CancelResponse(BaseModel):
@@ -480,14 +574,18 @@ async def cancel_worker_task(
     Returns:
         CancelResponse with success status.
     """
+    logger.info(f"Cancelling worker task: worker_id={worker_id}")
+
     from ringmaster.events import EventBus, EventType
 
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for cancellation: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     if worker.status != WorkerStatus.BUSY:
+        logger.warning(f"Worker is not busy, cannot cancel: worker_id={worker_id}, status={worker.status.value}")
         raise HTTPException(
             status_code=400,
             detail=f"Worker is not busy (status: {worker.status.value})"
@@ -495,6 +593,7 @@ async def cancel_worker_task(
 
     task_id = worker.current_task_id
     if not task_id:
+        logger.warning(f"Worker has no current task to cancel: worker_id={worker_id}")
         raise HTTPException(status_code=400, detail="Worker has no current task")
 
     # Update task status to failed
@@ -522,11 +621,14 @@ async def cancel_worker_task(
         },
     )
 
-    return CancelResponse(
+    response = CancelResponse(
         success=True,
         message=f"Cancelled task {task_id} on worker {worker_id}",
         task_id=task_id,
     )
+
+    logger.info(f"Worker task cancelled successfully: worker_id={worker_id}, task_id={task_id}")
+    return response
 
 
 @router.post("/{worker_id}/pause")
@@ -546,14 +648,18 @@ async def pause_worker(
     Returns:
         InterruptResponse with success status.
     """
+    logger.info(f"Pausing worker: worker_id={worker_id}")
+
     from ringmaster.events import EventBus, EventType
 
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for pause: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     if worker.status == WorkerStatus.OFFLINE:
+        logger.warning(f"Worker is already offline, cannot pause: worker_id={worker_id}")
         raise HTTPException(status_code=400, detail="Worker is offline")
 
     # Mark worker as paused (using OFFLINE status since we don't have PAUSED)
@@ -575,11 +681,14 @@ async def pause_worker(
         },
     )
 
-    return InterruptResponse(
+    response = InterruptResponse(
         success=True,
         message=f"Worker {worker_id} paused. Current task will complete.",
         worker_id=worker_id,
     )
+
+    logger.info(f"Worker paused successfully: worker_id={worker_id}, previous_status={previous_status.value}, current_task_id={worker.current_task_id}")
+    return response
 
 
 class PauseAllResponse(BaseModel):
@@ -605,6 +714,8 @@ async def pause_all_workers(
     Returns:
         PauseAllResponse with count of paused workers.
     """
+    logger.info("Pausing all active workers")
+
     from ringmaster.events import EventBus, EventType
 
     repo = WorkerRepository(db)
@@ -612,6 +723,8 @@ async def pause_all_workers(
     # Get all non-offline workers
     all_workers = await repo.list(limit=1000)
     active_workers = [w for w in all_workers if w.status != WorkerStatus.OFFLINE]
+
+    logger.info(f"Found {len(active_workers)} active workers to pause out of {len(all_workers)} total workers")
 
     if not active_workers:
         return PauseAllResponse(
@@ -642,13 +755,16 @@ async def pause_all_workers(
             },
         )
 
-    return PauseAllResponse(
+    response = PauseAllResponse(
         success=True,
         message=f"Paused {len(paused_ids)} worker(s). Current tasks will complete.",
         paused_count=len(paused_ids),
         paused_worker_ids=paused_ids,
         skipped_count=0,
     )
+
+    logger.info(f"All active workers paused successfully: paused_count={len(paused_ids)}, worker_ids={paused_ids}")
+    return response
 
 
 # =============================================================================
@@ -705,6 +821,8 @@ async def spawn_worker(
     Returns:
         SpawnedWorkerResponse with session details.
     """
+    logger.info(f"Spawning worker: worker_id={worker_id}, type={body.worker_type}, capabilities={body.capabilities}")
+
     from ringmaster.events import EventBus, EventType
     from ringmaster.worker.spawner import WorkerSpawner
 
@@ -754,7 +872,7 @@ async def spawn_worker(
             },
         )
 
-        return SpawnedWorkerResponse(
+        response = SpawnedWorkerResponse(
             worker_id=spawned.worker_id,
             worker_type=spawned.worker_type,
             tmux_session=spawned.tmux_session,
@@ -763,7 +881,11 @@ async def spawn_worker(
             attach_command=spawner.attach_command(worker_id),
         )
 
+        logger.info(f"Worker spawned successfully: worker_id={worker_id}, tmux_session={spawned.tmux_session}, log_path={spawned.log_path}")
+        return response
+
     except RuntimeError as e:
+        logger.warning(f"Failed to spawn worker: worker_id={worker_id}, error={str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -783,12 +905,15 @@ async def kill_worker(
     Returns:
         InterruptResponse with success status.
     """
+    logger.info(f"Killing worker: worker_id={worker_id}")
+
     from ringmaster.events import EventBus, EventType
     from ringmaster.worker.spawner import WorkerSpawner
 
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for kill: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     # Kill the tmux session
@@ -797,7 +922,7 @@ async def kill_worker(
 
     if not success:
         # Session may not exist, still update DB
-        pass
+        logger.info(f"Tmux session may not have existed for worker: worker_id={worker_id}")
 
     # Update worker status
     worker.status = WorkerStatus.OFFLINE
@@ -814,11 +939,14 @@ async def kill_worker(
         },
     )
 
-    return InterruptResponse(
+    response = InterruptResponse(
         success=True,
         message=f"Worker {worker_id} killed",
         worker_id=worker_id,
     )
+
+    logger.info(f"Worker killed successfully: worker_id={worker_id}, tmux_session_killed={success}")
+    return response
 
 
 @router.get("/{worker_id}/session")
@@ -834,11 +962,14 @@ async def get_worker_session(
     Returns:
         TmuxSessionResponse with session details.
     """
+    logger.info(f"Getting worker session info: worker_id={worker_id}")
+
     from ringmaster.worker.spawner import WorkerSpawner
 
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for session info: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     spawner = WorkerSpawner()
@@ -846,13 +977,17 @@ async def get_worker_session(
 
     # Check if session is running
     if not await spawner.is_running(worker_id):
+        logger.warning(f"Worker session not running: worker_id={worker_id}, session_name={session_name}")
         raise HTTPException(status_code=404, detail="Worker session not running")
 
-    return TmuxSessionResponse(
+    response = TmuxSessionResponse(
         session_name=session_name,
         worker_id=worker_id,
         attach_command=spawner.attach_command(worker_id),
     )
+
+    logger.info(f"Worker session info retrieved: worker_id={worker_id}, session_name={session_name}")
+    return response
 
 
 @router.get("/sessions/list")
@@ -862,12 +997,14 @@ async def list_worker_sessions() -> list[TmuxSessionResponse]:
     Returns:
         List of running worker sessions.
     """
+    logger.info("Listing all worker tmux sessions")
+
     from ringmaster.worker.spawner import WorkerSpawner
 
     spawner = WorkerSpawner()
     sessions = await spawner.list_sessions()
 
-    return [
+    response = [
         TmuxSessionResponse(
             session_name=session,
             worker_id=session.replace("rm-worker-", ""),
@@ -875,6 +1012,9 @@ async def list_worker_sessions() -> list[TmuxSessionResponse]:
         )
         for session in sessions
     ]
+
+    logger.info(f"Found {len(response)} running worker sessions: {[s.session_name for s in response]}")
+    return response
 
 
 class WorkerLogResponse(BaseModel):
@@ -944,6 +1084,8 @@ async def get_worker_health(
     Returns:
         WorkerHealthResponse with health analysis.
     """
+    logger.info(f"Getting worker health: worker_id={worker_id}")
+
     from ringmaster.worker.monitor import (
         LivenessStatus,
         WorkerMonitor,
@@ -953,6 +1095,7 @@ async def get_worker_health(
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for health check: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     # Get recent output from buffer for analysis
@@ -981,7 +1124,7 @@ async def get_worker_health(
         LivenessStatus.DEGRADED: "degraded",
     }
 
-    return WorkerHealthResponse(
+    response = WorkerHealthResponse(
         worker_id=worker_id,
         task_id=worker.current_task_id,
         liveness_status=liveness_map.get(liveness, "unknown"),
@@ -1002,6 +1145,9 @@ async def get_worker_health(
         total_output_lines=len(monitor.state.output_lines),
     )
 
+    logger.info(f"Worker health retrieved: worker_id={worker_id}, liveness_status={response.liveness_status}, is_degraded={response.degradation.is_degraded}, recommended_action={response.recommended_action.action}")
+    return response
+
 
 @router.get("/{worker_id}/log")
 async def get_worker_log(
@@ -1021,23 +1167,29 @@ async def get_worker_log(
     Returns:
         WorkerLogResponse with log output.
     """
+    logger.info(f"Getting worker log: worker_id={worker_id}, lines={lines}")
+
     from ringmaster.worker.spawner import WorkerSpawner
 
     repo = WorkerRepository(db)
     worker = await repo.get(worker_id)
     if not worker:
+        logger.warning(f"Worker not found for log: worker_id={worker_id}")
         raise HTTPException(status_code=404, detail="Worker not found")
 
     spawner = WorkerSpawner()
     output = await spawner.get_output(worker_id, lines)
     log_path = spawner.log_dir / f"{worker_id}.log"
 
-    return WorkerLogResponse(
+    response = WorkerLogResponse(
         worker_id=worker_id,
         log_path=str(log_path) if log_path.exists() else None,
         output=output,
         lines_count=len(output.split("\n")) if output else 0,
     )
+
+    logger.info(f"Worker log retrieved: worker_id={worker_id}, log_path_exists={log_path.exists() if log_path else False}, lines_count={response.lines_count}")
+    return response
 
 
 # =============================================================================
@@ -1084,17 +1236,20 @@ async def list_worktrees_api(
     Returns:
         WorktreeListResponse with worktree information.
     """
+    logger.info(f"Listing worktrees: repo_path={repo_path}")
+
     from pathlib import Path
 
     from ringmaster.git.worktrees import list_worktrees
 
     repo = Path(repo_path).resolve()
     if not repo.exists():
+        logger.warning(f"Repository not found: repo_path={repo_path}")
         raise HTTPException(status_code=404, detail=f"Repository not found: {repo_path}")
 
     worktrees = await list_worktrees(repo)
 
-    return WorktreeListResponse(
+    response = WorktreeListResponse(
         repo_path=str(repo),
         worktrees=[
             WorktreeInfo(
@@ -1109,6 +1264,9 @@ async def list_worktrees_api(
         ],
         prunable_count=sum(1 for wt in worktrees if wt.is_prunable),
     )
+
+    logger.info(f"Worktrees listed: repo_path={repo_path}, total_worktrees={len(response.worktrees)}, prunable_count={response.prunable_count}")
+    return response
 
 
 @router.post("/worktrees/prune")
@@ -1126,12 +1284,15 @@ async def prune_worktrees_api(
     Returns:
         WorktreePruneResponse with prune results.
     """
+    logger.info(f"Pruning worktrees: repo_path={repo_path}")
+
     from pathlib import Path
 
     from ringmaster.git.worktrees import clean_stale_worktrees, list_worktrees
 
     repo = Path(repo_path).resolve()
     if not repo.exists():
+        logger.warning(f"Repository not found for pruning: repo_path={repo_path}")
         raise HTTPException(status_code=404, detail=f"Repository not found: {repo_path}")
 
     # Prune
@@ -1140,8 +1301,11 @@ async def prune_worktrees_api(
     # Count after pruning
     worktrees_after = await list_worktrees(repo)
 
-    return WorktreePruneResponse(
+    response = WorktreePruneResponse(
         repo_path=str(repo),
         pruned_count=removed,
         remaining_count=len(worktrees_after),
     )
+
+    logger.info(f"Worktrees pruned: repo_path={repo_path}, pruned_count={removed}, remaining_count={response.remaining_count}")
+    return response
