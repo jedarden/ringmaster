@@ -115,11 +115,17 @@ class Database:
             logger.info(f"Applying migration: {migration_file.name}")
             sql = migration_file.read_text()
 
-            # Use executescript for the entire migration file
-            # This properly handles multi-statement SQL with embedded semicolons
-            await self.connection.executescript(sql)
-            await self.commit()
-            logger.info(f"Migration applied: {migration_file.name}")
+            try:
+                # Use executescript for the entire migration file
+                # This properly handles multi-statement SQL with embedded semicolons
+                await self.connection.executescript(sql)
+                await self.commit()
+                logger.info(f"Migration applied: {migration_file.name}")
+            except Exception as e:
+                logger.error(
+                    f"Failed to apply migration {migration_file.name}: {type(e).__name__}: {e}"
+                )
+                raise
 
 
 async def get_database(db_path: str | Path | None = None) -> Database:
