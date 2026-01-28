@@ -474,9 +474,9 @@ status() {
         echo -n "Tasks:      "
         local ready_count
         ready_count=$(curl -s "http://localhost:${API_PORT}/api/tasks?status=ready" | jq 'length' 2>/dev/null || echo "?")
-        local running_count
-        running_count=$(curl -s "http://localhost:${API_PORT}/api/tasks?status=running" | jq 'length' 2>/dev/null || echo "?")
-        echo "Ready: $ready_count, Running: $running_count"
+        local in_progress_count
+        in_progress_count=$(curl -s "http://localhost:${API_PORT}/api/tasks?status=in_progress" | jq 'length' 2>/dev/null || echo "?")
+        echo "Ready: $ready_count, In Progress: $in_progress_count"
     fi
 
     echo ""
