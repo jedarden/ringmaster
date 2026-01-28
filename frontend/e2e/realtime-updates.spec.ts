@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * E2E tests for Real-time Updates
  * Tests WebSocket integration for live updates
  */
-import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
+import { waitForPageStability } from './helpers/navigation';
 test.describe('Real-time Updates', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');

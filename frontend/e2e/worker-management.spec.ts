@@ -5,7 +5,7 @@ import {
   waitForBackend,
 } from './helpers/test-api';
 
-import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
+import { waitForPageStability } from './helpers/navigation';
 /**
  * E2E tests for Worker Management
  * Tests viewing workers, spawning workers, and monitoring worker status

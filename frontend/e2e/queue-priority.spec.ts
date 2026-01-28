@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { navigateWithRetry, waitForPageStability } from './helpers/navigation';
+import { waitForPageStability } from './helpers/navigation';
 import {
   createTestProject,
   createTestTask,
