@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 14
+**Iteration**: 15
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -22,6 +22,63 @@
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 15 Accomplishments
+
+### 📊 Observability - Decisions API INFO Logging
+
+Continuing the self-improvement loop with an observability enhancement following the pattern established in iteration 9:
+
+1. **Codebase Analysis**: Used Task/Explore agent to find API routes missing logging. Found that `decisions.py` had no logging while the similar `queue.py` module already had comprehensive INFO logging (added in iteration 9).
+
+2. **Task Created**: `bd-b5725acb` - "Add INFO logging to decisions API routes for observability"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [10] in worker)
+
+4. **Worker Completed Task Successfully**:
+   - Added `import logging` and `logger = logging.getLogger(__name__)`
+   - Added INFO logging to all 6 key endpoints:
+     - `list_decisions()`: Log filters and result count
+     - `create_decision()`: Log decision creation and task blocking
+     - `resolve_decision()`: Log resolution and task unblocking
+     - `list_questions()`: Log filters and result count
+     - `create_question()`: Log question creation with urgency
+     - `answer_question()`: Log question answering
+   - Tests pass: 730 passed
+   - Clean commit: `967c751`
+
+### Worker-Generated Commit
+
+```
+commit 967c751
+Author: jeda <coder@jedarden.com>
+
+    feat(api): add INFO logging to decisions API routes for observability
+
+    - Add import logging and logger = logging.getLogger(__name__) at top of file
+    - Add INFO logging to list_decisions(): Log request filters and result count
+    - Add INFO logging to create_decision(): Log decision creation and task blocking
+    - Add INFO logging to resolve_decision(): Log resolution and task unblocking
+    - Add INFO logging to list_questions(): Log request filters and result count
+    - Add INFO logging to create_question(): Log question creation with urgency
+    - Add INFO logging to answer_question(): Log question answering
+
+    Follows the same logging pattern used in src/ringmaster/api/routes/queue.py
+    for consistent observability across API routes.
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/api/routes/decisions.py` - (by worker!) Added INFO logging to all 6 endpoints (+44 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable (iteration [10])
+- Task assignment and completion working reliably
+
+---
 
 ## Iteration 14 Accomplishments
 
