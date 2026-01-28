@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 17
+**Iteration**: 18
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -22,6 +22,63 @@
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 18 Accomplishments
+
+### 📊 Observability - Metrics API INFO Logging
+
+Continuing the self-improvement loop with an observability enhancement. This completes the logging pattern for the metrics API module:
+
+1. **Codebase Analysis**: Used Task/Explore agent to scan API route modules. Found that `metrics.py` had 5 endpoints with no INFO logging, while similar modules (`queue.py`, `decisions.py`, `outcomes.py`, `input.py`) already had comprehensive logging.
+
+2. **Task Created**: `bd-65689948` - "Add INFO logging to metrics API routes for observability"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [3])
+
+4. **Worker Completed Task Successfully**:
+   - Added `import logging` and `logger = logging.getLogger(__name__)`
+   - Added INFO logging to all 5 key endpoints:
+     - `get_metrics()`: Log request and key metrics summary (tasks total/active, workers active)
+     - `get_task_metrics()`: Log request and task stats summary
+     - `get_worker_metrics()`: Log request and worker count
+     - `get_events()`: Log request filters (entity_type, limit, offset) and result count
+     - `get_activity()`: Log request parameters (days, project_id) and activity summary
+   - Tests pass: 730 passed
+   - Clean commit: `2897904`
+
+### Worker-Generated Commit
+
+```
+commit 2897904
+Author: jeda <coder@jedarden.com>
+
+    feat(api): add INFO logging to metrics API routes for observability
+
+    Following the pattern established in queue.py, add INFO logging to all
+    5 endpoints in the metrics API routes module:
+
+    1. get_metrics() - logs request and key metrics summary
+    2. get_task_metrics() - logs request and task stats
+    3. get_worker_metrics() - logs request and worker count
+    4. get_events() - logs request filters and result count
+    5. get_activity() - logs request parameters and activity summary
+
+    This provides consistent observability across all metrics endpoints
+    for monitoring and debugging API usage patterns.
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/api/routes/metrics.py` - (by worker!) Added INFO logging to all 5 endpoints (+35 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable (iteration [3])
+- Task assignment and completion working reliably
+
+---
 
 ## Iteration 17 Accomplishments
 
