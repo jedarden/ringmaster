@@ -2,8 +2,8 @@
 
 ## Current State
 
-**Status**: CORE SELF-HOSTING VALIDATED
-**Iteration**: 2
+**Status**: HOT-RELOAD VALIDATED
+**Iteration**: 3
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -17,10 +17,48 @@
 | Task Creation | ✅ Working | API POST /api/tasks works, PATCH status works |
 | Worker Lifecycle | ✅ Working | pull-bead, build-prompt, report-result all validated |
 | Output Parsing | ⚠️ Code exists | outcome.py exists, need real worker test |
-| Hot-Reload | ⚠️ Code exists | reload system exists, need testing |
+| Hot-Reload | ✅ Validated | File watcher, test runner, module reload, rollback all work |
 | Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
 | Bootstrap Sequence | ❌ Not done | Need script to start loop |
 | Self-Improvement Loop | ❌ Not done | The ultimate goal |
+
+## Iteration 3 Accomplishments
+
+### Hot-Reload System Fully Validated
+Comprehensive testing of the hot-reload system confirmed all components work:
+
+1. **File Change Detection** ✅
+   - FileChangeWatcher tracks 67 files in src/ringmaster/
+   - Hash-based change detection works correctly
+   - Initial scan returns no false positives
+
+2. **Test Runner** ✅
+   - Tests execute via `pytest tests/ -x --tb=short`
+   - Returns proper exit codes (0=pass, non-zero=fail)
+   - Timeout handling works
+
+3. **Module Reloading** ✅
+   - Modified modules are correctly identified
+   - importlib.reload() successfully reloads changed modules
+   - Module path-to-name conversion handles src/ prefix
+
+4. **Rollback on Test Failure** ✅
+   - When tests fail, git checkout restores original files
+   - SafetyConfig.auto_rollback=True controls this behavior
+   - File content is verified restored after rollback
+
+5. **API Server Stability** ✅
+   - Server remained healthy throughout all hot-reload tests
+   - curl http://localhost:8080/health returns {"status":"healthy"}
+   - No restarts required
+
+### Test Results
+```
+Test 1: Basic initialization - PASS
+Test 2: Test runner execution - PASS (all tests pass)
+Test 3: Code change detection + reload - PASS (ringmaster module reloaded)
+Test 4: Rollback on test failure - PASS (syntax error rolled back)
+```
 
 ## Iteration 2 Accomplishments
 
@@ -55,7 +93,7 @@ Worker `selfhost-worker` (worker-0bc3a778):
 
 ## Next Steps (Priority Order)
 
-### Phase 1 Complete: Core Validated ✅
+### Phase 1 Complete: Core + Hot-Reload Validated ✅
 All core components work:
 - API server
 - Database
@@ -63,6 +101,7 @@ All core components work:
 - Worker lifecycle
 - Prompt enrichment
 - Result reporting
+- **Hot-reload (file watcher, test runner, module reload, rollback)**
 
 ### Phase 2: Bootstrap Sequence (NEXT)
 1. **Create bootstrap script** that:
@@ -70,23 +109,19 @@ All core components work:
    - Creates Ringmaster self-project (if not exists)
    - Spawns workers in tmux
    - Creates initial self-improvement tasks
-   - Starts scheduler
+   - Starts scheduler with hot-reload enabled
 
 2. **Test with real Claude Code worker**:
    - Spawn actual claude-code worker
    - Create real implementation task
    - Let it complete and verify
 
-3. **Hot-reload validation**:
-   - Have worker modify ringmaster code
-   - Run tests
-   - Hot-reload if tests pass
-
-### Phase 3: Autonomous Improvement
-- Self-improvement loop working
-- Ringmaster creating tasks for itself
-- Workers implementing features
-- Continuous improvement achieved
+### Phase 3: Self-Improvement Loop
+- Worker modifies ringmaster code
+- Hot-reload detects changes
+- Tests run automatically
+- Modules reload on success
+- Verify new code is active
 
 ## Blocking Issues
 
