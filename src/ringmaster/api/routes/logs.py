@@ -7,6 +7,7 @@ Based on docs/09-remaining-decisions.md section 20:
 """
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -19,6 +20,7 @@ from ringmaster.domain.enums import LogComponent, LogLevel
 from ringmaster.events import event_bus
 from ringmaster.events.types import EventType
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -88,6 +90,7 @@ async def create_log(
 
     Used by system components to write structured logs.
     """
+    logger.info(f"Creating log entry: level={log_entry.level.value}, component={log_entry.component.value}, task_id={log_entry.task_id}, worker_id={log_entry.worker_id}")
     timestamp = datetime.now(UTC).isoformat()
     data_json = json.dumps(log_entry.data) if log_entry.data else None
 
@@ -131,6 +134,7 @@ async def create_log(
         project_id=log_response.project_id,
     )
 
+    logger.info(f"Log entry created with ID {log_response.id}")
     return log_response
 
 
@@ -152,6 +156,7 @@ async def list_logs(
     Supports filtering by component, level, task, worker, project, and time range.
     Full-text search is supported via the 'search' parameter.
     """
+    logger.info(f"Listing logs with filters - component={component}, level={level}, task_id={task_id}, worker_id={worker_id}, project_id={project_id}, since={since}, search={search}, offset={offset}, limit={limit}")
     query = "SELECT * FROM logs"
     count_query = "SELECT COUNT(*) as total FROM logs"
     conditions: list[str] = []
@@ -202,6 +207,7 @@ async def list_logs(
     rows = await db.fetchall(query, tuple(params))
     logs = [_row_to_log_entry(row) for row in rows]
 
+    logger.info(f"Retrieved {len(logs)} logs out of {total} total matching filters")
     return LogsResponse(logs=logs, total=total, offset=offset, limit=limit)
 
 
@@ -215,6 +221,7 @@ async def get_recent_logs(
 
     Useful for tail-style log viewing.
     """
+    logger.info(f"Getting recent logs from last {minutes} minutes (limit={limit})")
     cutoff = datetime.now(UTC) - timedelta(minutes=minutes)
     cutoff_str = cutoff.isoformat()
 
@@ -228,6 +235,7 @@ async def get_recent_logs(
         (cutoff_str, limit),
     )
 
+    logger.info(f"Retrieved {len(rows)} recent logs since {cutoff_str}")
     return [_row_to_log_entry(row) for row in rows]
 
 
@@ -242,6 +250,7 @@ async def get_logs_for_task(
     Returns logs that directly reference this task.
     Useful for debugging task-specific issues.
     """
+    logger.info(f"Getting logs for task {task_id} (limit={limit})")
     # First verify the task exists
     task = await db.fetchone("SELECT id FROM tasks WHERE id = ?", (task_id,))
     if not task:
@@ -257,6 +266,7 @@ async def get_logs_for_task(
         (task_id, limit),
     )
 
+    logger.info(f"Retrieved {len(rows)} logs for task {task_id}")
     return [_row_to_log_entry(row) for row in rows]
 
 
@@ -270,6 +280,7 @@ async def get_logs_for_worker(
 
     Useful for debugging worker-specific issues.
     """
+    logger.info(f"Getting logs for worker {worker_id} (limit={limit})")
     # First verify the worker exists
     worker = await db.fetchone("SELECT id FROM workers WHERE id = ?", (worker_id,))
     if not worker:
@@ -285,19 +296,26 @@ async def get_logs_for_worker(
         (worker_id, limit),
     )
 
+    logger.info(f"Retrieved {len(rows)} logs for worker {worker_id}")
     return [_row_to_log_entry(row) for row in rows]
 
 
 @router.get("/components")
 async def get_log_components() -> list[str]:
     """Get list of available log components."""
-    return [c.value for c in LogComponent]
+    logger.info("Getting list of available log components")
+    components = [c.value for c in LogComponent]
+    logger.info(f"Returning {len(components)} log components")
+    return components
 
 
 @router.get("/levels")
 async def get_log_levels() -> list[str]:
     """Get list of available log levels."""
-    return [level.value for level in LogLevel]
+    logger.info("Getting list of available log levels")
+    levels = [level.value for level in LogLevel]
+    logger.info(f"Returning {len(levels)} log levels")
+    return levels
 
 
 @router.get("/stats")
@@ -309,6 +327,7 @@ async def get_log_stats(
 
     Returns counts grouped by level and component.
     """
+    logger.info(f"Getting log statistics for the last {hours} hours")
     cutoff = datetime.now(UTC) - timedelta(hours=hours)
     cutoff_str = cutoff.isoformat()
 
@@ -353,13 +372,15 @@ async def get_log_stats(
     )
     errors = error_row["count"] if error_row else 0
 
-    return {
+    stats = {
         "period_hours": hours,
         "total": total,
         "errors": errors,
         "by_level": by_level,
         "by_component": by_component,
     }
+    logger.info(f"Log statistics calculated: {total} total logs, {errors} errors in last {hours} hours")
+    return stats
 
 
 @router.delete("")
@@ -371,6 +392,7 @@ async def clear_old_logs(
 
     Returns the number of logs deleted.
     """
+    logger.info(f"Clearing logs older than {days} days")
     cutoff = datetime.now(UTC) - timedelta(days=days)
     cutoff_str = cutoff.isoformat()
 
@@ -385,4 +407,6 @@ async def clear_old_logs(
     await db.execute("DELETE FROM logs WHERE timestamp < ?", (cutoff_str,))
     await db.commit()
 
-    return {"deleted": count, "cutoff": cutoff_str}
+    result = {"deleted": count, "cutoff": cutoff_str}
+    logger.info(f"Deleted {count} logs older than {cutoff_str}")
+    return result
