@@ -1,122 +1,128 @@
-# Ringmaster Marathon 2 Implementation Progress
+# Ringmaster Marathon 2: Self-Hosting Bootstrap Progress
 
 ## Current State
 
-**Status**: IN PROGRESS - Iteration 1 Complete
+**Status**: CORE SELF-HOSTING VALIDATED
+**Iteration**: 2
 
-Marathon 2 focuses on completing missing production-readiness features that were identified after Marathon 1. The core system is functional (178 commits, 48 hours), but production deployment and external worker integration require additional work.
+**Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
-## Marathon 2 Objectives
+## Self-Hosting Capability Checklist
 
-### Priority 1: Installation & Deployment
-- [x] Installation script (install-ringmaster.sh) - **Complete from Marathon 1**
-- [x] Backup script (scripts/backup-ringmaster.sh) - **Complete**
-- [x] Restore script (scripts/restore-ringmaster.sh) - **Complete**
-- [x] systemd service files - **Complete (embedded in install script)**
-- [ ] Kustomize overlays (dev/prod)
+| Capability | Status | Notes |
+|------------|--------|-------|
+| API Server Stability | ✅ Running | http://localhost:8080/health returns healthy |
+| Database Initialized | ✅ Complete | ~/.ringmaster/ringmaster.db with all migrations |
+| Worker Spawning | ✅ Validated | spawner.py fixed, CLI commands work |
+| Task Creation | ✅ Working | API POST /api/tasks works, PATCH status works |
+| Worker Lifecycle | ✅ Working | pull-bead, build-prompt, report-result all validated |
+| Output Parsing | ⚠️ Code exists | outcome.py exists, need real worker test |
+| Hot-Reload | ⚠️ Code exists | reload system exists, need testing |
+| Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
+| Bootstrap Sequence | ❌ Not done | Need script to start loop |
+| Self-Improvement Loop | ❌ Not done | The ultimate goal |
 
-### Priority 2: External Worker CLI
-- [x] ringmaster-cli binary - **Complete (embedded in install script)**
-- [x] pull-bead command
-- [x] build-prompt command
-- [x] report-result command
+## Iteration 2 Accomplishments
 
-### Priority 3: Tmux Worker Spawning
-- [x] Worker spawner module (src/ringmaster/worker/spawner.py) - **Complete**
-- [x] Worker script templates
-- [x] Tmux integration
-- [x] Worker lifecycle management
+### Fixed Worker Spawner Script
+The spawner.py had incorrect CLI argument syntax. Fixed:
+- `ringmaster pull-bead $WORKER_ID` (was `--worker-id`)
+- `ringmaster build-prompt $TASK_ID` (was `--task-id`)
+- `ringmaster report-result $TASK_ID` (was `--task-id`)
+- Removed unused `--db` flags (database path is global)
+- Capabilities now passed as `-c cap1 -c cap2` format
 
-### Priority 4: Priority Inheritance
-- [x] Priority inheritance logic (src/ringmaster/queue/priority_inheritance.py) - **Complete**
-- [x] Recalculation trigger
-- [x] Tests (tests/test_priority.py)
+### Validated Core Task Flow
+End-to-end test successful:
+1. Created "Ringmaster" project via API
+2. Created test task via API
+3. Marked task as ready via PATCH
+4. Created and activated worker via CLI
+5. Worker pulled task → task assigned
+6. Built enriched prompt with code context
+7. Reported completion → task done, worker idle
 
-### Priority 5: Backup Automation
-- [x] Backup script with retention - **Complete**
-- [x] Restore script with verification - **Complete**
-- [x] Cron configuration (embedded in install script)
-- [x] Verification (gzip + SQLite integrity checks)
+### API Server Running
+- Started on port 8080
+- Health endpoint: `/health`
+- All major endpoints responding (projects, tasks, workers, queue)
 
-### Priority 6: Capability Registry
-- [x] Database migration (006_worker_capabilities.sql)
-- [ ] API endpoints
-- [ ] Confidence tracking
+### Worker Ready for Deployment
+Worker `selfhost-worker` (worker-0bc3a778):
+- Type: claude-code
+- Status: idle
+- Tasks completed: 1
 
-### Priority 7: Task Iteration Tracking
-- [ ] Database migration (iteration, max_iterations)
-- [ ] Escalation logic
-- [ ] UI display
+## Next Steps (Priority Order)
 
-### Priority 8: Cost Dashboards
-- [ ] Token tracking
-- [ ] Cost calculation
-- [ ] Dashboard UI
+### Phase 1 Complete: Core Validated ✅
+All core components work:
+- API server
+- Database
+- Task CRUD
+- Worker lifecycle
+- Prompt enrichment
+- Result reporting
 
-### Priority 9: Multi-User Foundations
-- [ ] Users table
-- [ ] Foreign key updates
-- [ ] Authentication endpoints
+### Phase 2: Bootstrap Sequence (NEXT)
+1. **Create bootstrap script** that:
+   - Starts API server (if not running)
+   - Creates Ringmaster self-project (if not exists)
+   - Spawns workers in tmux
+   - Creates initial self-improvement tasks
+   - Starts scheduler
 
-### Priority 10: Worker Reflexion
-- [ ] Reflexion recording
-- [ ] Learning integration
-- [ ] API endpoints
+2. **Test with real Claude Code worker**:
+   - Spawn actual claude-code worker
+   - Create real implementation task
+   - Let it complete and verify
 
-## Iteration Log
+3. **Hot-reload validation**:
+   - Have worker modify ringmaster code
+   - Run tests
+   - Hot-reload if tests pass
 
-### Iteration 0 - Setup
-- Created `prompts/marathon-cycle-2.md` with comprehensive feature specifications
-- Created `prompts/PROGRESS-2.md` for progress tracking
-- Identified 10 major feature areas to implement
+### Phase 3: Autonomous Improvement
+- Self-improvement loop working
+- Ringmaster creating tasks for itself
+- Workers implementing features
+- Continuous improvement achieved
 
-### Iteration 1 - Backup/Restore Scripts & Linting Fixes
-**Commit**: 4393cee
+## Blocking Issues
 
-**Completed**:
-1. Created comprehensive `scripts/backup-ringmaster.sh`:
-   - Supports hourly, daily, and manual backup modes
-   - Automatic retention (7 days hourly, 30 days daily)
-   - Backup verification (gzip and SQLite integrity checks)
-   - Automatic compression of old backups
-   - Logging and error handling
+None - ready for bootstrap sequence implementation.
 
-2. Created `scripts/restore-ringmaster.sh`:
-   - Automatic decompression of .gz backups
-   - Database integrity verification before and after restore
-   - Safety backup creation before restore
-   - Service stop/start integration
-   - Interactive confirmation with --force bypass
+## Design Decisions
 
-3. Fixed linting issues in `src/ringmaster/queue/priority_inheritance.py`:
-   - Organized imports alphabetically
-   - Replaced `Optional[T]` with `T | None` syntax
-   - Removed unused `Task` import
+1. **Spawner script uses positional args**: The spawner bash script now uses positional arguments matching the actual CLI interface.
 
-**Verified**:
-- All ruff linting passes
-- Priority inheritance tests pass (5 tests)
-- Worker spawner tests pass (21 tests)
+2. **Self-project uses file:// URL**: The Ringmaster project points to `file:///home/coder/ringmaster` for local development.
 
-**Discovered existing implementations**:
-- Installation script already exists and is comprehensive
-- ringmaster-cli already embedded in install script
-- Worker spawner already implemented with full tmux support
-- Priority inheritance system already implemented
-- Capability registry migration already exists (006_worker_capabilities.sql)
+3. **Worker runs in tmux**: Workers are spawned as bash scripts in tmux sessions for easy attachment/debugging.
 
-## Next Steps
+## Commands for Testing
 
-1. Create task iteration tracking migration (add iteration, max_iterations columns)
-2. Implement cost tracking (database migration + API endpoints)
-3. Add multi-user schema migration (users table, foreign keys)
-4. Implement worker reflexion recording
-5. Create capability registry API endpoints
+```bash
+# Start API server
+cd /home/coder/ringmaster && nohup python3 -m ringmaster.cli serve --host 0.0.0.0 --port 8080 > /tmp/ringmaster-api.log 2>&1 &
 
-## Notes
+# Check health
+curl http://localhost:8080/health
 
-- All Marathon 1 features remain intact
-- Focus on production readiness, not new features
-- Maintain backward compatibility
-- Follow existing code patterns
-- Fixed aiosqlite version incompatibility (downgraded to 0.21.0)
+# Create task
+curl -X POST http://localhost:8080/api/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"project_id": "c892ec79-2eb9-4641-9e0b-c62e087771d5", "title": "Test task", "priority": "P2"}'
+
+# Mark ready
+curl -X PATCH http://localhost:8080/api/tasks/TASK_ID \
+  -H "Content-Type: application/json" \
+  -d '{"status": "ready"}'
+
+# Worker commands
+ringmaster worker add myworker --type claude-code
+ringmaster worker activate WORKER_ID
+ringmaster pull-bead WORKER_ID --json
+ringmaster build-prompt TASK_ID -d /home/coder/ringmaster
+ringmaster report-result TASK_ID --status completed
+```

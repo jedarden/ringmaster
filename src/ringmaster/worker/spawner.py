@@ -61,7 +61,6 @@ WORKER_ID="{worker_id}"
 WORKER_TYPE="{worker_type}"
 WORKTREE_PATH="{worktree_path}"
 LOG_FILE="{log_path}"
-RINGMASTER_DB="{db_path}"
 CAPABILITIES="{capabilities}"
 
 # Ensure log directory exists
@@ -82,10 +81,15 @@ MAX_BACKOFF=60
 
 while true; do
     # Pull next available bead
-    BEAD_JSON=$(ringmaster pull-bead \\
-        --worker-id "$WORKER_ID" \\
-        --capabilities "$CAPABILITIES" \\
-        --db "$RINGMASTER_DB" 2>/dev/null || echo "")
+    # Build capabilities args
+    CAP_ARGS=""
+    if [ -n "$CAPABILITIES" ]; then
+        for cap in $(echo "$CAPABILITIES" | tr ',' ' '); do
+            CAP_ARGS="$CAP_ARGS -c $cap"
+        done
+    fi
+
+    BEAD_JSON=$(ringmaster pull-bead "$WORKER_ID" $CAP_ARGS --json 2>/dev/null || echo "")
 
     if [ -z "$BEAD_JSON" ] || [ "$BEAD_JSON" = "null" ]; then
         # No work available, backoff
@@ -114,11 +118,11 @@ while true; do
 
     # Build enriched prompt
     PROMPT_FILE="/tmp/ringmaster-prompt-$BEAD_ID.txt"
-    ringmaster build-prompt --task-id "$BEAD_ID" --db "$RINGMASTER_DB" -o "$PROMPT_FILE" 2>&1 | tee -a "$LOG_FILE"
+    ringmaster build-prompt "$BEAD_ID" -o "$PROMPT_FILE" 2>&1 | tee -a "$LOG_FILE"
 
     if [ ! -f "$PROMPT_FILE" ]; then
         log "ERROR: Failed to build prompt for $BEAD_ID"
-        ringmaster report-result --task-id "$BEAD_ID" --status failed --db "$RINGMASTER_DB" 2>&1 | tee -a "$LOG_FILE"
+        ringmaster report-result "$BEAD_ID" --status failed --reason "Failed to build prompt" 2>&1 | tee -a "$LOG_FILE"
         continue
     fi
 
@@ -129,10 +133,10 @@ while true; do
     # Report result
     if [ $EXIT_CODE -eq 0 ]; then
         log "[$ITERATION] Completed bead $BEAD_ID successfully"
-        ringmaster report-result --task-id "$BEAD_ID" --status completed --db "$RINGMASTER_DB" 2>&1 | tee -a "$LOG_FILE"
+        ringmaster report-result "$BEAD_ID" --status completed 2>&1 | tee -a "$LOG_FILE"
     else
         log "[$ITERATION] Failed bead $BEAD_ID with exit code $EXIT_CODE"
-        ringmaster report-result --task-id "$BEAD_ID" --status failed --db "$RINGMASTER_DB" 2>&1 | tee -a "$LOG_FILE"
+        ringmaster report-result "$BEAD_ID" --status failed --exit-code $EXIT_CODE 2>&1 | tee -a "$LOG_FILE"
     fi
 
     # Cleanup prompt file
@@ -255,7 +259,6 @@ done
             worker_type=worker_type,
             worktree_path=worktree_path or "",
             log_path=str(log_path),
-            db_path=str(self.db_path),
             capabilities=",".join(capabilities or []),
             worker_command=worker_command,
         )
