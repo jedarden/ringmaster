@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 10
+**Iteration**: 11
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -17,11 +17,61 @@
 | Task Creation | ✅ Working | API POST /api/tasks works, PATCH status works |
 | Worker Lifecycle | ✅ Working | pull-bead, build-prompt, report-result all validated |
 | Output Parsing | ✅ Validated | Worker correctly detects COMPLETE signal |
-| Hot-Reload | ✅ Validated | 718 tests passing |
+| Hot-Reload | ✅ Validated | 725 tests passing |
 | Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 11 Accomplishments
+
+### 🔧 Observability - Output Buffer Queue Overflow Logging
+
+Continuing the self-improvement loop with an observability enhancement identified through codebase exploration:
+
+1. **Codebase Analysis**: Used Task/Explore agent to scan for silent failures and observability gaps. Found that `output_buffer.py` silently drops oldest lines when subscriber queues overflow, making debugging difficult.
+
+2. **Task Created**: `bd-a0bbe369` - "Add warning logging when output buffer subscriber queue overflows"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [6] in worker)
+
+4. **Worker Completed Task Successfully**:
+   - Added `import logging` and `logger = logging.getLogger(__name__)`
+   - Added `_overflow_warnings` dict to track per-worker overflow state
+   - Implemented rate-limited logging (only logs once when overflow starts, resets when queue recovers)
+   - Created comprehensive test suite with 7 test cases
+   - Tests pass: 725 passed (7 new tests added)
+   - Clean commit: `69c6d2e`
+
+### Worker-Generated Commit
+
+```
+commit 69c6d2e
+Author: jeda <coder@jedarden.com>
+
+    feat(output_buffer): add warning logging for subscriber queue overflow
+
+    - Add logging import and logger initialization to output_buffer.py
+    - Implement overflow warning when subscriber queues are full and oldest lines are dropped
+    - Add per-worker overflow tracking to prevent log spam during continuous overflow
+    - Warning only logs once when overflow starts, resets when queue is no longer full
+    - Preserve existing behavior of dropping oldest lines on overflow
+    - Add comprehensive tests for logging functionality and rate limiting
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/worker/output_buffer.py` - (by worker!) Added logging infrastructure and rate-limited overflow warning (+13 lines)
+- `tests/test_output_buffer.py` - (by worker!) New test file with 7 comprehensive test cases (+159 lines)
+
+### Test Results
+- All 725 tests passing (increased from 718)
+- Worker polling loop stable
+- Task assignment and completion working reliably
+
+---
 
 ## Iteration 10 Accomplishments
 
