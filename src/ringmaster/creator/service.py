@@ -7,6 +7,7 @@ This is the main entry point that orchestrates:
 4. Creating tasks in the database
 """
 
+import logging
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -23,6 +24,8 @@ from ringmaster.domain import (
     TaskStatus,
 )
 from ringmaster.events import EventType, event_bus
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -248,7 +251,8 @@ class BeadCreator:
         try:
             dep = Dependency(child_id=child_id, parent_id=parent_id)
             return await self.repo.add_dependency(dep)
-        except Exception:
+        except Exception as e:
+            logger.debug("Failed to create dependency %s -> %s: %s: %s", child_id, parent_id, type(e).__name__, e)
             # Ignore dependency creation errors (e.g., circular dependencies)
             return None
 
