@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 21
+**Iteration**: 22
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -22,6 +22,65 @@
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 22 Accomplishments
+
+### 🔧 Reliability - Worker Interface DEBUG Logging
+
+Continuing the core module reliability initiative by improving debuggability of the worker interface module - critical for tracking worker execution failures:
+
+1. **Codebase Analysis**: Used Task/Explore agent to scan for improvement opportunities. Identified that `worker/interface.py` line 214-215 had a silent `except Exception: pass` handler in the `SessionHandle.wait()` method for stderr reading.
+
+2. **Task Created**: `bd-cb0eb778` - "Add DEBUG logging to silent stderr exception handler in worker/interface.py"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [2])
+
+4. **Worker Completed Task Successfully**:
+   - Modified the silent exception handler in `SessionHandle.wait()` method
+   - Changed from `except Exception: pass` to `except Exception as e: logger.debug(...)`
+   - Follows the exact pattern from `updater/launcher.py`
+   - Logging imports were already present in the file
+   - Tests pass: 730 passed
+   - Clean commit: `4284d7b`
+
+### Worker-Generated Commit
+
+```
+commit 4284d7b
+Author: jeda <coder@jedarden.com>
+
+    feat(worker): add DEBUG logging to silent stderr exception handler
+
+    Adds DEBUG logging to the silent exception handler in SessionHandle.wait()
+    at lines 214-215 in worker/interface.py. Previously, stderr read failures
+    were silently ignored, making debugging worker failures difficult.
+
+    Pattern follows updater/launcher.py:
+    - Catch exception as 'e' instead of bare except
+    - Log exception type and message at DEBUG level
+    - Preserve safe fallback behavior (continue without stderr data)
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/worker/interface.py` - (by worker!) Added DEBUG logging to stderr exception handler (+2 lines, -2 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable (iteration [2])
+- Task assignment and completion working reliably
+
+### Core Module Reliability Initiative Progress
+
+After completing API observability (iterations 9-20), we're now focusing on improving reliability and debuggability of core modules:
+- ✅ `updater/launcher.py` - Self-update exception handling (iteration 21)
+- ✅ `worker/interface.py` - Stderr read exception handling (iteration 22)
+- 🔜 `creator/service.py` - Overly broad dependency creation exception
+- 🔜 `api/routes/logs.py` - Missing type hint on `row` parameter
+
+---
 
 ## Iteration 21 Accomplishments
 
