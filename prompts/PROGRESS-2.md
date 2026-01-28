@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 26
+**Iteration**: 27
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -17,11 +17,73 @@
 | Task Creation | ✅ Working | API POST /api/tasks works, PATCH status works |
 | Worker Lifecycle | ✅ Working | pull-bead, build-prompt, report-result all validated |
 | Output Parsing | ✅ Validated | Worker correctly detects COMPLETE signal |
-| Hot-Reload | ✅ Validated | 743 tests passing |
+| Hot-Reload | ✅ Validated | 730 tests passing |
 | Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 27 Accomplishments
+
+### 📚 Documentation - Repository Layer Docstrings
+
+After completing the Core Module Reliability Initiative (iterations 21-26), this iteration starts a new initiative: improving documentation in the database layer, which has critical but undocumented migration compatibility logic.
+
+1. **Codebase Analysis**: Used Task/Explore agent to find next improvement opportunity. Identified that `db/repositories.py` has several `_row_to_*` conversion methods with:
+   - Vague `Any` type hints instead of `sqlite3.Row`
+   - Missing docstrings explaining migration compatibility logic
+   - Silent JSON parsing fallbacks that are undocumented
+
+2. **Task Created**: `bd-46c416f9` - "Add docstring to _row_to_project() in db/repositories.py"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [4])
+
+4. **Worker Completed Task Successfully**:
+   - Added `import sqlite3` for proper type hints
+   - Updated type hint from `Any` to `sqlite3.Row`
+   - Added comprehensive docstring explaining:
+     - Migration compatibility for `pinned` column (added in migration 007)
+     - JSON parsing behavior for `tech_stack` and `settings` fields
+     - Note about using `row.keys()` instead of `'in row'` for sqlite3.Row
+   - Tests pass: 730 passed
+   - Clean commit: `af987e7`
+
+### Worker-Generated Commit
+
+```
+commit af987e7
+Author: jeda <coder@jedarden.com>
+
+    docs(db): add comprehensive docstring to _row_to_project() method
+
+    - Update type hint from Any to sqlite3.Row for better type safety
+    - Add import for sqlite3 module
+    - Document migration compatibility for pinned column (added in migration 007)
+    - Explain JSON parsing behavior for tech_stack and settings fields
+    - Note use of row.keys() instead of 'in row' for sqlite3.Row compatibility
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/db/repositories.py` - (by worker!) Added comprehensive docstring and improved type hint (+27 lines, -2 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable (iteration [4])
+- Task assignment and completion working reliably
+
+### New Initiative: Database Layer Documentation
+
+Starting a new documentation initiative to improve maintainability of the database access layer:
+- ✅ `_row_to_project()` - Docstring with migration compatibility docs (iteration 27)
+- 🔜 `_row_to_task()` - Handles 6 different migration-era columns
+- 🔜 `_row_to_decision()` - JSON parsing without docs
+- 🔜 `_row_to_question()` - Urgency field defaults to "medium"
+- 🔜 `_row_to_worker()` - Capabilities column missing logic
+
+---
 
 ## Iteration 26 Accomplishments
 
