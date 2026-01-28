@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
+from ringmaster import __version__
 from ringmaster.reload.safety import SafetyConfig, SafetyValidator
 from ringmaster.reload.watcher import FileChange
 
@@ -313,7 +314,7 @@ class HotReloader:
             return result
 
         # Success!
-        logger.info(f"Hot-reload complete: {len(reloaded_modules)} modules reloaded")
+        logger.info(f"Hot-reload complete: {len(reloaded_modules)} modules reloaded (ringmaster v{__version__})")
         result = ReloadResult(
             status=ReloadStatus.SUCCESS,
             changes=changes,

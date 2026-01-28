@@ -676,6 +676,10 @@ def pull_bead(worker_id: str, capabilities: tuple[str, ...], as_json: bool) -> N
     )
     from ringmaster.domain import TaskStatus, WorkerStatus
 
+    # Suppress logging when using JSON output to keep output clean
+    if as_json:
+        logging.getLogger().setLevel(logging.WARNING)
+
     async def do_pull() -> None:
         db = await get_database()
         worker_repo = WorkerRepository(db)
@@ -760,7 +764,8 @@ def pull_bead(worker_id: str, capabilities: tuple[str, ...], as_json: bool) -> N
 @click.argument("task_id")
 @click.option("--output", "-o", type=click.Path(), help="Write prompt to file")
 @click.option("--project-dir", "-d", type=click.Path(exists=True), help="Project directory")
-def build_prompt(task_id: str, output: str | None, project_dir: str | None) -> None:
+@click.option("--quiet", "-q", is_flag=True, help="Suppress logging output")
+def build_prompt(task_id: str, output: str | None, project_dir: str | None, quiet: bool) -> None:
     """Build an enriched prompt for a task.
 
     Assembles the full context including:
@@ -773,6 +778,10 @@ def build_prompt(task_id: str, output: str | None, project_dir: str | None) -> N
     """
     from ringmaster.db import ProjectRepository, TaskRepository, get_database
     from ringmaster.enricher.pipeline import EnrichmentPipeline
+
+    # Suppress logging when quiet or when writing to file (for script use)
+    if quiet or output:
+        logging.getLogger().setLevel(logging.WARNING)
 
     async def do_build() -> None:
         db = await get_database()
@@ -890,7 +899,8 @@ def report_result(
                 # Calculate retry backoff
                 from ringmaster.worker.executor import calculate_retry_backoff
 
-                task.retry_after = calculate_retry_backoff(task.attempts)
+                backoff = calculate_retry_backoff(task.attempts)
+                task.retry_after = datetime.now(UTC) + backoff
                 task.status = TaskStatus.READY  # Retry
                 console.print(
                     f"[yellow]Task {task_id} failed, will retry after backoff[/yellow]"

@@ -148,11 +148,12 @@ class TaskRepository:
             """
             INSERT INTO tasks (
                 id, project_id, parent_id, type, title, description, priority, status,
-                worker_id, attempts, max_attempts, required_capabilities, pagerank_score, betweenness_score,
+                worker_id, attempts, max_attempts, iteration, max_iterations,
+                required_capabilities, pagerank_score, betweenness_score,
                 on_critical_path, combined_priority, created_at, updated_at, started_at,
                 completed_at, prompt_path, output_path, context_hash, acceptance_criteria, context
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task.id,
@@ -166,6 +167,8 @@ class TaskRepository:
                 getattr(task, "worker_id", None),
                 getattr(task, "attempts", 0),
                 getattr(task, "max_attempts", 5),
+                getattr(task, "iteration", 0),
+                getattr(task, "max_iterations", 10),
                 json.dumps(getattr(task, "required_capabilities", [])),
                 getattr(task, "pagerank_score", 0),
                 getattr(task, "betweenness_score", 0),
@@ -250,7 +253,8 @@ class TaskRepository:
             """
             UPDATE tasks SET
                 title = ?, description = ?, priority = ?, status = ?,
-                worker_id = ?, attempts = ?, max_attempts = ?, required_capabilities = ?,
+                worker_id = ?, attempts = ?, max_attempts = ?,
+                iteration = ?, max_iterations = ?, required_capabilities = ?,
                 pagerank_score = ?, betweenness_score = ?, on_critical_path = ?,
                 combined_priority = ?, updated_at = ?, started_at = ?, completed_at = ?,
                 prompt_path = ?, output_path = ?, context_hash = ?,
@@ -266,6 +270,8 @@ class TaskRepository:
                 getattr(task, "worker_id", None),
                 getattr(task, "attempts", 0),
                 getattr(task, "max_attempts", 5),
+                getattr(task, "iteration", 0),
+                getattr(task, "max_iterations", 10),
                 json.dumps(getattr(task, "required_capabilities", [])),
                 getattr(task, "pagerank_score", 0),
                 getattr(task, "betweenness_score", 0),
@@ -406,6 +412,14 @@ class TaskRepository:
         if "last_failure_reason" in row.keys():  # noqa: SIM118
             last_failure_reason = row["last_failure_reason"]
 
+        # Handle iteration tracking columns - may not exist in older DBs before migration 013
+        iteration = 0
+        max_iterations = 10
+        if "iteration" in row.keys():  # noqa: SIM118
+            iteration = row["iteration"] or 0
+        if "max_iterations" in row.keys():  # noqa: SIM118
+            max_iterations = row["max_iterations"] or 10
+
         if task_type == TaskType.EPIC:
             return Epic(
                 **base_kwargs,
@@ -430,6 +444,8 @@ class TaskRepository:
                 worker_id=row["worker_id"],
                 attempts=row["attempts"],
                 max_attempts=row["max_attempts"],
+                iteration=iteration,
+                max_iterations=max_iterations,
                 required_capabilities=required_capabilities,
                 started_at=datetime.fromisoformat(row["started_at"]) if row["started_at"] else None,
                 completed_at=datetime.fromisoformat(row["completed_at"]) if row["completed_at"] else None,

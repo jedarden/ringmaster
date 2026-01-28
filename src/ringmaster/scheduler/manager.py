@@ -13,6 +13,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from ringmaster import __version__
 from ringmaster.db import Database, TaskRepository, WorkerRepository
 from ringmaster.domain import Task, TaskStatus, Worker, WorkerStatus
 from ringmaster.events import EventBus, EventType
@@ -87,7 +88,7 @@ class Scheduler:
         )
         self._file_watcher.initialize()
 
-        logger.info("Hot-reload initialized for self-improvement flywheel")
+        logger.info(f"Hot-reload initialized for self-improvement flywheel (ringmaster v{__version__})")
 
     def _is_self_improvement_task(self, task: Task) -> bool:
         """Check if task modifies Ringmaster's own source code.

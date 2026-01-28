@@ -142,6 +142,21 @@ while true; do
     # Cleanup prompt file
     rm -f "$PROMPT_FILE"
 
+    # Cleanup worktree if task succeeded and changes were committed
+    # This prevents stale worktrees from accumulating
+    if [ $EXIT_CODE -eq 0 ] && [ -n "$WORKTREE_PATH" ]; then
+        # Check if there are uncommitted changes
+        if ! git -C "$WORKTREE_PATH" diff --quiet HEAD 2>/dev/null; then
+            log "[$ITERATION] Worktree has uncommitted changes, keeping for review"
+        elif ! git -C "$WORKTREE_PATH" diff --quiet origin/main 2>/dev/null; then
+            log "[$ITERATION] Worktree has unpushed commits, keeping for review"
+        else
+            # Worktree is clean, can be pruned
+            log "[$ITERATION] Worktree clean, marking for cleanup"
+            # The worktree will be pruned on next iteration by git worktree prune
+        fi
+    fi
+
     log "[$ITERATION] Finished bead $BEAD_ID"
 done
 '''
@@ -152,7 +167,7 @@ done
     log "Running Claude Code..."
     claude --print --dangerously-skip-permissions \\
         --model claude-sonnet-4-20250514 \\
-        --prompt "$(cat $PROMPT_FILE)" \\
+        "$(cat $PROMPT_FILE)" \\
         2>&1 | tee -a "$LOG_FILE" || EXIT_CODE=$?
 ''',
         "aider": '''
@@ -201,7 +216,8 @@ done
             db_path: Path to ringmaster database.
             script_dir: Directory to store generated worker scripts.
         """
-        self.log_dir = log_dir or Path("/var/log/ringmaster/workers")
+        # Use ~/.ringmaster/logs for user-writable default
+        self.log_dir = log_dir or Path.home() / ".ringmaster" / "logs" / "workers"
         self.worktree_dir = worktree_dir
         self.db_path = db_path or Path(".ringmaster/ringmaster.db")
         self.script_dir = script_dir or Path("/tmp/ringmaster-workers")

@@ -72,6 +72,22 @@ class QueueManager:
 
     async def _assign_task(self, task: Task, worker: Worker) -> None:
         """Assign a task to a worker."""
+        # Check if task has exceeded max iterations (needs escalation)
+        if task.iteration >= task.max_iterations:
+            logger.warning(
+                f"Task {task.id} has reached max iterations ({task.iteration}/{task.max_iterations}), "
+                "needs human review - marking as blocked"
+            )
+            task.status = TaskStatus.BLOCKED
+            task.updated_at = datetime.now(UTC)
+            await self.task_repo.update_task(task)
+            await self._log_event("task_escalated", "task", task.id, {
+                "iteration": task.iteration,
+                "max_iterations": task.max_iterations,
+                "reason": "max_iterations_reached",
+            })
+            return
+
         logger.info(f"Assigning task {task.id} to worker {worker.id}")
 
         # Update task
@@ -90,6 +106,7 @@ class QueueManager:
         await self._log_event("task_assigned", "task", task.id, {
             "worker_id": worker.id,
             "priority_score": task.combined_priority,
+            "iteration": task.iteration,
         })
 
     async def enqueue_task(self, task_id: str) -> bool:
@@ -192,6 +209,69 @@ class QueueManager:
             (event_type, entity_type, entity_id, json.dumps(data) if data else None),
         )
         await self.db.commit()
+
+    async def increment_iteration(self, task_id: str) -> bool:
+        """Increment the iteration count for a task.
+
+        Called when a task completes one cycle through the work loop
+        (Ralph Wiggum loop) but needs additional iterations.
+
+        Returns True if the task can continue, False if max iterations reached.
+        """
+        task = await self.task_repo.get_task(task_id)
+        if not task or not isinstance(task, Task):
+            return False
+
+        task.iteration += 1
+        task.updated_at = datetime.now(UTC)
+
+        if task.iteration >= task.max_iterations:
+            # Task has reached max iterations - escalate
+            logger.warning(
+                f"Task {task_id} reached max iterations ({task.iteration}/{task.max_iterations})"
+            )
+            await self.task_repo.update_task(task)
+            await self._log_event("iteration_limit_reached", "task", task_id, {
+                "iteration": task.iteration,
+                "max_iterations": task.max_iterations,
+            })
+            return False
+
+        await self.task_repo.update_task(task)
+        await self._log_event("iteration_incremented", "task", task_id, {
+            "iteration": task.iteration,
+            "max_iterations": task.max_iterations,
+        })
+        return True
+
+    async def get_tasks_needing_escalation(self, project_id: UUID | None = None) -> list[Task]:
+        """Get tasks that have reached max iterations and need human review.
+
+        These tasks should be reviewed by a human to either:
+        - Adjust the task scope
+        - Provide additional context
+        - Accept the partial progress
+        - Mark as infeasible
+        """
+        conditions = [
+            "type IN ('task', 'subtask')",
+            "iteration >= max_iterations",
+            "status NOT IN ('done', 'failed')",
+        ]
+        params: list = []
+
+        if project_id:
+            conditions.append("project_id = ?")
+            params.append(str(project_id))
+
+        query = f"""
+            SELECT * FROM tasks
+            WHERE {' AND '.join(conditions)}
+            ORDER BY combined_priority DESC
+        """
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self.task_repo._row_to_task(row) for row in rows]  # type: ignore
 
     async def get_queue_stats(self) -> dict:
         """Get current queue statistics."""
