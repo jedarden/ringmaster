@@ -143,11 +143,14 @@ class QueueManager:
         """Mark a task as complete or failed."""
         task = await self.task_repo.get_task(task_id)
         if not task or not isinstance(task, Task):
+            logger.warning(f"Cannot complete task {task_id}: task not found")
             return
 
         worker = None
         if task.worker_id:
             worker = await self.worker_repo.get(task.worker_id)
+            if not worker:
+                logger.warning(f"Cannot find worker {task.worker_id} for task {task_id}")
 
         if success:
             task.status = TaskStatus.DONE
