@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 15
+**Iteration**: 16
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -22,6 +22,67 @@
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 16 Accomplishments
+
+### 📊 Observability - Outcomes API INFO Logging
+
+Continuing the self-improvement loop with an observability enhancement. This completes the logging pattern for another major API route module:
+
+1. **Codebase Analysis**: Used Task/Explore agent to find API routes missing logging. Found that `outcomes.py` had 7 endpoints with no INFO logging, while similar modules (`queue.py`, `decisions.py`) already had comprehensive logging.
+
+2. **Task Created**: `bd-9c02815e` - "Add INFO logging to outcomes API routes for observability"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [1] after respawn)
+
+4. **Worker Completed Task Successfully**:
+   - Added `import logging` and `logger = logging.getLogger(__name__)`
+   - Added INFO logging to all 7 key endpoints:
+     - `list_outcomes()`: Log request filters (project_id, limit, offset) and result count
+     - `get_outcome()`: Log outcome_id being retrieved, WARNING for not found
+     - `get_outcome_for_task()`: Log task_id lookup and retrieval status
+     - `find_similar_outcomes()`: Log search parameters (bead_type, keywords, min_similarity) and match count
+     - `get_model_success_rates()`: Log model filter parameters and result count
+     - `get_outcome_stats()`: Log stats request scope and response summary
+     - `cleanup_old_outcomes()`: Log cleanup parameters and number of records deleted
+   - Tests pass: 730 passed
+   - Clean commit: `4cfd471`
+
+### Worker-Generated Commit
+
+```
+commit 4cfd471
+Author: jeda <coder@jedarden.com>
+
+    feat(api): add INFO logging to outcomes API routes for observability
+
+    Following the pattern established in queue.py, add INFO logging to all
+    7 endpoints in the outcomes API routes module:
+
+    1. list_outcomes() - logs request filters and result count
+    2. get_outcome() - logs outcome_id being retrieved
+    3. get_outcome_for_task() - logs task_id lookup
+    4. find_similar_outcomes() - logs search parameters and match count
+    5. get_model_success_rates() - logs model filter and result count
+    6. get_outcome_stats() - logs stats request and response summary
+    7. cleanup_old_outcomes() - logs number of records deleted
+
+    This provides consistent observability across all outcomes endpoints
+    for monitoring and debugging API usage patterns.
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/api/routes/outcomes.py` - (by worker!) Added INFO logging to all 7 endpoints (+32 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable
+- Task assignment and completion working reliably
+
+---
 
 ## Iteration 15 Accomplishments
 
