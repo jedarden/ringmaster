@@ -1,6 +1,7 @@
 """Metrics API routes for dashboard display."""
 
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from ringmaster.api.deps import get_db
 from ringmaster.db import Database
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -208,11 +210,15 @@ async def get_metrics(
 
     Returns task stats, worker stats, recent events, and activity summaries.
     """
+    logger.info(f"Getting dashboard metrics: event_limit={event_limit}")
+
     task_stats = await get_task_stats(db)
     worker_stats = await get_worker_stats(db)
     recent_events = await get_recent_events(db, limit=event_limit)
     activity_24h = await get_activity_summary(db, hours=24)
     activity_7d = await get_activity_summary(db, hours=24 * 7)
+
+    logger.info(f"Dashboard metrics retrieved: tasks_total={task_stats.total}, workers_total={worker_stats.total}, events_count={len(recent_events)}, activity_24h_completed={activity_24h.tasks_completed}")
 
     return MetricsResponse(
         timestamp=datetime.now(UTC).isoformat(),
@@ -229,7 +235,12 @@ async def get_task_metrics(
     db: Annotated[Database, Depends(get_db)],
 ) -> TaskStats:
     """Get task statistics only."""
-    return await get_task_stats(db)
+    logger.info("Getting task statistics")
+
+    task_stats = await get_task_stats(db)
+    logger.info(f"Task stats retrieved: total={task_stats.total}, ready={task_stats.ready}, in_progress={task_stats.in_progress}, done={task_stats.done}")
+
+    return task_stats
 
 
 @router.get("/workers")
@@ -237,7 +248,12 @@ async def get_worker_metrics(
     db: Annotated[Database, Depends(get_db)],
 ) -> WorkerStats:
     """Get worker statistics only."""
-    return await get_worker_stats(db)
+    logger.info("Getting worker statistics")
+
+    worker_stats = await get_worker_stats(db)
+    logger.info(f"Worker stats retrieved: total={worker_stats.total}, idle={worker_stats.idle}, busy={worker_stats.busy}, completed={worker_stats.total_completed}")
+
+    return worker_stats
 
 
 @router.get("/events")
@@ -248,6 +264,15 @@ async def get_events(
     entity_type: str | None = Query(default=None),
 ) -> list[RecentEvent]:
     """Get recent events with optional filtering."""
+    filter_info = []
+    if event_type:
+        filter_info.append(f"event_type={event_type}")
+    if entity_type:
+        filter_info.append(f"entity_type={entity_type}")
+    filter_str = ", ".join(filter_info) if filter_info else "no filters"
+
+    logger.info(f"Getting events: limit={limit}, {filter_str}")
+
     query = "SELECT id, event_type, entity_type, entity_id, data, created_at FROM events"
     conditions = []
     params: list = []
@@ -288,6 +313,8 @@ async def get_events(
             )
         )
 
+    logger.info(f"Events retrieved: count={len(events)}")
+
     return events
 
 
@@ -297,4 +324,9 @@ async def get_activity(
     hours: int = Query(default=24, ge=1, le=720),  # Max 30 days
 ) -> ActivitySummary:
     """Get activity summary for a custom time period."""
-    return await get_activity_summary(db, hours=hours)
+    logger.info(f"Getting activity summary: hours={hours}")
+
+    activity = await get_activity_summary(db, hours=hours)
+    logger.info(f"Activity summary retrieved: completed={activity.tasks_completed}, failed={activity.tasks_failed}, created={activity.tasks_created}")
+
+    return activity
