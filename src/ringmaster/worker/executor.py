@@ -130,10 +130,13 @@ class WorkerExecutor:
             Path to the working directory for task execution.
         """
         # Determine base project directory
+        # Priority: project.repo_url > worker.working_dir > executor.project_dir > cwd
         if project.repo_url and Path(project.repo_url).is_dir():
             project_dir = Path(project.repo_url)
         elif worker.working_dir:
             project_dir = Path(worker.working_dir)
+        elif self.project_dir:
+            project_dir = self.project_dir
         else:
             project_dir = Path.cwd()
 

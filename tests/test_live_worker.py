@@ -121,7 +121,7 @@ class TestClaudeCodeLive:
         task = Task(
             project_id=live_project.id,
             title="Add a multiply function to math_utils.py",
-            description="Add a function called 'multiply' that multiplies two integers and returns the result. Include a docstring. Do not add tests.",
+            description="Modify the file src/myproject/math_utils.py. Add a function called 'multiply' that multiplies two integers and returns the result. Include a docstring. Do not add tests.",
             priority=Priority.P2,
             status=TaskStatus.READY,
             max_attempts=1,  # Only try once for live tests

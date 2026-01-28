@@ -43,6 +43,12 @@ class ClaudeCodeWorker(WorkerInterface):
         if model:
             cmd.extend(["--model", model])
 
+        # Add print mode for non-interactive execution
+        cmd.append("--print")
+
+        # Add permissions bypass for automated execution
+        cmd.append("--dangerously-skip-permissions")
+
         # Add prompt
         cmd.extend(["-p", config.prompt])
 
