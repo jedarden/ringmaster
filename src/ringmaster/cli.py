@@ -11,6 +11,13 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
+__all__ = [
+    "run_async",
+    "setup_logging",
+    "cli",
+    "main",
+]
+
 console = Console()
 
 # Type variable for async function return types
