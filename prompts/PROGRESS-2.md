@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 11
+**Iteration**: 12
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -17,11 +17,59 @@
 | Task Creation | ✅ Working | API POST /api/tasks works, PATCH status works |
 | Worker Lifecycle | ✅ Working | pull-bead, build-prompt, report-result all validated |
 | Output Parsing | ✅ Validated | Worker correctly detects COMPLETE signal |
-| Hot-Reload | ✅ Validated | 725 tests passing |
+| Hot-Reload | ✅ Validated | 739 tests passing |
 | Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 12 Accomplishments
+
+### 🔧 Reliability - Database Migration Error Handling
+
+Continuing the self-improvement loop with a reliability enhancement identified through codebase exploration:
+
+1. **Codebase Analysis**: Used Task/Explore agent to scan for silent error handling and missing error recovery. Found that `connection.py` migration runner lacked error handling - if a migration fails mid-execution, there was no clear error logging.
+
+2. **Task Created**: `bd-45a2c976` - "Add error handling and logging to database migration runner"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [7] in worker)
+
+4. **Worker Completed Task Successfully**:
+   - Wrapped `executescript()` and `commit()` in try-except block
+   - Added `logger.error()` with migration filename and specific exception type/message
+   - Re-raises exception so failures are visible to callers
+   - Added new test `test_migration_failure_handling()` to verify behavior
+   - Tests pass: 739 passed (1 new test added)
+   - Clean commit: `77f4f38`
+
+### Worker-Generated Commit
+
+```
+commit 77f4f38
+Author: jeda <coder@jedarden.com>
+
+    feat(db): add error handling and logging to migration runner
+
+    - Wrap executescript and commit in try-except block
+    - Log ERROR with migration filename and exception details
+    - Re-raise exception so failures are visible
+    - Add comprehensive test for migration failure handling
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/db/connection.py` - (by worker!) Added try-except with error logging and re-raise (+6 lines)
+- `tests/test_db.py` - (by worker!) Added `test_migration_failure_handling()` test case
+
+### Test Results
+- All 739 tests passing (increased from 738)
+- Worker polling loop stable
+- Task assignment and completion working reliably
+
+---
 
 ## Iteration 11 Accomplishments
 
