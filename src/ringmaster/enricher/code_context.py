@@ -225,7 +225,8 @@ class CodeContextExtractor:
         for path in self._iter_code_files():
             try:
                 content = path.read_text(encoding="utf-8", errors="ignore")
-            except OSError:
+            except OSError as e:
+                logger.debug("Skipping file %s: %s: %s", path, type(e).__name__, e)
                 continue
 
             for keyword in keywords:
