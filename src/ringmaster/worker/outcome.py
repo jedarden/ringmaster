@@ -149,7 +149,32 @@ def detect_outcome(
 
     Returns:
         OutcomeResult with detected outcome and reasoning.
+
+    Raises:
+        TypeError: If output is not a string.
     """
+    # Input validation
+    if not isinstance(output, str):
+        raise TypeError(f"output must be a string, got {type(output).__name__}")
+
+    if output == "":
+        # Create default signals for empty output
+        signals = OutcomeSignals(
+            exit_code_success=exit_code == 0 if exit_code is not None else False,
+            has_success_marker=False,
+            has_failure_marker=False,
+            has_decision_marker=False,
+            tests_passed=False,
+            tests_failed=False,
+            has_completion_signal=False,
+        )
+        return OutcomeResult(
+            outcome=Outcome.UNKNOWN,
+            signals=signals,
+            confidence=0.0,
+            reason="Empty output provided to analyze",
+        )
+
     # Normalize output for searching
     output_lower = output.lower()
 

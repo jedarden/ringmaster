@@ -200,6 +200,39 @@ Tests:       15 passed, 15 total
         assert result.outcome == Outcome.SUCCESS
         assert result.signals.tests_passed
 
+    def test_empty_string_output(self):
+        """Empty string output returns UNKNOWN with appropriate reason."""
+        result = detect_outcome("", exit_code=0)
+
+        assert result.outcome == Outcome.UNKNOWN
+        assert result.confidence == 0.0
+        assert "Empty output provided to analyze" in result.reason
+        assert not result.signals.has_success_marker
+        assert not result.signals.has_failure_marker
+
+    def test_none_output_raises_type_error(self):
+        """None output raises TypeError with clear message."""
+        import pytest
+
+        with pytest.raises(TypeError, match="output must be a string, got NoneType"):
+            detect_outcome(None, exit_code=0)
+
+    def test_non_string_output_raises_type_error(self):
+        """Non-string output raises TypeError with clear message."""
+        import pytest
+
+        # Test with integer
+        with pytest.raises(TypeError, match="output must be a string, got int"):
+            detect_outcome(123, exit_code=0)
+
+        # Test with list
+        with pytest.raises(TypeError, match="output must be a string, got list"):
+            detect_outcome(["some", "output"], exit_code=0)
+
+        # Test with dict
+        with pytest.raises(TypeError, match="output must be a string, got dict"):
+            detect_outcome({"output": "value"}, exit_code=0)
+
 
 class TestOutcomeResultProperties:
     """Tests for OutcomeResult properties."""
