@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 20
+**Iteration**: 21
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -22,6 +22,75 @@
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 21 Accomplishments
+
+### 🔧 Reliability - Updater Module DEBUG Logging
+
+After completing the API observability initiative in iteration 20, this iteration focuses on improving the debuggability of the updater/launcher module - the self-update system for Ringmaster:
+
+1. **Codebase Analysis**: Used Task/Explore agent to scan for improvement opportunities. Identified that `updater/launcher.py` had 8 locations with broad `except Exception:` handlers that silently swallowed errors, making debugging extremely difficult.
+
+2. **Task Created**: `bd-1ea9c4f0` - "Add DEBUG logging to silent exception handlers in updater/launcher.py"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [1] after respawn)
+
+4. **Worker Completed Task Successfully**:
+   - Added `import logging` and `logger = logging.getLogger(__name__)`
+   - Updated all 8 silent exception handlers with DEBUG logging:
+     - `get_current_version()`: pyproject.toml read failure
+     - `get_current_version()`: import fallback failure
+     - `_load_state()`: JSON state file read failure
+     - `_fetch_github_release()`: network fetch failure
+     - `check_for_updates()`: cache date parse failure
+     - `download_update()`: download failure
+     - `restart_with_new_version()`: execv failure
+     - `rollback()`: rollback failure
+   - Each handler now logs exception type and message while preserving safe fallback behavior
+   - Tests pass: 730 passed
+   - Clean commit: `dd15f16`
+
+### Worker-Generated Commit
+
+```
+commit dd15f16
+Author: jeda <coder@jedarden.com>
+
+    feat(launcher): add DEBUG logging to silent exception handlers
+
+    - Added logging import and logger setup to updater/launcher.py
+    - Replaced 8 silent 'except Exception: pass' handlers with DEBUG logging:
+      * get_current_version(): pyproject.toml and import fallback failures
+      * _load_state(): JSON state file read failure
+      * _fetch_github_release(): network fetch failure
+      * check_for_updates(): cache date parse failure
+      * download_update(): download failure
+      * restart_with_new_version(): execv failure
+      * rollback(): rollback failure
+    - Each exception now logs type and message while preserving safe fallback behavior
+    - Enables debugging via logging.getLogger('ringmaster.updater.launcher').setLevel(logging.DEBUG)
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/updater/launcher.py` - (by worker!) Added DEBUG logging to all 8 exception handlers (+19 lines, -11 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable (iteration [1])
+- Task assignment and completion working reliably
+
+### New Initiative: Core Module Reliability
+
+After completing API observability (iterations 9-20), we're now focusing on improving reliability and debuggability of core modules:
+- ✅ `updater/launcher.py` - Self-update exception handling (iteration 21)
+- 🔜 `worker/interface.py` - Unhandled stderr read exception
+- 🔜 `db/connection.py` - Overly broad migration error catch
+- 🔜 `worker/outcome.py` - Missing critical docstrings
+
+---
 
 ## Iteration 20 Accomplishments
 
