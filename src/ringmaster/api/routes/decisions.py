@@ -5,6 +5,7 @@ Provides endpoints for human-in-the-loop decision points and clarification quest
 - Questions: Non-blocking clarification requests
 """
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from ringmaster.db import Database, TaskRepository
 from ringmaster.domain import Decision, Question, TaskStatus
 from ringmaster.events import EventType, event_bus
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -93,14 +95,26 @@ async def list_decisions(
         limit: Maximum number of results
         offset: Pagination offset
     """
+    filter_params = {
+        "project_id": project_id,
+        "blocks_id": blocks_id,
+        "pending_only": pending_only,
+        "limit": limit,
+        "offset": offset,
+    }
+    logger.info(f"Listing decisions with filters: {filter_params}")
+
     repo = TaskRepository(db)
-    return await repo.list_decisions(
+    decisions = await repo.list_decisions(
         project_id=project_id,
         blocks_id=blocks_id,
         pending_only=pending_only,
         limit=limit,
         offset=offset,
     )
+
+    logger.info(f"Found {len(decisions)} decisions")
+    return decisions
 
 
 @router.post("/decisions", status_code=201)
@@ -113,6 +127,8 @@ async def create_decision(
     When a worker encounters a situation requiring human input,
     it creates a decision that blocks the task until resolved.
     """
+    logger.info(f"Creating decision for task {body.blocks_id} in project {body.project_id}: {body.question}")
+
     repo = TaskRepository(db)
 
     # Verify the blocked task exists
@@ -134,6 +150,8 @@ async def create_decision(
     blocked_task.status = TaskStatus.BLOCKED
     blocked_task.blocked_reason = body.question
     await repo.update_task(blocked_task)
+
+    logger.info(f"Decision {created.id} created and task {body.blocks_id} blocked")
 
     # Emit events
     await event_bus.emit(
@@ -173,6 +191,8 @@ async def resolve_decision(
 
     This unblocks the associated task and allows work to continue.
     """
+    logger.info(f"Resolving decision {decision_id} with resolution: {body.resolution}")
+
     repo = TaskRepository(db)
 
     # Get the decision first to find the blocked task
@@ -194,6 +214,8 @@ async def resolve_decision(
         blocked_task.status = TaskStatus.READY
         blocked_task.blocked_reason = None
         await repo.update_task(blocked_task)
+
+        logger.info(f"Decision {decision_id} resolved and task {blocked_task.id} unblocked")
 
         # Emit task unblocked event
         await event_bus.emit(
@@ -271,14 +293,26 @@ async def list_questions(
         limit: Maximum number of results
         offset: Pagination offset
     """
+    filter_params = {
+        "project_id": project_id,
+        "related_id": related_id,
+        "pending_only": pending_only,
+        "limit": limit,
+        "offset": offset,
+    }
+    logger.info(f"Listing questions with filters: {filter_params}")
+
     repo = TaskRepository(db)
-    return await repo.list_questions(
+    questions = await repo.list_questions(
         project_id=project_id,
         related_id=related_id,
         pending_only=pending_only,
         limit=limit,
         offset=offset,
     )
+
+    logger.info(f"Found {len(questions)} questions")
+    return questions
 
 
 @router.post("/questions", status_code=201)
@@ -290,6 +324,8 @@ async def create_question(
 
     Questions are non-blocking - work can continue with default assumptions.
     """
+    logger.info(f"Creating question for task {body.related_id} in project {body.project_id}: {body.question}")
+
     repo = TaskRepository(db)
 
     # Verify the related task exists
@@ -305,6 +341,8 @@ async def create_question(
         default_answer=body.default_answer,
     )
     created = await repo.create_question(question, body.project_id)
+
+    logger.info(f"Question {created.id} created for task {body.related_id} with urgency {body.urgency}")
 
     # Emit event
     await event_bus.emit(
@@ -341,6 +379,8 @@ async def answer_question(
     body: QuestionAnswer,
 ) -> Question:
     """Answer a question."""
+    logger.info(f"Answering question {question_id} with answer: {body.answer}")
+
     repo = TaskRepository(db)
 
     # Get the question first
@@ -359,6 +399,8 @@ async def answer_question(
     # Get related task for project_id
     related_task = await repo.get_task(question.related_id)
     project_id = str(related_task.project_id) if related_task else None
+
+    logger.info(f"Question {question_id} answered for related task {question.related_id}")
 
     # Emit event
     await event_bus.emit(
