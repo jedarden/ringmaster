@@ -1,5 +1,6 @@
 """User input API routes for natural language task creation."""
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from ringmaster.creator import BeadCreator
 from ringmaster.db import Database
 from ringmaster.domain import Epic, Priority, Subtask
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -79,6 +81,8 @@ async def submit_input(
     4. Create dependencies based on ordering
     5. Return the created/updated tasks
     """
+    logger.info(f"Submitting input for project {body.project_id}: text_length={len(body.text)}, priority={body.priority}, auto_decompose={body.auto_decompose}")
+
     creator = BeadCreator(
         db=db,
         auto_decompose=body.auto_decompose,
@@ -91,12 +95,20 @@ async def submit_input(
     )
 
     created_tasks: list[CreatedTaskInfo] = []
+    updated_count = 0
+    new_count = 0
+
     for ct in result.created_tasks:
         task_type = "task"
         if isinstance(ct.task, Epic):
             task_type = "epic"
         elif isinstance(ct.task, Subtask):
             task_type = "subtask"
+
+        if ct.was_updated:
+            updated_count += 1
+        else:
+            new_count += 1
 
         created_tasks.append(
             CreatedTaskInfo(
@@ -108,13 +120,19 @@ async def submit_input(
             )
         )
 
-    return UserInputResponse(
+    response = UserInputResponse(
         success=len(result.created_tasks) > 0 or result.epic is not None,
         epic_id=result.epic.id if result.epic else None,
         created_tasks=created_tasks,
         dependencies_count=len(result.dependencies_created),
         messages=result.messages,
     )
+
+    logger.info(f"Input processing complete for project {body.project_id}: "
+               f"created_tasks={len(created_tasks)} (new={new_count}, updated={updated_count}), "
+               f"epic_id={response.epic_id}, dependencies={response.dependencies_count}")
+
+    return response
 
 
 @router.post("/suggest-related", response_model=SuggestRelatedResponse)
@@ -127,6 +145,8 @@ async def suggest_related(
     Use this before creating tasks to check for potential duplicates
     or to understand what related work already exists.
     """
+    logger.info(f"Suggesting related tasks for project {body.project_id}: text_length={len(body.text)}, max_results={body.max_results}")
+
     creator = BeadCreator(db=db)
 
     related = await creator.suggest_related(
@@ -135,7 +155,7 @@ async def suggest_related(
         max_results=body.max_results,
     )
 
-    return SuggestRelatedResponse(
+    response = SuggestRelatedResponse(
         related_tasks=[
             RelatedTaskInfo(
                 task_id=task.id,
@@ -145,3 +165,7 @@ async def suggest_related(
             for task, score in related
         ]
     )
+
+    logger.info(f"Found {len(response.related_tasks)} related tasks for project {body.project_id}")
+
+    return response
