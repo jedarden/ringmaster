@@ -1038,3 +1038,110 @@ async def get_worker_log(
         output=output,
         lines_count=len(output.split("\n")) if output else 0,
     )
+
+
+# =============================================================================
+# Worktree Management Endpoints
+# =============================================================================
+
+
+class WorktreeInfo(BaseModel):
+    """Information about a git worktree."""
+
+    path: str
+    branch: str
+    commit_hash: str
+    is_detached: bool = False
+    is_locked: bool = False
+    is_prunable: bool = False
+
+
+class WorktreeListResponse(BaseModel):
+    """Response for listing worktrees."""
+
+    repo_path: str
+    worktrees: list[WorktreeInfo]
+    prunable_count: int
+
+
+class WorktreePruneResponse(BaseModel):
+    """Response for pruning worktrees."""
+
+    repo_path: str
+    pruned_count: int
+    remaining_count: int
+
+
+@router.post("/worktrees/list")
+async def list_worktrees_api(
+    repo_path: str = Query(..., description="Path to the git repository"),
+) -> WorktreeListResponse:
+    """List all worktrees for a repository.
+
+    Args:
+        repo_path: Path to the main git repository.
+
+    Returns:
+        WorktreeListResponse with worktree information.
+    """
+    from pathlib import Path
+
+    from ringmaster.git.worktrees import list_worktrees
+
+    repo = Path(repo_path).resolve()
+    if not repo.exists():
+        raise HTTPException(status_code=404, detail=f"Repository not found: {repo_path}")
+
+    worktrees = await list_worktrees(repo)
+
+    return WorktreeListResponse(
+        repo_path=str(repo),
+        worktrees=[
+            WorktreeInfo(
+                path=str(wt.path),
+                branch=wt.branch,
+                commit_hash=wt.commit_hash,
+                is_detached=wt.is_detached,
+                is_locked=wt.is_locked,
+                is_prunable=wt.is_prunable,
+            )
+            for wt in worktrees
+        ],
+        prunable_count=sum(1 for wt in worktrees if wt.is_prunable),
+    )
+
+
+@router.post("/worktrees/prune")
+async def prune_worktrees_api(
+    repo_path: str = Query(..., description="Path to the git repository"),
+) -> WorktreePruneResponse:
+    """Prune stale worktrees for a repository.
+
+    Removes worktrees whose directories no longer exist. This can happen
+    when worker directories are deleted without using 'git worktree remove'.
+
+    Args:
+        repo_path: Path to the main git repository.
+
+    Returns:
+        WorktreePruneResponse with prune results.
+    """
+    from pathlib import Path
+
+    from ringmaster.git.worktrees import clean_stale_worktrees, list_worktrees
+
+    repo = Path(repo_path).resolve()
+    if not repo.exists():
+        raise HTTPException(status_code=404, detail=f"Repository not found: {repo_path}")
+
+    # Prune
+    removed = await clean_stale_worktrees(repo)
+
+    # Count after pruning
+    worktrees_after = await list_worktrees(repo)
+
+    return WorktreePruneResponse(
+        repo_path=str(repo),
+        pruned_count=removed,
+        remaining_count=len(worktrees_after),
+    )

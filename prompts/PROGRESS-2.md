@@ -2,8 +2,8 @@
 
 ## Current State
 
-**Status**: 🎉 SELF-HOSTING VALIDATED - Full worker loop working!
-**Iteration**: 5
+**Status**: 🎉 SELF-HOSTING VALIDATED - Worktree cleanup added!
+**Iteration**: 6
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -21,6 +21,42 @@
 | Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
 | Bootstrap Sequence | ✅ Script exists | scripts/bootstrap-selfhost.sh |
 | Self-Improvement Loop | ✅ VALIDATED! | Worker successfully modified ringmaster code! |
+
+## Iteration 6 Accomplishments
+
+### 🧹 Worktree Cleanup Infrastructure
+
+Discovered and fixed a major worktree accumulation issue: **6,017 stale worktrees** had accumulated from previous test runs, using ~280MB of disk space in `.git/worktrees/`.
+
+#### Root Cause
+- Workers create worktrees for task isolation
+- When tests or processes delete worktree directories directly, git metadata in `.git/worktrees/` remains
+- `git worktree prune` removes these stale entries, but was never called automatically
+
+#### Solution: Added Worktree Pruning Infrastructure
+
+1. **CLI Command**: `ringmaster worker prune-worktrees [REPO_PATH]`
+   - Lists prunable worktrees
+   - Supports `--dry-run` mode
+   - Cleans up stale git metadata
+
+2. **API Endpoints**:
+   - `POST /api/workers/worktrees/list?repo_path=...` - List all worktrees with status
+   - `POST /api/workers/worktrees/prune?repo_path=...` - Prune stale worktrees
+
+3. **Cleanup Results**:
+   - Removed 6,017 stale worktree entries
+   - Freed ~280MB of disk space in `.git/worktrees/`
+   - Reduced actual worktree directories to 12 (100MB)
+
+#### Files Modified
+
+- `src/ringmaster/cli.py` - Added `worker prune-worktrees` command
+- `src/ringmaster/api/routes/workers.py` - Added worktree management endpoints
+
+#### Test Results
+- All 718 tests passing
+- Linting checks pass
 
 ## Iteration 5 Accomplishments
 

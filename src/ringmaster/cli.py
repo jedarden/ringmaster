@@ -613,6 +613,47 @@ def worker_output(worker_id: str, lines: int, follow: bool) -> None:
     asyncio.run(do_output())
 
 
+@worker.command("prune-worktrees")
+@click.argument("repo_path", type=click.Path(exists=True), default=".")
+@click.option("--dry-run", is_flag=True, help="Show what would be pruned without actually pruning")
+def worker_prune_worktrees(repo_path: str, dry_run: bool) -> None:
+    """Prune stale worktrees for a repository.
+
+    Removes worktrees whose directories no longer exist. This can happen
+    when worker directories are deleted without using 'git worktree remove'.
+
+    REPO_PATH defaults to the current directory.
+    """
+    from pathlib import Path
+
+    from ringmaster.git.worktrees import clean_stale_worktrees, list_worktrees
+
+    async def do_prune() -> None:
+        repo = Path(repo_path).resolve()
+
+        # First, list worktrees to show prunable ones
+        worktrees = await list_worktrees(repo)
+        prunable = [wt for wt in worktrees if wt.is_prunable]
+
+        if not prunable:
+            console.print("[green]No stale worktrees to prune[/green]")
+            return
+
+        console.print(f"[yellow]Found {len(prunable)} stale worktrees[/yellow]")
+        for wt in prunable:
+            console.print(f"  - {wt.path}")
+
+        if dry_run:
+            console.print("\n[dim]Dry run mode - no changes made[/dim]")
+            return
+
+        # Actually prune
+        removed = await clean_stale_worktrees(repo)
+        console.print(f"\n[green]Pruned {removed} stale worktrees[/green]")
+
+    asyncio.run(do_prune())
+
+
 @cli.command()
 def doctor() -> None:
     """Check system health and worker availability."""
