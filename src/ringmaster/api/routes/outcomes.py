@@ -4,6 +4,7 @@ Per docs/08-open-architecture.md "Reflexion-Based Learning" section:
 Provides access to task execution outcomes for analysis and learning.
 """
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,7 @@ from ringmaster.api.deps import get_db
 from ringmaster.db import Database
 from ringmaster.db.repositories import ReasoningBankRepository
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -88,6 +90,11 @@ async def list_outcomes(
 
     Optionally filter by project.
     """
+    if project_id:
+        logger.info(f"Getting outcomes for project {project_id} (limit={limit}, offset={offset})")
+    else:
+        logger.info(f"Getting all outcomes (limit={limit}, offset={offset})")
+
     repo = ReasoningBankRepository(db)
 
     if project_id:
@@ -104,6 +111,7 @@ async def list_outcomes(
         )
         outcomes = [repo._row_to_outcome(row) for row in rows]
 
+    logger.info(f"Found {len(outcomes)} outcomes")
     return [
         TaskOutcomeResponse(
             id=o.id or 0,
@@ -134,12 +142,15 @@ async def get_outcome(
     db: Database = Depends(get_db),
 ) -> TaskOutcomeResponse:
     """Get a specific task outcome by ID."""
+    logger.info(f"Getting outcome {outcome_id}")
     repo = ReasoningBankRepository(db)
     outcome = await repo.get(outcome_id)
 
     if not outcome:
+        logger.warning(f"Outcome {outcome_id} not found")
         raise HTTPException(status_code=404, detail="Outcome not found")
 
+    logger.info(f"Retrieved outcome {outcome_id} for task {outcome.task_id}")
     return TaskOutcomeResponse(
         id=outcome.id or 0,
         task_id=outcome.task_id,
@@ -167,12 +178,15 @@ async def get_outcome_for_task(
     db: Database = Depends(get_db),
 ) -> TaskOutcomeResponse | None:
     """Get the outcome for a specific task."""
+    logger.info(f"Getting outcome for task {task_id}")
     repo = ReasoningBankRepository(db)
     outcome = await repo.get_for_task(task_id)
 
     if not outcome:
+        logger.info(f"No outcome found for task {task_id}")
         return None
 
+    logger.info(f"Retrieved outcome for task {task_id} (outcome_id={outcome.id})")
     return TaskOutcomeResponse(
         id=outcome.id or 0,
         task_id=outcome.task_id,
@@ -205,6 +219,10 @@ async def find_similar_outcomes(
     Uses keyword-based Jaccard similarity to find related tasks
     from the reasoning bank.
     """
+    logger.info(f"Finding similar outcomes: bead_type={request.bead_type}, "
+                f"keywords={request.keywords}, min_similarity={request.min_similarity}, "
+                f"project_id={request.project_id}, limit={limit}")
+
     repo = ReasoningBankRepository(db)
 
     project_uuid = UUID(request.project_id) if request.project_id else None
@@ -218,6 +236,7 @@ async def find_similar_outcomes(
         project_id=project_uuid,
     )
 
+    logger.info(f"Found {len(similar)} similar outcomes")
     return [
         SimilarOutcomeResponse(
             outcome=TaskOutcomeResponse(
@@ -257,6 +276,9 @@ async def get_model_success_rates(
     Useful for understanding which models perform best for
     different task types.
     """
+    logger.info(f"Getting model success rates: bead_type={bead_type}, "
+                f"project_id={project_id}, min_samples={min_samples}")
+
     repo = ReasoningBankRepository(db)
 
     rates = await repo.get_model_success_rates(
@@ -265,6 +287,7 @@ async def get_model_success_rates(
         min_samples=min_samples,
     )
 
+    logger.info(f"Retrieved success rates for {len(rates)} models")
     return [
         ModelSuccessRateResponse(
             model_used=model,
@@ -284,9 +307,16 @@ async def get_outcome_stats(
     db: Database = Depends(get_db),
 ) -> OutcomeStatsResponse:
     """Get aggregated statistics for the reasoning bank."""
+    if project_id:
+        logger.info(f"Getting outcome stats for project {project_id}")
+    else:
+        logger.info("Getting overall outcome stats")
+
     repo = ReasoningBankRepository(db)
     stats = await repo.get_stats(project_id)
 
+    logger.info(f"Retrieved outcome stats: total={stats['total_outcomes']}, "
+                f"success_rate={stats['success_rate']:.2f}")
     return OutcomeStatsResponse(
         total_outcomes=stats["total_outcomes"],
         success_count=stats["success_count"],
@@ -306,6 +336,8 @@ async def cleanup_old_outcomes(
 
     Default is 90 days to keep learning data reasonably fresh.
     """
+    logger.info(f"Cleaning up outcomes older than {days} days")
     repo = ReasoningBankRepository(db)
     deleted = await repo.cleanup_old(days)
+    logger.info(f"Cleanup completed: deleted {deleted} old outcomes")
     return {"deleted": deleted, "days": days}
