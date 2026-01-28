@@ -560,8 +560,8 @@ class EnrichmentPipeline:
                     elif "error" in data or "exception" in data:
                         error_detail = data.get("error") or data.get("exception")
                         entry += f"\n  Error: {error_detail}"
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                except (json.JSONDecodeError, TypeError) as e:
+                    logger.debug("Failed to parse log data: %s: %s", type(e).__name__, e)
 
             parts.append(entry)
 
