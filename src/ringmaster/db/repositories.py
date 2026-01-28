@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -116,8 +117,32 @@ class ProjectRepository:
         project.pinned = pinned
         return await self.update(project)
 
-    def _row_to_project(self, row: Any) -> Project:
-        """Convert a database row to a Project."""
+    def _row_to_project(self, row: sqlite3.Row) -> Project:
+        """Convert a database row to a Project.
+
+        Args:
+            row: sqlite3.Row object returned by database queries. The row object
+                provides dict-like access to column values and supports the keys()
+                method for checking column existence.
+
+        Returns:
+            Project: Domain model populated from database row data.
+
+        Migration Compatibility:
+            The 'pinned' column was added in migration 007 and may not exist in
+            older database schemas. This method safely handles missing columns
+            by checking row.keys() and defaulting pinned=False if not present.
+
+        JSON Parsing:
+            - tech_stack: JSON-encoded list stored as TEXT. Returns empty list []
+              if column value is None or empty string.
+            - settings: JSON-encoded dict stored as TEXT. Returns empty dict {}
+              if column value is None or empty string.
+
+        Note:
+            Uses row.keys() to check for column existence instead of 'in row'
+            because sqlite3.Row doesn't support the 'in' operator directly.
+        """
         # Handle pinned column which may not exist in older databases
         pinned = False
         row_keys = row.keys()
