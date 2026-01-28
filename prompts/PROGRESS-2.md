@@ -2,8 +2,8 @@
 
 ## Current State
 
-**Status**: HOT-RELOAD VALIDATED
-**Iteration**: 3
+**Status**: CLI DATABASE CONNECTION FIX - READY FOR WORKER TESTING
+**Iteration**: 4
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -19,126 +19,139 @@
 | Output Parsing | ⚠️ Code exists | outcome.py exists, need real worker test |
 | Hot-Reload | ✅ Validated | File watcher, test runner, module reload, rollback all work |
 | Self-Project Setup | ✅ Done | "Ringmaster" project created (c892ec79...) |
-| Bootstrap Sequence | ❌ Not done | Need script to start loop |
-| Self-Improvement Loop | ❌ Not done | The ultimate goal |
+| Bootstrap Sequence | ✅ Script exists | scripts/bootstrap-selfhost.sh |
+| Self-Improvement Loop | ⚠️ Blocked | Worker script needs testing with fixed CLI |
 
-## Iteration 3 Accomplishments
+## Iteration 4 Accomplishments
 
-### Hot-Reload System Fully Validated
-Comprehensive testing of the hot-reload system confirmed all components work:
+### Fixed CLI Database Connection Hang
 
-1. **File Change Detection** ✅
-   - FileChangeWatcher tracks 67 files in src/ringmaster/
-   - Hash-based change detection works correctly
-   - Initial scan returns no false positives
+The worker CLI commands (`pull-bead`, `build-prompt`, `report-result`, `worker spawn`) were hanging after execution due to aiosqlite's background thread not being cleaned up properly.
 
-2. **Test Runner** ✅
-   - Tests execute via `pytest tests/ -x --tb=short`
-   - Returns proper exit codes (0=pass, non-zero=fail)
-   - Timeout handling works
+**Root Cause**: `asyncio.run()` wasn't closing the database connection, causing the program to hang waiting for aiosqlite's background thread.
 
-3. **Module Reloading** ✅
-   - Modified modules are correctly identified
-   - importlib.reload() successfully reloads changed modules
-   - Module path-to-name conversion handles src/ prefix
+**Fix**: Added `run_async()` helper function that ensures `close_database()` is called after every async CLI command:
 
-4. **Rollback on Test Failure** ✅
-   - When tests fail, git checkout restores original files
-   - SafetyConfig.auto_rollback=True controls this behavior
-   - File content is verified restored after rollback
+```python
+def run_async(coro: Callable[[], Awaitable[T]]) -> T:
+    """Run an async function with proper database cleanup."""
+    from ringmaster.db import close_database
 
-5. **API Server Stability** ✅
-   - Server remained healthy throughout all hot-reload tests
-   - curl http://localhost:8080/health returns {"status":"healthy"}
-   - No restarts required
+    async def wrapped() -> T:
+        try:
+            return await coro()
+        finally:
+            await close_database()
 
-### Test Results
-```
-Test 1: Basic initialization - PASS
-Test 2: Test runner execution - PASS (all tests pass)
-Test 3: Code change detection + reload - PASS (ringmaster module reloaded)
-Test 4: Rollback on test failure - PASS (syntax error rolled back)
+    return asyncio.run(wrapped())
 ```
 
-## Iteration 2 Accomplishments
+**Files Modified**:
+- `src/ringmaster/cli.py` - Added `run_async()` helper, updated 4 commands
+- `src/ringmaster/db/__init__.py` - Exported `close_database`
 
-### Fixed Worker Spawner Script
-The spawner.py had incorrect CLI argument syntax. Fixed:
-- `ringmaster pull-bead $WORKER_ID` (was `--worker-id`)
-- `ringmaster build-prompt $TASK_ID` (was `--task-id`)
-- `ringmaster report-result $TASK_ID` (was `--task-id`)
-- Removed unused `--db` flags (database path is global)
-- Capabilities now passed as `-c cap1 -c cap2` format
+### Validated CLI Commands Now Work
 
-### Validated Core Task Flow
-End-to-end test successful:
-1. Created "Ringmaster" project via API
-2. Created test task via API
-3. Marked task as ready via PATCH
-4. Created and activated worker via CLI
-5. Worker pulled task → task assigned
-6. Built enriched prompt with code context
-7. Reported completion → task done, worker idle
+All critical worker CLI commands now complete properly:
 
-### API Server Running
-- Started on port 8080
-- Health endpoint: `/health`
-- All major endpoints responding (projects, tasks, workers, queue)
+1. **pull-bead** ✅
+   ```
+   $ ringmaster pull-bead worker-0bc3a778 --json
+   {"id": "bd-b369e265", "title": "Test CLI fix", ...}
+   Database connection closed
+   ```
 
-### Worker Ready for Deployment
-Worker `selfhost-worker` (worker-0bc3a778):
-- Type: claude-code
-- Status: idle
-- Tasks completed: 1
+2. **build-prompt** ✅
+   ```
+   $ ringmaster build-prompt bd-b369e265 -d /home/coder/ringmaster
+   Found 5 relevant files (~11996 tokens)
+   # System Prompt...
+   Database connection closed
+   ```
 
-## Next Steps (Priority Order)
+3. **report-result** ✅
+   ```
+   $ ringmaster report-result bd-b369e265 --status completed
+   Task bd-b369e265 marked as completed
+   Worker selfhost-worker returned to idle
+   Database connection closed
+   ```
 
-### Phase 1 Complete: Core + Hot-Reload Validated ✅
-All core components work:
-- API server
-- Database
-- Task CRUD
-- Worker lifecycle
-- Prompt enrichment
-- Result reporting
-- **Hot-reload (file watcher, test runner, module reload, rollback)**
+### Tests Pass
+- 718 tests passed, 13 skipped
+- No regressions introduced by the fix
 
-### Phase 2: Bootstrap Sequence (NEXT)
-1. **Create bootstrap script** that:
-   - Starts API server (if not running)
-   - Creates Ringmaster self-project (if not exists)
-   - Spawns workers in tmux
-   - Creates initial self-improvement tasks
-   - Starts scheduler with hot-reload enabled
+## Previous Iterations
 
-2. **Test with real Claude Code worker**:
-   - Spawn actual claude-code worker
-   - Create real implementation task
-   - Let it complete and verify
+### Iteration 3: Hot-Reload Validation ✅
+- File change detection works
+- Test runner executes properly
+- Module reloading works
+- Rollback on test failure works
+- API server stays up during reload
 
-### Phase 3: Self-Improvement Loop
-- Worker modifies ringmaster code
+### Iteration 2: Core Flow Validation ✅
+- Fixed spawner script CLI arguments
+- Validated task creation/update APIs
+- Tested worker lifecycle management
+
+## Next Steps
+
+### IMMEDIATE: Test Real Worker Flow
+With CLI now working, the next step is to test the full self-improvement loop:
+
+1. **Start fresh worker in tmux**:
+   ```bash
+   # Kill any old sessions
+   tmux kill-session -t rm-worker-worker-0bc3a778 2>/dev/null || true
+
+   # Spawn new worker
+   ringmaster worker spawn worker-0bc3a778 -w /home/coder/ringmaster
+   ```
+
+2. **Create real self-improvement task**:
+   ```bash
+   curl -X POST http://localhost:8080/api/tasks \
+     -H "Content-Type: application/json" \
+     -d '{"project_id": "c892ec79-2eb9-4641-9e0b-c62e087771d5", "title": "Add version to hot-reload log", "priority": "P2"}'
+
+   curl -X PATCH http://localhost:8080/api/tasks/TASK_ID \
+     -H "Content-Type: application/json" \
+     -d '{"status": "ready"}'
+   ```
+
+3. **Watch worker pick up task and execute**:
+   ```bash
+   tmux attach-session -t rm-worker-worker-0bc3a778
+   ```
+
+4. **Verify hot-reload triggers** after worker modifies code
+
+### Phase 2: Self-Hosting Complete
+Once the above flow works end-to-end:
+- Worker pulls task
+- Worker builds prompt
+- Worker executes Claude Code
+- Worker reports result
 - Hot-reload detects changes
 - Tests run automatically
 - Modules reload on success
-- Verify new code is active
+
+Then we can output: `<promise>SELF-HOSTING-CAPABLE</promise>`
 
 ## Blocking Issues
 
-None - ready for bootstrap sequence implementation.
+**CLI now works** - main blocker removed.
 
-## Design Decisions
-
-1. **Spawner script uses positional args**: The spawner bash script now uses positional arguments matching the actual CLI interface.
-
-2. **Self-project uses file:// URL**: The Ringmaster project points to `file:///home/coder/ringmaster` for local development.
-
-3. **Worker runs in tmux**: Workers are spawned as bash scripts in tmux sessions for easy attachment/debugging.
+Remaining validation needed:
+1. Test worker script actually runs the full loop
+2. Verify Claude Code execution works in worker
+3. Confirm hot-reload triggers after worker completion
 
 ## Commands for Testing
 
 ```bash
-# Start API server
+# Start API server (if needed)
 cd /home/coder/ringmaster && nohup python3 -m ringmaster.cli serve --host 0.0.0.0 --port 8080 > /tmp/ringmaster-api.log 2>&1 &
 
 # Check health
@@ -154,10 +167,11 @@ curl -X PATCH http://localhost:8080/api/tasks/TASK_ID \
   -H "Content-Type: application/json" \
   -d '{"status": "ready"}'
 
-# Worker commands
-ringmaster worker add myworker --type claude-code
-ringmaster worker activate WORKER_ID
-ringmaster pull-bead WORKER_ID --json
+# Worker commands (now work without hanging!)
+ringmaster pull-bead worker-0bc3a778 --json
 ringmaster build-prompt TASK_ID -d /home/coder/ringmaster
 ringmaster report-result TASK_ID --status completed
+
+# Spawn worker
+ringmaster worker spawn worker-0bc3a778 -w /home/coder/ringmaster
 ```

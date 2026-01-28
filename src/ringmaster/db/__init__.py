@@ -1,6 +1,6 @@
 """Database module for Ringmaster."""
 
-from ringmaster.db.connection import Database, get_database
+from ringmaster.db.connection import Database, close_database, get_database
 from ringmaster.db.repositories import (
     ChatRepository,
     ProjectRepository,
@@ -10,6 +10,7 @@ from ringmaster.db.repositories import (
 
 __all__ = [
     "Database",
+    "close_database",
     "get_database",
     "ChatRepository",
     "ProjectRepository",

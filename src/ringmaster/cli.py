@@ -2,7 +2,9 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import TypeVar
 
 import click
 from rich.console import Console
@@ -10,6 +12,27 @@ from rich.logging import RichHandler
 from rich.table import Table
 
 console = Console()
+
+# Type variable for async function return types
+T = TypeVar("T")
+
+
+def run_async(coro: Callable[[], Awaitable[T]]) -> T:
+    """Run an async function with proper database cleanup.
+
+    This ensures the database connection is properly closed after the
+    async function completes, preventing hanging CLI commands due to
+    aiosqlite's background thread.
+    """
+    from ringmaster.db import close_database
+
+    async def wrapped() -> T:
+        try:
+            return await coro()
+        finally:
+            await close_database()
+
+    return asyncio.run(wrapped())
 
 
 def setup_logging(verbose: bool = False) -> None:
@@ -471,7 +494,7 @@ def worker_spawn(
             console.print(f"[red]Failed to spawn worker: {e}[/red]")
             raise SystemExit(1) from e
 
-    asyncio.run(do_spawn())
+    run_async(do_spawn)
 
 
 @worker.command("attach")
@@ -730,7 +753,7 @@ def pull_bead(worker_id: str, capabilities: tuple[str, ...], as_json: bool) -> N
         if not as_json:
             console.print("[yellow]No tasks matching capabilities[/yellow]", err=True)
 
-    asyncio.run(do_pull())
+    run_async(do_pull)
 
 
 @cli.command("build-prompt")
@@ -804,7 +827,7 @@ def build_prompt(task_id: str, output: str | None, project_dir: str | None) -> N
         else:
             print(full_prompt)
 
-    asyncio.run(do_build())
+    run_async(do_build)
 
 
 @cli.command("report-result")
@@ -910,7 +933,7 @@ def report_result(
                         await task_repo.update_task(dep_task)
                         console.print(f"  [green]Unblocked dependent task: {dep_task.title}[/green]")
 
-    asyncio.run(do_report())
+    run_async(do_report)
 
 
 # =============================================================================
