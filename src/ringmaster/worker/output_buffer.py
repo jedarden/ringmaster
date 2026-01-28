@@ -1,9 +1,12 @@
 """Output buffer for real-time worker output streaming."""
 
 import asyncio
+import logging
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -32,6 +35,7 @@ class WorkerOutputBuffer:
         self._buffers: dict[str, deque[OutputLine]] = {}
         self._line_counters: dict[str, int] = {}
         self._subscribers: dict[str, dict[str, asyncio.Queue]] = {}  # worker_id -> {sub_id: queue}
+        self._overflow_warnings: dict[str, bool] = {}  # worker_id -> has_logged_overflow
         self._lock = asyncio.Lock()
 
     async def write(self, worker_id: str, line: str) -> None:
@@ -46,6 +50,7 @@ class WorkerOutputBuffer:
             if worker_id not in self._buffers:
                 self._buffers[worker_id] = deque(maxlen=self.max_lines)
                 self._line_counters[worker_id] = 0
+                self._overflow_warnings[worker_id] = False
 
             # Create output line
             self._line_counters[worker_id] += 1
@@ -62,7 +67,15 @@ class WorkerOutputBuffer:
                 for queue in self._subscribers[worker_id].values():
                     try:
                         queue.put_nowait(output_line)
+                        # Reset overflow warning flag on successful put
+                        if self._overflow_warnings.get(worker_id, False):
+                            self._overflow_warnings[worker_id] = False
                     except asyncio.QueueFull:
+                        # Log warning only once when overflow starts
+                        if not self._overflow_warnings.get(worker_id, False):
+                            logger.warning(f"Output buffer queue full for worker {worker_id}, dropping oldest line")
+                            self._overflow_warnings[worker_id] = True
+
                         # Drop oldest if queue is full
                         try:
                             queue.get_nowait()
