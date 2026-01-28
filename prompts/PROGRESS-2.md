@@ -3,7 +3,7 @@
 ## Current State
 
 **Status**: 🎉 SELF-HOSTING OPERATIONAL - Continuous improvement active!
-**Iteration**: 16
+**Iteration**: 17
 
 **Goal**: Get Ringmaster sophisticated enough to continue improving itself.
 
@@ -22,6 +22,61 @@
 | Bootstrap Sequence | ✅ Script fixed | scripts/bootstrap-selfhost.sh - status command fixed |
 | Self-Improvement Loop | ✅ OPERATIONAL! | Multiple tasks completed by workers |
 | Multi-Worker Support | ✅ Added | Second worker registered (worker-6ab58bee) |
+
+## Iteration 17 Accomplishments
+
+### 📊 Observability - Input API INFO Logging
+
+Continuing the self-improvement loop with an observability enhancement. This adds logging to the critical user input entry point:
+
+1. **Codebase Analysis**: Used Task/Explore agent to scan all API route modules. Found that `input.py` (the critical entry point for task creation) had no INFO logging, while `queue.py`, `decisions.py`, and `outcomes.py` already had comprehensive logging.
+
+2. **Task Created**: `bd-edc6748e` - "Add INFO logging to input API routes for observability"
+
+3. **Worker Picked Up Task**: Worker `worker-0bc3a778` detected and processed task automatically via polling loop (iteration [2])
+
+4. **Worker Completed Task Successfully**:
+   - Added `import logging` and `logger = logging.getLogger(__name__)`
+   - Added INFO logging to both endpoints:
+     - `submit_input()`: Log input parameters (project_id, text_length, priority, auto_decompose) and results (tasks created, new vs updated breakdown, epic_id, dependencies count)
+     - `suggest_related()`: Log request parameters (project_id, text_length, max_results) and result count
+   - Worker also added tracking variables `updated_count` and `new_count` for better logging
+   - Tests pass: 730 passed
+   - Clean commit: `6a92c14`
+
+### Worker-Generated Commit
+
+```
+commit 6a92c14
+Author: jeda <coder@jedarden.com>
+
+    feat(api): add INFO logging to input API routes for observability
+
+    Following the pattern from queue.py and decisions.py, add comprehensive
+    logging to input.py endpoints:
+
+    * submit_input(): Log input parameters (project_id, text length, priority,
+      auto_decompose flag) and creation results (tasks created with new vs
+      updated breakdown, epic_id, dependencies count)
+    * suggest_related(): Log request parameters (project_id, text length,
+      max_results) and result count
+
+    This improves observability of the critical user input entry point where
+    all natural language inputs flow through for task creation.
+
+    Co-Authored-By: Claude Sonnet 4 <noreply@anthropic.com>
+```
+
+### Files Modified
+
+- `src/ringmaster/api/routes/input.py` - (by worker!) Added INFO logging to both endpoints (+26 lines)
+
+### Test Results
+- All 730 tests passing
+- Worker polling loop stable (iteration [2])
+- Task assignment and completion working reliably
+
+---
 
 ## Iteration 16 Accomplishments
 
