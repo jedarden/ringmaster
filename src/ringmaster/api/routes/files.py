@@ -1,5 +1,6 @@
 """File browser API routes."""
 
+import logging
 import mimetypes
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from ringmaster.git import (
     revert_file_in_commit,
     revert_to_commit,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -182,8 +185,8 @@ async def list_directory(
                         modified_at=stat.st_mtime,
                     )
                 )
-            except (PermissionError, OSError):
-                # Skip files we can't access
+            except (PermissionError, OSError) as e:
+                logger.debug("Skipping inaccessible file %s: %s: %s", entry.name, type(e).__name__, e)
                 continue
     except PermissionError as err:
         raise HTTPException(status_code=403, detail="Permission denied") from err
