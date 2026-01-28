@@ -211,8 +211,8 @@ class SessionHandle:
             try:
                 stderr_data = await self.process.stderr.read()
                 self._error_lines.append(stderr_data.decode("utf-8", errors="replace"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Failed to read stderr: %s: %s", type(e).__name__, e)
 
         ended_at = datetime.now(UTC)
         self._completed = True
