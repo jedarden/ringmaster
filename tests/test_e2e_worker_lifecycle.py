@@ -15,7 +15,6 @@ This test requires --run-live flag and actual Claude Code CLI installed.
 import asyncio
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -23,8 +22,6 @@ from ringmaster.db.connection import Database
 from ringmaster.db.repositories import ProjectRepository, TaskRepository, WorkerRepository
 from ringmaster.domain import Dependency, Priority, Project, Task, TaskStatus, Worker, WorkerStatus
 from ringmaster.events import EventBus, EventType
-from ringmaster.scheduler import Scheduler
-from ringmaster.worker.executor import WorkerExecutor
 from ringmaster.worker.spawner import WorkerSpawner
 
 
@@ -121,9 +118,6 @@ class TestE2EWorkerLifecycle:
 
         event_bus.add_callback(track_event)
 
-        # Create scheduler
-        scheduler = Scheduler(db, event_bus)
-
         # Assign task to worker (simulating scheduler behavior)
         worker.status = WorkerStatus.BUSY
         worker.current_task_id = task.id
@@ -216,9 +210,6 @@ class TestE2EWorkerLifecycle:
             project_id=project.id,
         )
         worker = await worker_repo.create(worker)
-
-        # Create scheduler
-        scheduler = Scheduler(db, event_bus)
 
         # Get ready tasks (should include our task)
         ready_tasks = await task_repo.get_ready_tasks(project.id)
