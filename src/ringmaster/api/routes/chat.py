@@ -391,3 +391,109 @@ async def download_uploaded_file(
         media_type=mime_type,
         filename=original_filename,
     )
+
+
+# =============================================================================
+# Chat-to-Task Creation
+# =============================================================================
+
+
+class UserInputRequest(BaseModel):
+    """Request body for user input that creates a task."""
+
+    content: str  # User's natural language request
+    priority: str = "P2"  # Priority level
+
+
+class UserInputResponse(BaseModel):
+    """Response from user input processing."""
+
+    message: ChatMessage  # The stored chat message
+    task_id: str  # Created task ID
+    task_title: str  # Generated task title
+
+
+@router.post("/projects/{project_id}/input", status_code=201)
+async def process_user_input(
+    db: Annotated[Database, Depends(get_db)],
+    project_id: UUID,
+    body: UserInputRequest,
+) -> UserInputResponse:
+    """Process user input and create a task.
+
+    This is the main entry point for the chat-to-task workflow.
+    Takes natural language input from the user and:
+    1. Stores it as a chat message
+    2. Creates a task from the input
+    3. Returns both for display
+
+    The task is automatically enqueued (status=READY) so workers
+    can immediately claim it.
+    """
+    from ringmaster.db import ProjectRepository, TaskRepository
+    from ringmaster.domain import Priority, Task, TaskStatus
+
+    # Verify project exists
+    project_repo = ProjectRepository(db)
+    project = await project_repo.get(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Generate a concise task title from the content
+    # Take first line or first 80 chars
+    content_lines = body.content.strip().split('\n')
+    first_line = content_lines[0].strip()
+    if len(first_line) > 80:
+        task_title = first_line[:77] + "..."
+    else:
+        task_title = first_line
+
+    # Map priority string to enum
+    try:
+        priority = Priority(body.priority)
+    except ValueError:
+        priority = Priority.P2
+
+    # Create the task
+    task_repo = TaskRepository(db)
+    task = Task(
+        project_id=project_id,
+        title=task_title,
+        description=body.content,
+        priority=priority,
+        status=TaskStatus.READY,  # Auto-enqueued
+    )
+    created_task = await task_repo.create_task(task)
+
+    # Store as chat message
+    chat_repo = ChatRepository(db)
+    message = ChatMessage(
+        project_id=project_id,
+        task_id=created_task.id,
+        role="user",
+        content=body.content,
+    )
+    created_message = await chat_repo.create_message(message)
+
+    # Emit events
+    await event_bus.emit(
+        EventType.TASK_CREATED,
+        data={"task_id": created_task.id, "title": task_title, "type": "task"},
+        project_id=str(project_id),
+    )
+    await event_bus.emit(
+        EventType.MESSAGE_CREATED,
+        data={
+            "message_id": created_message.id,
+            "role": "user",
+            "content": body.content,
+            "task_id": created_task.id,
+        },
+        project_id=str(project_id),
+    )
+
+    return UserInputResponse(
+        message=created_message,
+        task_id=created_task.id,
+        task_title=task_title,
+    )

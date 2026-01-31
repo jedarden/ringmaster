@@ -68,6 +68,7 @@ class WorkerCreate(BaseModel):
     prompt_template: str | None = None  # Injected when worker executes task
     generated_script: str | None = None
     capabilities: list[str] = []  # e.g., ["python", "typescript", "security"]
+    auto_spawn: bool = True  # Automatically spawn worker after creation
 
 
 class WorkerUpdate(BaseModel):
@@ -404,7 +405,11 @@ async def create_worker(
     db: Annotated[Database, Depends(get_db)],
     body: WorkerCreate,
 ) -> Worker:
-    """Create a new worker."""
+    """Create a new worker.
+
+    If auto_spawn is True and the worker has a generated_script,
+    the worker will be automatically spawned in a tmux session.
+    """
     logger.info(f"Creating worker: name={body.name}, type={body.type}, capabilities={body.capabilities}")
 
     repo = WorkerRepository(db)
@@ -412,12 +417,37 @@ async def create_worker(
         name=body.name,
         description=body.description,
         type=body.type,
+        prompt_template=body.prompt_template,
         generated_script=body.generated_script,
         capabilities=body.capabilities,
     )
     created_worker = await repo.create(worker)
 
     logger.info(f"Worker created: id={created_worker.id}, name={created_worker.name}")
+
+    # Auto-spawn if requested and worker has a script
+    if body.auto_spawn and created_worker.generated_script:
+        try:
+            from ringmaster.worker.spawner import WorkerSpawner
+
+            spawner = WorkerSpawner(db_path=db.db_path)
+            await spawner.spawn(
+                worker_id=created_worker.id,
+                worker_name=created_worker.name,
+                worker_type=created_worker.type,
+                capabilities=created_worker.capabilities,
+                generated_script=created_worker.generated_script,
+            )
+
+            # Update worker status to IDLE (ready to work)
+            created_worker.status = WorkerStatus.IDLE
+            await repo.update(created_worker)
+
+            logger.info(f"Worker auto-spawned: id={created_worker.id}")
+        except Exception as e:
+            logger.warning(f"Failed to auto-spawn worker {created_worker.id}: {e}")
+            # Worker is still created, just not spawned
+
     return created_worker
 
 

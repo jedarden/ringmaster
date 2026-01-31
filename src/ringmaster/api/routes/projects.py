@@ -55,6 +55,7 @@ class ProjectCreate(BaseModel):
     description: str | None = None
     tech_stack: list[str] = []
     repo_url: str | None = None
+    create_initial_task: bool = True  # Create an onboarding task
 
 
 class ProjectUpdate(BaseModel):
@@ -178,7 +179,13 @@ async def create_project(
     db: Annotated[Database, Depends(get_db)],
     body: ProjectCreate,
 ) -> Project:
-    """Create a new project."""
+    """Create a new project.
+
+    If create_initial_task is True, creates an onboarding task that
+    analyzes the codebase and sets up context for the project.
+    """
+    from ringmaster.domain import Task, TaskStatus, Priority
+
     repo = ProjectRepository(db)
     project = Project(
         name=body.name,
@@ -186,7 +193,35 @@ async def create_project(
         tech_stack=body.tech_stack,
         repo_url=body.repo_url,
     )
-    return await repo.create(project)
+    created_project = await repo.create(project)
+
+    # Create initial onboarding task if requested
+    if body.create_initial_task:
+        task_repo = TaskRepository(db)
+
+        initial_task = Task(
+            project_id=created_project.id,
+            title=f"Onboard project: {created_project.name}",
+            description=f"""Analyze the codebase and set up context for the project.
+
+Tasks:
+1. Read and understand the project structure
+2. Identify key files and components
+3. Note any conventions or patterns used
+4. Review existing documentation
+5. Summarize the project architecture
+
+Project: {created_project.name}
+{f"Repository: {created_project.repo_url}" if created_project.repo_url else ""}
+{f"Tech stack: {', '.join(created_project.tech_stack)}" if created_project.tech_stack else ""}
+{f"Description: {created_project.description}" if created_project.description else ""}
+""",
+            priority=Priority.P2,
+            status=TaskStatus.READY,  # Auto-enqueued
+        )
+        await task_repo.create_task(initial_task)
+
+    return created_project
 
 
 @router.get("/{project_id}")

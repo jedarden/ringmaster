@@ -32,6 +32,7 @@ class TaskCreate(BaseModel):
     priority: Priority = Priority.P2
     parent_id: str | None = None
     task_type: TaskType = TaskType.TASK
+    auto_enqueue: bool = True  # Automatically set status to READY
 
 
 class EpicCreate(BaseModel):
@@ -39,6 +40,7 @@ class EpicCreate(BaseModel):
 
     project_id: UUID
     title: str
+    auto_enqueue: bool = True  # Automatically set status to READY
     description: str | None = None
     priority: Priority = Priority.P2
     acceptance_criteria: list[str] = []
@@ -113,6 +115,9 @@ async def create_task(
     """Create a new task or subtask."""
     repo = TaskRepository(db)
 
+    # Determine initial status
+    initial_status = TaskStatus.READY if body.auto_enqueue else TaskStatus.DRAFT
+
     if body.task_type == TaskType.SUBTASK:
         if not body.parent_id:
             raise HTTPException(status_code=400, detail="Subtask requires parent_id")
@@ -122,6 +127,7 @@ async def create_task(
             description=body.description,
             priority=body.priority,
             parent_id=body.parent_id,
+            status=initial_status,
         )
     else:
         task = Task(
@@ -130,6 +136,7 @@ async def create_task(
             description=body.description,
             priority=body.priority,
             parent_id=body.parent_id,
+            status=initial_status,
         )
 
     created = await repo.create_task(task)
@@ -151,12 +158,17 @@ async def create_epic(
 ) -> Epic:
     """Create a new epic."""
     repo = TaskRepository(db)
+
+    # Determine initial status
+    initial_status = TaskStatus.READY if body.auto_enqueue else TaskStatus.DRAFT
+
     epic = Epic(
         project_id=body.project_id,
         title=body.title,
         description=body.description,
         priority=body.priority,
         acceptance_criteria=body.acceptance_criteria,
+        status=initial_status,
     )
     created = await repo.create_task(epic)
 
