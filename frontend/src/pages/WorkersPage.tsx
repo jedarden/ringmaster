@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   listWorkersWithTasks,
   createWorker,
+  updateWorker,
   activateWorker,
   deactivateWorker,
   deleteWorker,
@@ -12,6 +13,7 @@ import {
   killWorker,
   listWorkerSessions,
   getWorkerHealth,
+  naturalLanguageToSettings,
 } from "../api/client";
 import type { TmuxSessionResponse, SpawnWorkerRequest, WorkerHealthResponse } from "../types";
 import { WorkerOutputPanel } from "../components/WorkerOutputPanel";
@@ -46,11 +48,12 @@ export function WorkersPage() {
   const [workers, setWorkers] = useState<WorkerWithTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newWorker, setNewWorker] = useState<WorkerCreate>({
+  // Modal state: null = closed, "new" = create mode, worker ID = edit mode
+  const [showWorkerModal, setShowWorkerModal] = useState<string | null>(null);
+  const [workerFormData, setWorkerFormData] = useState<WorkerCreate & { generated_script?: string }>({
     name: "",
     type: "claude-code",
-    command: "claude",
+    capabilities: [],
   });
   const listRef = useRef<HTMLDivElement>(null);
   const [outputPanelWorkerId, setOutputPanelWorkerId] = useState<string | null>(null);
@@ -65,6 +68,9 @@ export function WorkersPage() {
   const [, setTick] = useState(0);
   // Health status for busy workers
   const [workerHealth, setWorkerHealth] = useState<Record<string, WorkerHealthResponse>>({});
+  // AI settings generation
+  const [aiLoading, setAiLoading] = useState(false);
+  const [naturalLanguage, setNaturalLanguage] = useState("");
 
   const loadWorkers = useCallback(async () => {
     try {
@@ -129,7 +135,7 @@ export function WorkersPage() {
   // Keyboard navigation for workers list
   const { selectedIndex, setSelectedIndex } = useListNavigation({
     items: workers,
-    enabled: !showCreateForm,
+    enabled: !showWorkerModal,
     onSelect: (_worker, index) => {
       // Scroll selected item into view
       const items = listRef.current?.querySelectorAll(".worker-card");
@@ -147,17 +153,59 @@ export function WorkersPage() {
     },
   });
 
-  const handleCreate = async (e: React.FormEvent) => {
+  // Open modal for creating a new worker
+  const handleOpenCreate = () => {
+    setWorkerFormData({
+      name: "",
+      type: "claude-code",
+      capabilities: [],
+      description: undefined,
+      generated_script: undefined,
+    });
+    setNaturalLanguage("");
+    setShowWorkerModal("new");
+  };
+
+  // Open modal for editing an existing worker (pre-filled)
+  const handleOpenEdit = (id: string) => {
+    const worker = workers.find(w => w.id === id);
+    if (!worker) return;
+
+    setWorkerFormData({
+      name: worker.name,
+      type: worker.type,
+      capabilities: worker.capabilities || [],
+      description: worker.description || undefined,
+      generated_script: worker.generated_script || undefined,
+    });
+    setNaturalLanguage("");
+    setShowWorkerModal(id);
+  };
+
+  // Handle form submission for both create and edit
+  const handleWorkerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newWorker.name.trim()) return;
+    if (!workerFormData.name.trim()) return;
 
     try {
-      await createWorker(newWorker);
-      setNewWorker({ name: "", type: "claude-code", command: "claude" });
-      setShowCreateForm(false);
+      if (showWorkerModal === "new") {
+        // Create new worker
+        await createWorker(workerFormData);
+      } else {
+        // Update existing worker
+        await updateWorker(showWorkerModal!, {
+          name: workerFormData.name,
+          description: workerFormData.description,
+          generated_script: workerFormData.generated_script,
+          capabilities: workerFormData.capabilities,
+        });
+      }
+      setShowWorkerModal(null);
+      setWorkerFormData({ name: "", type: "claude-code", capabilities: [] });
+      setNaturalLanguage("");
       await loadWorkers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create worker");
+      setError(err instanceof Error ? err.message : "Failed to save worker");
     }
   };
 
@@ -187,6 +235,41 @@ export function WorkersPage() {
       await loadWorkers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete worker");
+    }
+  };
+
+  const handleAIGenerate = async () => {
+    if (!naturalLanguage.trim()) {
+      setError("Please enter a description of the worker");
+      return;
+    }
+
+    setAiLoading(true);
+    try {
+      const response = await naturalLanguageToSettings({
+        natural_language: naturalLanguage,
+        settings_type: "worker",
+      });
+
+      if (response.success && response.worker_settings) {
+        const settings = response.worker_settings;
+        // Update the form with AI-generated settings
+        setWorkerFormData((prev) => ({
+          ...prev,
+          name: settings.name || prev.name,
+          description: settings.description || prev.description,
+          type: settings.type || prev.type,
+          generated_script: settings.generated_script || prev.generated_script,
+          capabilities: settings.capabilities || prev.capabilities,
+        }));
+        setError(null);
+      } else {
+        setError(response.error || "Failed to generate settings from AI");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to generate settings");
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -358,44 +441,13 @@ export function WorkersPage() {
               {pauseAllLoading ? "Pausing..." : "Pause All"}
             </button>
           )}
-          <button onClick={() => setShowCreateForm(!showCreateForm)}>
-            {showCreateForm ? "Cancel" : "+ New Worker"}
+          <button onClick={handleOpenCreate}>
+            + New Worker
           </button>
         </div>
       </div>
 
       {error && <div className="error">{error}</div>}
-
-      {showCreateForm && (
-        <form onSubmit={handleCreate} className="create-form">
-          <input
-            type="text"
-            placeholder="Worker name"
-            value={newWorker.name}
-            onChange={(e) => setNewWorker({ ...newWorker, name: e.target.value })}
-            required
-            autoFocus
-          />
-          <select
-            value={newWorker.type}
-            onChange={(e) => setNewWorker({ ...newWorker, type: e.target.value })}
-          >
-            <option value="claude-code">Claude Code</option>
-            <option value="aider">Aider</option>
-            <option value="codex">Codex</option>
-            <option value="goose">Goose</option>
-            <option value="custom">Custom</option>
-          </select>
-          <input
-            type="text"
-            placeholder="Command (e.g., claude)"
-            value={newWorker.command}
-            onChange={(e) => setNewWorker({ ...newWorker, command: e.target.value })}
-            required
-          />
-          <button type="submit">Create Worker</button>
-        </form>
-      )}
 
       {workers.length === 0 ? (
         <div className="empty-state">
@@ -475,6 +527,13 @@ export function WorkersPage() {
                         )}
                       </div>
                       <div className="worker-actions">
+                        <button
+                          onClick={() => handleOpenEdit(worker.id)}
+                          className="edit-btn"
+                          title="Edit worker configuration"
+                        >
+                          Edit
+                        </button>
                         {worker.status === WorkerStatus.IDLE ? (
                           <>
                             {hasSession(worker.id) ? (
@@ -570,6 +629,13 @@ export function WorkersPage() {
                         <span className="worker-type">{worker.type}</span>
                       </div>
                       <div className="worker-actions">
+                        <button
+                          onClick={() => handleOpenEdit(worker.id)}
+                          className="edit-btn"
+                          title="Edit worker configuration"
+                        >
+                          Edit
+                        </button>
                         <button
                           onClick={() => setShowSpawnModal(worker.id)}
                           className="spawn-btn"
@@ -687,8 +753,109 @@ export function WorkersPage() {
         </div>
       )}
 
+      {/* Create/Edit Worker Modal */}
+      {showWorkerModal && (
+        <div className="modal-overlay" onClick={() => setShowWorkerModal(null)}>
+          <div className="modal edit-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{showWorkerModal === "new" ? "New Worker" : `Edit Worker: ${workers.find(w => w.id === showWorkerModal)?.name}`}</h2>
+            <form onSubmit={handleWorkerSubmit}>
+              <div className="form-wrapper">
+                {/* AI Settings Generation Section */}
+                <div className="form-group ai-section">
+                  <label>Describe your worker (AI-powered)</label>
+                  <textarea
+                    placeholder="e.g., 'A Claude Code worker for Python development using my existing Claude Code Pro subscription' or 'A GitHub Copilot worker that uses my monthly plan'"
+                    value={naturalLanguage}
+                    onChange={(e) => setNaturalLanguage(e.target.value)}
+                    rows={3}
+                    className="ai-textarea"
+                    autoFocus={showWorkerModal === "new"}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAIGenerate}
+                    disabled={aiLoading || !naturalLanguage.trim()}
+                    className="ai-generate-btn"
+                  >
+                    {aiLoading ? "Generating..." : "Generate Script from AI"}
+                  </button>
+                  <small>Describe the worker in plain English. Works with API keys, monthly plans (Claude Code Pro, Cursor, Copilot), or existing CLI auth.</small>
+                </div>
+
+                <div className="form-group">
+                  <label>Name</label>
+                  <input
+                    type="text"
+                    value={workerFormData.name || ""}
+                    onChange={(e) => setWorkerFormData({ ...workerFormData, name: e.target.value })}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Description</label>
+                  <textarea
+                    placeholder="What does this worker do?"
+                    value={workerFormData.description || ""}
+                    onChange={(e) => setWorkerFormData({ ...workerFormData, description: e.target.value || undefined })}
+                    rows={2}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Capabilities (comma-separated)</label>
+                  <input
+                    type="text"
+                    placeholder="python, typescript, security"
+                    value={workerFormData.capabilities?.join(", ") || ""}
+                    onChange={(e) =>
+                      setWorkerFormData({
+                        ...workerFormData,
+                        capabilities: e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                  <small>Used for task-worker matching (AI can infer this too)</small>
+                </div>
+
+                <div className="form-group">
+                  <label>Generated Start Script</label>
+                  <textarea
+                    placeholder="#!/bin/bash&#10;# The AI-generated bash script will appear here&#10;# Or write your own complete worker script"
+                    value={workerFormData.generated_script || ""}
+                    onChange={(e) => setWorkerFormData({ ...workerFormData, generated_script: e.target.value || undefined })}
+                    rows={12}
+                    style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                  />
+                  <small>Complete bash script with shebang, signal handling, task polling, and AI tool execution</small>
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWorkerModal(null);
+                    setWorkerFormData({ name: "", type: "claude-code", capabilities: [] });
+                    setNaturalLanguage("");
+                  }}
+                  className="secondary"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="primary">
+                  {showWorkerModal === "new" ? "Create Worker" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Keyboard navigation hint */}
-      {workers.length > 0 && !showCreateForm && (
+      {workers.length > 0 && !showWorkerModal && (
         <div
           style={{
             marginTop: "1rem",
