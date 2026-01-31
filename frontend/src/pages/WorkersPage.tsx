@@ -50,10 +50,11 @@ export function WorkersPage() {
   const [error, setError] = useState<string | null>(null);
   // Modal state: null = closed, "new" = create mode, worker ID = edit mode
   const [showWorkerModal, setShowWorkerModal] = useState<string | null>(null);
-  const [workerFormData, setWorkerFormData] = useState<WorkerCreate & { generated_script?: string }>({
+  const [workerFormData, setWorkerFormData] = useState<WorkerCreate & { prompt_template?: string; generated_script?: string }>({
     name: "",
     type: "claude-code",
     capabilities: [],
+    prompt_template: "",
   });
   const listRef = useRef<HTMLDivElement>(null);
   const [outputPanelWorkerId, setOutputPanelWorkerId] = useState<string | null>(null);
@@ -160,6 +161,7 @@ export function WorkersPage() {
       type: "claude-code",
       capabilities: [],
       description: undefined,
+      prompt_template: "",
       generated_script: undefined,
     });
     setNaturalLanguage("");
@@ -176,6 +178,7 @@ export function WorkersPage() {
       type: worker.type,
       capabilities: worker.capabilities || [],
       description: worker.description || undefined,
+      prompt_template: worker.prompt_template || "",
       generated_script: worker.generated_script || undefined,
     });
     setNaturalLanguage("");
@@ -196,12 +199,13 @@ export function WorkersPage() {
         await updateWorker(showWorkerModal!, {
           name: workerFormData.name,
           description: workerFormData.description,
+          prompt_template: workerFormData.prompt_template,
           generated_script: workerFormData.generated_script,
           capabilities: workerFormData.capabilities,
         });
       }
       setShowWorkerModal(null);
-      setWorkerFormData({ name: "", type: "claude-code", capabilities: [] });
+      setWorkerFormData({ name: "", type: "claude-code", capabilities: [], prompt_template: "" });
       setNaturalLanguage("");
       await loadWorkers();
     } catch (err) {
@@ -803,6 +807,18 @@ export function WorkersPage() {
                 </div>
 
                 <div className="form-group">
+                  <label>Prompt Template</label>
+                  <textarea
+                    placeholder="You are a Python expert. Focus on clean, well-tested code.&#10;&#10;{task}"
+                    value={workerFormData.prompt_template || ""}
+                    onChange={(e) => setWorkerFormData({ ...workerFormData, prompt_template: e.target.value || undefined })}
+                    rows={4}
+                    style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+                  />
+                  <small>Template injected when worker executes. Use {"{task}"} for task details, {"{context}"} for project context.</small>
+                </div>
+
+                <div className="form-group">
                   <label>Capabilities (comma-separated)</label>
                   <input
                     type="text"
@@ -838,7 +854,7 @@ export function WorkersPage() {
                   type="button"
                   onClick={() => {
                     setShowWorkerModal(null);
-                    setWorkerFormData({ name: "", type: "claude-code", capabilities: [] });
+                    setWorkerFormData({ name: "", type: "claude-code", capabilities: [], prompt_template: "" });
                     setNaturalLanguage("");
                   }}
                   className="secondary"

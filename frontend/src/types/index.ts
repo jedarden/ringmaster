@@ -180,20 +180,29 @@ export interface DependencyCreate {
 export interface Worker {
   id: string;
   name: string;
+  description: string | null;
   type: string;
   status: WorkerStatus;
   current_task_id: string | null;
-  command: string;
-  args: string[];
-  prompt_flag: string;
-  working_dir: string | null;
-  timeout_seconds: number;
-  env_vars: Record<string, string>;
+  capabilities: string[];
+  prompt_template: string | null;
+  generated_script: string | null;
   tasks_completed: number;
   tasks_failed: number;
   avg_completion_seconds: number | null;
   created_at: string;
   last_active_at: string | null;
+
+  // Legacy fields - deprecated, kept for backwards compatibility
+  command?: string | null;
+  args?: string[] | null;
+  prompt_flag?: string | null;
+  working_dir?: string | null;
+  timeout_seconds?: number | null;
+  env_vars?: Record<string, string> | null;
+  launcher_script?: string | null;
+  launcher_script_inline?: string | null;
+  launcher_args?: string[] | null;
 }
 
 // Current task info for busy workers
@@ -214,24 +223,32 @@ export interface WorkerWithTask extends Worker {
 
 export interface WorkerCreate {
   name: string;
-  type: string;
-  command: string;
-  args?: string[];
-  prompt_flag?: string;
-  working_dir?: string | null;
-  timeout_seconds?: number;
-  env_vars?: Record<string, string>;
+  description?: string | null;
+  type?: string;
+  prompt_template?: string | null;
+  generated_script?: string | null;
+  capabilities?: string[];
 }
 
 export interface WorkerUpdate {
   name?: string | null;
+  description?: string | null;
+  type?: string | null;
   status?: WorkerStatus | null;
+  prompt_template?: string | null;
+  generated_script?: string | null;
+  capabilities?: string[] | null;
+
+  // Legacy fields - deprecated
   command?: string | null;
   args?: string[] | null;
   prompt_flag?: string | null;
   working_dir?: string | null;
   timeout_seconds?: number | null;
   env_vars?: Record<string, string> | null;
+  launcher_script?: string | null;
+  launcher_script_inline?: string | null;
+  launcher_args?: string[] | null;
 }
 
 export interface QueueStats {
@@ -882,4 +899,45 @@ export interface RevertResponse {
   new_commit_hash: string | null;
   message: string;
   conflicts: string[] | null;
+}
+
+// AI Settings Generation types
+
+export interface NLToSettingsRequest {
+  natural_language: string;
+  settings_type?: string;
+}
+
+export interface WorkerSettingsFromAI {
+  name: string | null;
+  description: string | null;
+  type: string | null;
+  generated_script: string | null;
+  capabilities: string[] | null;
+  reasoning: string | null;
+
+  // Legacy fields - deprecated
+  command?: string | null;
+  args?: string[] | null;
+  prompt_flag?: string | null;
+  working_dir?: string | null;
+  timeout_seconds?: number | null;
+  launcher_script?: string | null;
+  launcher_args?: string[] | null;
+  launcher_script_inline?: string | null;
+  env_vars?: Record<string, string> | null;
+}
+
+export interface NLToSettingsResponse {
+  success: boolean;
+  settings: Record<string, unknown> | null;
+  worker_settings: WorkerSettingsFromAI | null;
+  reasoning: string | null;
+  error: string | null;
+}
+
+export interface AIStatusResponse {
+  enabled: boolean;
+  provider: string;
+  has_api_key: boolean;
 }

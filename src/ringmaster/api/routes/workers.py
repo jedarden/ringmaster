@@ -32,16 +32,13 @@ class WorkerWithTask(BaseModel):
 
     id: str
     name: str
+    description: str | None = None
     type: str
     status: WorkerStatus
     current_task_id: str | None = None
     capabilities: list[str] = []
-    command: str
-    args: list[str] = []
-    prompt_flag: str = "-p"
-    working_dir: str | None = None
-    timeout_seconds: int = 1800
-    env_vars: dict[str, str] = {}
+    prompt_template: str | None = None
+    generated_script: str | None = None
     tasks_completed: int = 0
     tasks_failed: int = 0
     avg_completion_seconds: float | None = None
@@ -50,18 +47,26 @@ class WorkerWithTask(BaseModel):
     # Enriched task info
     current_task: CurrentTaskInfo | None = None
 
+    # Legacy fields - deprecated, kept for backwards compatibility
+    command: str | None = None
+    args: list[str] | None = None
+    prompt_flag: str | None = None
+    working_dir: str | None = None
+    timeout_seconds: int | None = None
+    env_vars: dict[str, str] | None = None
+    launcher_script: str | None = None
+    launcher_script_inline: str | None = None
+    launcher_args: list[str] | None = None
+
 
 class WorkerCreate(BaseModel):
     """Request body for creating a worker."""
 
     name: str
+    description: str | None = None
     type: str  # claude-code, aider, codex, etc.
-    command: str
-    args: list[str] = []
-    prompt_flag: str = "-p"
-    working_dir: str | None = None
-    timeout_seconds: int = 1800
-    env_vars: dict[str, str] = {}
+    prompt_template: str | None = None  # Injected when worker executes task
+    generated_script: str | None = None
     capabilities: list[str] = []  # e.g., ["python", "typescript", "security"]
 
 
@@ -69,20 +74,244 @@ class WorkerUpdate(BaseModel):
     """Request body for updating a worker."""
 
     name: str | None = None
+    description: str | None = None
     status: WorkerStatus | None = None
+    prompt_template: str | None = None
+    generated_script: str | None = None
+    capabilities: list[str] | None = None
+
+    # Legacy fields - deprecated
     command: str | None = None
     args: list[str] | None = None
     prompt_flag: str | None = None
     working_dir: str | None = None
     timeout_seconds: int | None = None
     env_vars: dict[str, str] | None = None
-    capabilities: list[str] | None = None
+    launcher_script: str | None = None
+    launcher_script_inline: str | None = None
+    launcher_args: list[str] | None = None
 
 
 class CapabilityUpdate(BaseModel):
     """Request body for adding/removing a capability."""
 
     capability: str
+
+
+# =============================================================================
+# Natural Language Worker Configuration Endpoints
+# =============================================================================
+
+
+class NaturalWorkerCreate(BaseModel):
+    """Request body for creating a worker from natural language."""
+
+    description: str  # Natural language description
+    worker_id: str | None = None  # Optional custom worker ID
+
+
+class NaturalWorkerResponse(BaseModel):
+    """Response from natural language worker creation."""
+
+    success: bool
+    worker_id: str | None = None
+    worker_type: str | None = None
+    model: str | None = None
+    parsed_description: str | None = None
+    suggestions: list[str] = []
+    error: str | None = None
+    confidence: float = 0.0
+
+
+@router.post("/natural", response_model=NaturalWorkerResponse, status_code=201)
+async def create_worker_from_natural_language(
+    db: Annotated[Database, Depends(get_db)],
+    body: NaturalWorkerCreate,
+) -> NaturalWorkerResponse:
+    """Create a worker from natural language description.
+
+    Parses natural language descriptions like:
+    - "claude code with sonnet for python tasks"
+    - "aider using claude-3.5-sonnet, good at refactoring"
+    - "generic worker that runs my-tool"
+
+    Extracts:
+    - Worker type (claude-code, aider, generic, etc.)
+    - Model (opus, sonnet, gpt-4o, etc.)
+    - Capabilities (python, typescript, rust, refactoring, etc.)
+
+    Args:
+        body: Natural language description and optional worker ID.
+
+    Returns:
+        NaturalWorkerResponse with parsed configuration.
+
+    Example:
+        POST /api/workers/natural
+        {
+            "description": "claude code with sonnet for python and typescript"
+        }
+    """
+    logger.info(f"Creating worker from natural language: {body.description}")
+
+    from ringmaster.worker.natural import parse_worker_description
+
+    # Parse the description
+    parse_result = parse_worker_description(body.description)
+
+    if not parse_result.success:
+        logger.warning(f"Failed to parse worker description: {parse_result.error}")
+
+        response = NaturalWorkerResponse(
+            success=False,
+            error=parse_result.error,
+            suggestions=parse_result.suggestions,
+            confidence=parse_result.confidence,
+        )
+        return response
+
+    # Generate worker ID if not provided
+    worker_id = body.worker_id
+    if not worker_id:
+        import uuid
+        worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+
+    # Create worker in database
+    repo = WorkerRepository(db)
+    worker = Worker(
+        id=worker_id,
+        name=parse_result.name or f"{parse_result.name} worker",
+        description=parse_result.description,
+        type=parse_result.name,
+    )
+    created_worker = await repo.create(worker)
+
+    logger.info(
+        f"Worker created from natural language: "
+        f"id={created_worker.id}, type={parse_result.name}, "
+        f"model={parse_result.model}"
+    )
+
+    response = NaturalWorkerResponse(
+        success=True,
+        worker_id=created_worker.id,
+        worker_type=parse_result.name,
+        model=parse_result.model,
+        parsed_description=parse_result.description,
+        suggestions=parse_result.suggestions,
+        confidence=parse_result.confidence,
+    )
+    return response
+
+
+class WorkerTypesResponse(BaseModel):
+    """Response listing available worker types."""
+
+    workers: list[dict]
+    total: int
+
+
+@router.get("/types", response_model=WorkerTypesResponse)
+async def list_worker_types() -> WorkerTypesResponse:
+    """List all available worker types.
+
+    Returns information about each worker type including:
+    - Display name and description
+    - Whether it's available (installed)
+    - Default model
+
+    This endpoint helps users discover what workers they can create
+    without needing to remember exact type names.
+    """
+    logger.info("Listing available worker types")
+
+    from ringmaster.worker.natural import list_all_workers
+
+    all_workers = list_all_workers()
+
+    workers = [
+        {
+            "name": w.name,
+            "description": w.description,
+            "available": w.is_available(),
+            "default_model": w.model,
+            "start_script": w.start_script,
+        }
+        for w in all_workers
+    ]
+
+    response = WorkerTypesResponse(
+        workers=workers,
+        total=len(workers),
+    )
+
+    logger.info(f"Found {len(workers)} worker types")
+    return response
+
+
+class ParseDescriptionRequest(BaseModel):
+    """Request body for parsing a worker description."""
+
+    description: str
+
+
+class ParseDescriptionResponse(BaseModel):
+    """Response from parsing a worker description."""
+
+    success: bool
+    worker_type: str | None = None
+    model: str | None = None
+    suggestions: list[str] = []
+    error: str | None = None
+    confidence: float = 0.0
+    examples: list[dict] = []
+
+
+@router.post("/parse", response_model=ParseDescriptionResponse)
+async def parse_worker_description_endpoint(
+    body: ParseDescriptionRequest,
+) -> ParseDescriptionResponse:
+    """Parse a natural language worker description without creating a worker.
+
+    Use this endpoint to:
+    - Validate a description before creating a worker
+    - See what Ringmaster understood from your description
+
+    Args:
+        body: The natural language description to parse.
+
+    Returns:
+        ParseDescriptionResponse with extracted information.
+
+    Example:
+        POST /api/workers/parse
+        {
+            "description": "claude code with opus"
+        }
+    """
+    logger.info(f"Parsing worker description: {body.description}")
+
+    from ringmaster.worker.natural import parse_worker_description
+
+    parse_result = parse_worker_description(body.description)
+
+    response = ParseDescriptionResponse(
+        success=parse_result.success,
+        worker_type=parse_result.name,
+        model=parse_result.model,
+        capabilities=[],
+        suggestions=parse_result.suggestions,
+        error=parse_result.error,
+        confidence=parse_result.confidence,
+    )
+
+    logger.info(
+        f"Description parsed: success={parse_result.success}, "
+        f"type={parse_result.name}, model={parse_result.model}, "
+        f"confidence={parse_result.confidence}"
+    )
+
+    return response
 
 
 @router.get("")
@@ -181,13 +410,9 @@ async def create_worker(
     repo = WorkerRepository(db)
     worker = Worker(
         name=body.name,
+        description=body.description,
         type=body.type,
-        command=body.command,
-        args=body.args,
-        prompt_flag=body.prompt_flag,
-        working_dir=body.working_dir,
-        timeout_seconds=body.timeout_seconds,
-        env_vars=body.env_vars,
+        generated_script=body.generated_script,
         capabilities=body.capabilities,
     )
     created_worker = await repo.create(worker)
@@ -232,20 +457,12 @@ async def update_worker(
 
     if body.name is not None:
         worker.name = body.name
+    if body.description is not None:
+        worker.description = body.description
     if body.status is not None:
         worker.status = body.status
-    if body.command is not None:
-        worker.command = body.command
-    if body.args is not None:
-        worker.args = body.args
-    if body.prompt_flag is not None:
-        worker.prompt_flag = body.prompt_flag
-    if body.working_dir is not None:
-        worker.working_dir = body.working_dir
-    if body.timeout_seconds is not None:
-        worker.timeout_seconds = body.timeout_seconds
-    if body.env_vars is not None:
-        worker.env_vars = body.env_vars
+    if body.generated_script is not None:
+        worker.generated_script = body.generated_script
     if body.capabilities is not None:
         worker.capabilities = body.capabilities
 
@@ -777,8 +994,7 @@ class SpawnWorkerRequest(BaseModel):
 
     worker_type: str = "claude-code"  # claude-code, aider, codex, goose, generic
     capabilities: list[str] = []
-    worktree_path: str | None = None
-    custom_command: str | None = None
+    generated_script: str | None = None  # LLM-generated script to use instead of template
 
 
 class SpawnedWorkerResponse(BaseModel):
@@ -835,15 +1051,17 @@ async def spawn_worker(
             id=worker_id,
             name=worker_id,
             type=body.worker_type,
-            command=body.custom_command or body.worker_type,
             capabilities=body.capabilities,
+            generated_script=body.generated_script,
         )
         await repo.create(worker)
     else:
-        # Update capabilities if provided
+        # Update capabilities and script if provided
         if body.capabilities:
             worker.capabilities = body.capabilities
-            await repo.update(worker)
+        if body.generated_script:
+            worker.generated_script = body.generated_script
+        await repo.update(worker)
 
     # Create spawner and spawn
     spawner = WorkerSpawner(db_path=db.db_path)
@@ -851,10 +1069,10 @@ async def spawn_worker(
     try:
         spawned = await spawner.spawn(
             worker_id=worker_id,
-            worker_type=body.worker_type,
-            capabilities=body.capabilities,
-            worktree_path=body.worktree_path,
-            custom_command=body.custom_command,
+            worker_name=worker.name,
+            worker_type=worker.type,
+            capabilities=worker.capabilities,
+            generated_script=worker.generated_script,
         )
 
         # Update worker status to idle (ready to work)
@@ -1222,6 +1440,110 @@ class WorktreePruneResponse(BaseModel):
     repo_path: str
     pruned_count: int
     remaining_count: int
+
+
+@router.get("/{worker_id}/next-task")
+async def get_next_task(
+    worker_id: str,
+    db: Annotated[Database, Depends(get_db)],
+) -> dict | None:
+    """Get the next available task for this worker.
+
+    This endpoint is for worker polling - workers can call this endpoint
+    to get their next task. The task is atomically assigned to the worker.
+
+    Returns null if no tasks are available.
+    """
+    logger.info(f"Worker {worker_id} polling for next task")
+
+    from ringmaster.domain import TaskStatus
+    from ringmaster.queue import QueueManager
+
+    worker_repo = WorkerRepository(db)
+    task_repo = db.task
+
+    # Verify worker exists and is active
+    worker = await worker_repo.get(worker_id)
+    if not worker:
+        logger.warning(f"Worker {worker_id} not found")
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    if worker.status != WorkerStatus.IDLE:
+        logger.warning(f"Worker {worker_id} is not idle (status: {worker.status})")
+        # Still allow getting next task, but log a warning
+
+    # Get next ready task that matches worker capabilities
+    ready_tasks = await task_repo.get_ready_tasks()
+
+    # Filter by worker capabilities if specified
+    if worker.capabilities:
+        # For now, don't filter - any worker can take any task
+        # TODO: Implement capability matching
+        pass
+
+    if not ready_tasks:
+        logger.debug(f"No ready tasks available for worker {worker_id}")
+        return None
+
+    # Get the first ready task (could be improved with priority/pagerank)
+    task = ready_tasks[0]
+
+    # Assign the task to this worker
+    manager = QueueManager(db)
+    success = await manager._assign_task(task, worker)
+
+    if not success:
+        logger.warning(f"Failed to assign task {task.id} to worker {worker_id}")
+        return None
+
+    logger.info(f"Assigned task {task.id} to worker {worker_id}")
+
+    return {
+        "id": task.id,
+        "title": task.title,
+        "description": task.description,
+        "prompt": task.description or task.title,  # Use description as prompt
+        "priority": task.priority,
+        "status": task.status,
+        "project_id": task.project_id,
+        "working_dir": None,  # Could be added later
+    }
+
+
+@router.post("/{worker_id}/complete")
+async def complete_worker_task(
+    worker_id: str,
+    body: dict,
+    db: Annotated[Database, Depends(get_db)],
+) -> dict:
+    """Complete a task assigned to this worker.
+
+    This endpoint is called by workers after they've finished processing a task.
+    """
+    task_id = body.get("task_id")
+    success = body.get("success", True)
+    output = body.get("output", "")
+
+    if not task_id:
+        raise HTTPException(status_code=400, detail="task_id is required")
+
+    logger.info(f"Worker {worker_id} completing task {task_id} (success: {success})")
+
+    from ringmaster.queue import QueueManager
+
+    manager = QueueManager(db)
+    await manager.complete_task(
+        task_id=task_id,
+        success=success,
+        output_path=None,  # Could save output to file and return path
+    )
+
+    logger.info(f"Task {task_id} marked as {'completed' if success else 'failed'}")
+
+    return {
+        "status": "completed" if success else "failed",
+        "task_id": task_id,
+    }
 
 
 @router.post("/worktrees/list")

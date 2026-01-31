@@ -701,12 +701,12 @@ class WorkerRepository:
         await self.db.execute(
             """
             INSERT INTO workers (
-                id, name, type, status, current_task_id, capabilities, command, args,
-                prompt_flag, working_dir, timeout_seconds, env_vars,
+                id, name, type, status, current_task_id, capabilities,
+                description, prompt_template, generated_script,
                 tasks_completed, tasks_failed, avg_completion_seconds,
                 created_at, last_active_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 worker.id,
@@ -715,12 +715,9 @@ class WorkerRepository:
                 worker.status.value,
                 worker.current_task_id,
                 json.dumps(worker.capabilities),
-                worker.command,
-                json.dumps(worker.args),
-                worker.prompt_flag,
-                worker.working_dir,
-                worker.timeout_seconds,
-                json.dumps(worker.env_vars),
+                worker.description,
+                worker.prompt_template,
+                worker.generated_script,
                 worker.tasks_completed,
                 worker.tasks_failed,
                 worker.avg_completion_seconds,
@@ -792,9 +789,8 @@ class WorkerRepository:
             """
             UPDATE workers SET
                 name = ?, type = ?, status = ?, current_task_id = ?, capabilities = ?,
-                command = ?, args = ?, prompt_flag = ?, working_dir = ?,
-                timeout_seconds = ?, env_vars = ?, tasks_completed = ?,
-                tasks_failed = ?, avg_completion_seconds = ?, last_active_at = ?
+                description = ?, prompt_template = ?, generated_script = ?,
+                tasks_completed = ?, tasks_failed = ?, avg_completion_seconds = ?, last_active_at = ?
             WHERE id = ?
             """,
             (
@@ -803,12 +799,9 @@ class WorkerRepository:
                 worker.status.value,
                 worker.current_task_id,
                 json.dumps(worker.capabilities),
-                worker.command,
-                json.dumps(worker.args),
-                worker.prompt_flag,
-                worker.working_dir,
-                worker.timeout_seconds,
-                json.dumps(worker.env_vars),
+                worker.description,
+                worker.prompt_template,
+                worker.generated_script,
                 worker.tasks_completed,
                 worker.tasks_failed,
                 worker.avg_completion_seconds,
@@ -897,6 +890,49 @@ class WorkerRepository:
         if "capabilities" in row.keys():  # noqa: SIM118
             capabilities = json.loads(row["capabilities"]) if row["capabilities"] else []
 
+        # Handle new simplified fields
+        description = None
+        prompt_template = None
+        generated_script = None
+
+        row_keys = row.keys()
+        if "description" in row_keys:  # noqa: SIM118
+            description = row["description"]
+        if "prompt_template" in row_keys:  # noqa: SIM118
+            prompt_template = row["prompt_template"]
+        if "generated_script" in row_keys:  # noqa: SIM118
+            generated_script = row["generated_script"]
+
+        # Handle legacy fields for backwards compatibility
+        command = None
+        args = None
+        prompt_flag = None
+        working_dir = None
+        timeout_seconds = None
+        env_vars = None
+        launcher_script = None
+        launcher_script_inline = None
+        launcher_args = None
+
+        if "command" in row_keys:  # noqa: SIM118
+            command = row["command"]
+        if "args" in row_keys:  # noqa: SIM118
+            args = json.loads(row["args"]) if row["args"] else None
+        if "prompt_flag" in row_keys:  # noqa: SIM118
+            prompt_flag = row["prompt_flag"]
+        if "working_dir" in row_keys:  # noqa: SIM118
+            working_dir = row["working_dir"]
+        if "timeout_seconds" in row_keys:  # noqa: SIM118
+            timeout_seconds = row["timeout_seconds"]
+        if "env_vars" in row_keys:  # noqa: SIM118
+            env_vars = json.loads(row["env_vars"]) if row["env_vars"] else None
+        if "launcher_script" in row_keys:  # noqa: SIM118
+            launcher_script = row["launcher_script"]
+        if "launcher_script_inline" in row_keys:  # noqa: SIM118
+            launcher_script_inline = row["launcher_script_inline"]
+        if "launcher_args" in row_keys:  # noqa: SIM118
+            launcher_args = json.loads(row["launcher_args"]) if row["launcher_args"] else None
+
         return Worker(
             id=row["id"],
             name=row["name"],
@@ -904,12 +940,19 @@ class WorkerRepository:
             status=WorkerStatus(row["status"]),
             current_task_id=row["current_task_id"],
             capabilities=capabilities,
-            command=row["command"],
-            args=json.loads(row["args"]) if row["args"] else [],
-            prompt_flag=row["prompt_flag"],
-            working_dir=row["working_dir"],
-            timeout_seconds=row["timeout_seconds"],
-            env_vars=json.loads(row["env_vars"]) if row["env_vars"] else {},
+            description=description,
+            prompt_template=prompt_template,
+            generated_script=generated_script,
+            # Legacy fields
+            command=command,
+            args=args,
+            prompt_flag=prompt_flag,
+            working_dir=working_dir,
+            timeout_seconds=timeout_seconds,
+            env_vars=env_vars,
+            launcher_script=launcher_script,
+            launcher_script_inline=launcher_script_inline,
+            launcher_args=launcher_args,
             tasks_completed=row["tasks_completed"],
             tasks_failed=row["tasks_failed"],
             avg_completion_seconds=row["avg_completion_seconds"],

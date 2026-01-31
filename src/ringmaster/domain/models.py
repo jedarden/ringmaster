@@ -167,11 +167,20 @@ class Dependency(BaseModel):
 
 
 class Worker(BaseModel):
-    """A coding agent worker (Claude Code, Aider, etc.)."""
+    """A coding agent worker (Claude Code, Aider, etc.).
+
+    Simplified model focused on LLM-generated start scripts.
+    The worker's behavior is defined by its generated_script field,
+    which contains a complete bash script for execution.
+    """
 
     id: str = Field(default_factory=lambda: f"worker-{uuid4().hex[:8]}")
-    name: str
-    type: str  # claude-code, aider, codex, etc.
+    name: str  # Worker name/label
+    description: str | None = None  # Natural language description of what this worker does
+
+    # Type classification for UI grouping and filtering
+    type: str  # claude-code, aider, codex, goose, generic, custom
+
     status: WorkerStatus = WorkerStatus.OFFLINE
     current_task_id: str | None = None
 
@@ -179,13 +188,19 @@ class Worker(BaseModel):
     # e.g., ["python", "typescript", "security", "refactoring"]
     capabilities: list[str] = Field(default_factory=list)
 
-    # Configuration
-    command: str  # CLI command to invoke
-    args: list[str] = Field(default_factory=list)
-    prompt_flag: str = "-p"  # Flag to pass prompt
-    working_dir: str | None = None
-    timeout_seconds: int = 1800  # 30 minutes default
-    env_vars: dict[str, str] = Field(default_factory=dict)
+    # Prompt template injected when worker executes a task
+    # Supports placeholders: {task}, {context}, {project}, {capabilities}
+    # Example: "You are a Python expert. Focus on clean, tested code.\n\n{task}"
+    prompt_template: str | None = None
+
+    # The LLM-generated bash start script
+    # This is a complete bash script that:
+    # - Sets up environment
+    # - Handles signals (SIGINT, SIGTERM)
+    # - Polls for tasks via ringmaster CLI
+    # - Executes the appropriate AI coding tool
+    # - Reports results back
+    generated_script: str | None = None
 
     # Stats
     tasks_completed: int = 0
@@ -195,6 +210,23 @@ class Worker(BaseModel):
     # Timestamps
     created_at: datetime = Field(default_factory=utc_now)
     last_active_at: datetime | None = None
+
+    # Legacy fields for backwards compatibility - deprecated
+    # These are kept for migration purposes and reading old data
+    command: str | None = None
+    args: list[str] | None = None
+    prompt_flag: str | None = None
+    working_dir: str | None = None
+    timeout_seconds: int | None = None
+    env_vars: dict[str, str] | None = None
+    launcher_script: str | None = None
+    launcher_script_inline: str | None = None
+    launcher_args: list[str] | None = None
+
+    @property
+    def has_script(self) -> bool:
+        """Check if this worker has a generated script."""
+        return bool(self.generated_script)
 
 
 class ChatMessage(BaseModel):
