@@ -186,6 +186,7 @@ The user responds, and work continues.
 | [12-operational-adrs.md](docs/12-operational-adrs.md) | Scaling, rate limits, knowledge persistence, notifications, audit |
 | [13-secrets-handling-adr.md](docs/13-secrets-handling-adr.md) | Multi-layer secrets management, sandboxing, detection, proxy pattern |
 | [14-mvp-bootstrap-adr.md](docs/14-mvp-bootstrap-adr.md) | MVP definition, bootstrap sequence, what Ringmaster builds vs requires |
+| [15-worker-configuration-adr.md](docs/15-worker-configuration-adr.md) | Worker templates, configuration flow, script generation, lifecycle |
 
 ## References
 
