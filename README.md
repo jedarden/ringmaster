@@ -181,6 +181,11 @@ The user responds, and work continues.
 | [07-user-experience.md](docs/07-user-experience.md) | Mailbox UX, file preview, agents dashboard, reversibility |
 | [08-open-architecture.md](docs/08-open-architecture.md) | Resolved design decisions: git worktrees, validation, routing, security |
 | [09-remaining-decisions.md](docs/09-remaining-decisions.md) | Bead lifecycle, worker spawning, output parsing, operations |
+| [10-self-improvement-adrs.md](docs/10-self-improvement-adrs.md) | ADRs enabling Ringmaster to improve itself (flywheel bootstrap) |
+| [11-coordination-adrs.md](docs/11-coordination-adrs.md) | Inter-worker communication, locking, coordinator pattern, MCP |
+| [12-operational-adrs.md](docs/12-operational-adrs.md) | Scaling, rate limits, knowledge persistence, notifications, audit |
+| [13-secrets-handling-adr.md](docs/13-secrets-handling-adr.md) | Multi-layer secrets management, sandboxing, detection, proxy pattern |
+| [14-mvp-bootstrap-adr.md](docs/14-mvp-bootstrap-adr.md) | MVP definition, bootstrap sequence, what Ringmaster builds vs requires |
 
 ## References
 
@@ -190,4 +195,9 @@ The user responds, and work continues.
 
 ## Status
 
-Design phase. Core architecture documented.
+**Implementation phase.** Core architecture implemented, bootstrap in progress.
+
+- ✅ Domain models, API, CLI, frontend
+- ✅ Worker spawning, git worktrees, hot reload
+- ✅ Enrichment pipeline, model routing
+- 🔄 Self-improvement bootstrap (ADR-020 through ADR-023)
