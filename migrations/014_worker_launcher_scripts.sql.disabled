@@ -1,0 +1,24 @@
+-- Add launcher script support to workers table
+-- This allows workers to use custom launcher scripts instead of built-in commands
+
+-- Add launcher_script column (path to script file) if not exists
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we use a try-catch pattern
+-- This migration is idempotent - if columns exist, the error is ignored
+
+BEGIN;
+
+-- Try to add launcher_script column
+-- Ignore error if column already exists (SQLITE_ERROR: duplicate column name)
+ALTER TABLE workers ADD COLUMN launcher_script TEXT;
+
+-- Try to add launcher_script_inline column
+ALTER TABLE workers ADD COLUMN launcher_script_inline TEXT;
+
+-- Try to add launcher_args column (JSON array)
+ALTER TABLE workers ADD COLUMN launcher_args TEXT;
+
+COMMIT;
+
+-- Track migration
+INSERT OR IGNORE INTO _migrations (version, applied_at)
+VALUES (14, CURRENT_TIMESTAMP);

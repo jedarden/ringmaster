@@ -9,6 +9,17 @@ from ringmaster.worker.monitor import (
     WorkerMonitor,
     recommend_recovery,
 )
+from ringmaster.worker.natural import (
+    WorkerConfig,
+    WorkerDefinition,
+    WorkerRegistry,
+    create_worker,
+    get_worker,
+    list_all_workers,
+    list_workers,
+    parse_worker_description,
+    register_worker,
+)
 from ringmaster.worker.platforms import AiderWorker, ClaudeCodeWorker
 from ringmaster.worker.spawner import SpawnedWorker, SpawnStatus, WorkerSpawner
 from ringmaster.worker.validator import (
@@ -39,4 +50,14 @@ __all__ = [
     "ValidationStatus",
     "ValidatorConfig",
     "validate_task",
+    # Natural language worker configuration
+    "WorkerConfig",
+    "WorkerDefinition",
+    "WorkerRegistry",
+    "create_worker",
+    "get_worker",
+    "list_workers",
+    "list_all_workers",
+    "parse_worker_description",
+    "register_worker",
 ]

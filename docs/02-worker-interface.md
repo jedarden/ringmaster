@@ -162,6 +162,82 @@ timeout_seconds = 1200
 max_concurrent = 2
 ```
 
+## Launcher Scripts
+
+For maximum flexibility, workers can use **custom launcher scripts** instead of built-in commands. This allows:
+
+1. **Custom API endpoints** - Use Claude Max, Z.AI, or other providers
+2. **Custom environment variables** - Pass API keys, model settings
+3. **Complex launch logic** - Pre-flight checks, configuration loading
+4. **Model-specific workers** - Different workers for Sonnet, Opus, Haiku
+
+### Launcher Script Environment
+
+When a launcher script is invoked, Ringmaster sets these environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `RINGMASTER_PROMPT_FILE` | Path to file containing the enriched prompt |
+| `RINGMASTER_WORKING_DIR` | Working directory for the task |
+| `RINGMASTER_TASK_ID` | Task/bead identifier |
+| `RINGMASTER_WORKER_ID` | Worker identifier |
+| `RINGMASTER_LOG_FILE` | Path to worker log file |
+
+### Example: Custom Launcher Script
+
+```bash
+#!/bin/bash
+# workers/claude-max-launcher.sh
+
+# Read environment variables
+PROMPT_FILE="${RINGMASTER_PROMPT_FILE}"
+WORKING_DIR="${RINGMASTER_WORKING_DIR}"
+
+# Custom configuration
+export CLAUDE_MAX_API_KEY="${CLAUDE_MAX_API_KEY}"
+export CLAUDE_MAX_BASE_URL="${CLAUDE_MAX_BASE_URL}"
+
+# Execute with custom endpoint
+cd "$WORKING_DIR" || exit 1
+claude --print --dangerously-skip-permissions \
+    --api-url "$CLAUDE_MAX_BASE_URL" \
+    --prompt "$(cat "$PROMPT_FILE")"
+```
+
+### Registering Workers with Launcher Scripts
+
+```bash
+# Using CLI
+ringmaster worker add claude-max-1 \
+  --type claude-code \
+  --launcher-script /path/to/claude-max-launcher.sh \
+  --capabilities python rust
+
+# Spawn with launcher script
+ringmaster worker spawn claude-max-1 \
+  --type claude-code \
+  --launcher-script ./workers/claude-max-launcher.sh \
+  --capabilities python
+```
+
+### Inline Launcher Scripts
+
+Alternatively, store the script content directly in the worker configuration:
+
+```python
+worker = Worker(
+    name="custom-worker",
+    type="launcher",
+    launcher_script_inline='''#!/bin/bash
+cd "$RINGMASTER_WORKING_DIR" || exit 1
+my-agent --prompt "$(cat $RINGMASTER_PROMPT_FILE)"
+''',
+    capabilities=["python"],
+)
+```
+
+See `workers/README.md` for more examples and documentation.
+
 ## Invocation Flow
 
 ```
