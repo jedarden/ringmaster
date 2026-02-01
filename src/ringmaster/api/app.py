@@ -3,9 +3,11 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from ringmaster.api.routes import (
     chat,
@@ -14,11 +16,13 @@ from ringmaster.api.routes import (
     files,
     graph,
     input,
+    lifecycle,
     logs,
     metrics,
     outcomes,
     projects,
     queue,
+    settings_ai,
     tasks,
     undo,
     workers,
@@ -79,12 +83,29 @@ def create_app() -> FastAPI:
     app.include_router(undo.router, tags=["undo"])  # Already has /api/undo prefix
     app.include_router(enricher.router, prefix="/api/enricher", tags=["enricher"])
     app.include_router(outcomes.router, prefix="/api", tags=["outcomes"])
+    app.include_router(settings_ai.router, prefix="/api/settings", tags=["settings-ai"])
+    app.include_router(lifecycle.router, prefix="/api/lifecycle", tags=["lifecycle"])
     app.include_router(ws.router, prefix="/ws", tags=["websocket"])
 
     @app.get("/health")
     async def health_check() -> dict:
         """Health check endpoint."""
         return {"status": "healthy", "version": "0.1.0"}
+
+    # Serve static frontend files
+    frontend_dist = Path(__file__).parent.parent.parent.parent / "frontend" / "dist"
+    if frontend_dist.exists():
+        app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
+
+        @app.get("/")
+        async def serve_frontend() -> dict:
+            """Serve the frontend index.html."""
+            from fastapi.responses import FileResponse
+
+            index_file = frontend_dist / "index.html"
+            if index_file.exists():
+                return FileResponse(index_file)
+            return {"detail": "Frontend not built"}
 
     return app
 

@@ -1902,3 +1902,130 @@ class ReasoningBankRepository:
             reflection=row["reflection"],
             created_at=datetime.fromisoformat(row["created_at"]),
         )
+
+
+class LifecycleRepository:
+    """Repository for task lifecycle tracking."""
+
+    def __init__(self, db: Database):
+        self.db = db
+
+    async def create_lifecycle(self, lifecycle: "TaskLifecycle") -> "TaskLifecycle":
+        """Create a new task lifecycle."""
+        from ringmaster.lifecycle.models import TaskLifecycle
+
+        await self.db.execute(
+            """
+            INSERT INTO task_lifecycles (id, task_id, project_id, deployment_model, steps, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                lifecycle.id,
+                lifecycle.task_id,
+                lifecycle.project_id,
+                lifecycle.deployment_model.value,
+                json.dumps([step.to_dict() for step in lifecycle.steps]),
+                lifecycle.created_at.isoformat(),
+                lifecycle.updated_at.isoformat(),
+            ),
+        )
+        await self.db.commit()
+        return lifecycle
+
+    async def get_lifecycle(self, lifecycle_id: str) -> "TaskLifecycle | None":
+        """Get a lifecycle by ID."""
+        row = await self.db.fetchone(
+            "SELECT * FROM task_lifecycles WHERE id = ?", (lifecycle_id,)
+        )
+        if not row:
+            return None
+        return self._row_to_lifecycle(row)
+
+    async def get_lifecycle_by_task(self, task_id: str) -> "TaskLifecycle | None":
+        """Get lifecycle for a task."""
+        row = await self.db.fetchone(
+            "SELECT * FROM task_lifecycles WHERE task_id = ?", (task_id,)
+        )
+        if not row:
+            return None
+        return self._row_to_lifecycle(row)
+
+    async def list_lifecycles(
+        self,
+        project_id: str | None = None,
+        deployment_model: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list["TaskLifecycle"]:
+        """List lifecycles with optional filters."""
+        query = "SELECT * FROM task_lifecycles WHERE 1=1"
+        params: list[Any] = []
+
+        if project_id:
+            query += " AND project_id = ?"
+            params.append(project_id)
+
+        if deployment_model:
+            query += " AND deployment_model = ?"
+            params.append(deployment_model)
+
+        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+
+        rows = await self.db.fetchall(query, tuple(params))
+        return [self._row_to_lifecycle(row) for row in rows]
+
+    async def update_lifecycle(self, lifecycle: "TaskLifecycle") -> "TaskLifecycle":
+        """Update an existing lifecycle."""
+        await self.db.execute(
+            """
+            UPDATE task_lifecycles SET
+                steps = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                json.dumps([step.to_dict() for step in lifecycle.steps]),
+                lifecycle.updated_at.isoformat(),
+                lifecycle.id,
+            ),
+        )
+        await self.db.commit()
+        return lifecycle
+
+    async def delete_lifecycle(self, lifecycle_id: str) -> bool:
+        """Delete a lifecycle."""
+        cursor = await self.db.execute(
+            "DELETE FROM task_lifecycles WHERE id = ?", (lifecycle_id,)
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    async def delete_lifecycle_by_task(self, task_id: str) -> bool:
+        """Delete lifecycle for a task."""
+        cursor = await self.db.execute(
+            "DELETE FROM task_lifecycles WHERE task_id = ?", (task_id,)
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    def _row_to_lifecycle(self, row: Any) -> "TaskLifecycle":
+        """Convert a database row to a TaskLifecycle."""
+        from ringmaster.lifecycle.models import (
+            DeploymentModel,
+            TaskLifecycle,
+            TaskLifecycleStep,
+        )
+
+        steps_data = json.loads(row["steps"]) if row["steps"] else []
+        steps = [TaskLifecycleStep.from_dict(s) for s in steps_data]
+
+        return TaskLifecycle(
+            id=row["id"],
+            task_id=row["task_id"],
+            project_id=row["project_id"],
+            deployment_model=DeploymentModel(row["deployment_model"]),
+            steps=steps,
+            created_at=datetime.fromisoformat(row["created_at"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )

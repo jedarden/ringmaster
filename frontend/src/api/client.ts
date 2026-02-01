@@ -1309,4 +1309,210 @@ export async function abortRevert(projectId: string): Promise<RevertResponse> {
   return handleResponse<RevertResponse>(response);
 }
 
+// AI Settings Generation API
+
+import type { NLToSettingsRequest, NLToSettingsResponse, AIStatusResponse } from "../types";
+
+/**
+ * Convert natural language to structured settings using AI.
+ * Supports worker, project, and other settings types.
+ */
+export async function naturalLanguageToSettings(
+  request: NLToSettingsRequest
+): Promise<NLToSettingsResponse> {
+  const response = await fetch(`${API_BASE}/settings/nl-to-settings`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  return handleResponse<NLToSettingsResponse>(response);
+}
+
+/**
+ * Check if AI settings generation is enabled and configured.
+ */
+export async function getAIStatus(): Promise<AIStatusResponse> {
+  const response = await fetch(`${API_BASE}/settings/ai-status`);
+  return handleResponse<AIStatusResponse>(response);
+}
+
+// Task Lifecycle API
+
+import type { TaskLifecycle, DeploymentModel, DeploymentModelInfo, LifecycleStepName } from "../types";
+
+/**
+ * Create a new task lifecycle.
+ */
+export async function createLifecycle(
+  taskId: string,
+  projectId: string,
+  deploymentModel: DeploymentModel = 'none'
+): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      task_id: taskId,
+      project_id: projectId,
+      deployment_model: deploymentModel,
+    }),
+  });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Get lifecycle for a task.
+ */
+export async function getLifecycle(taskId: string): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}`);
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * List lifecycles with optional filters.
+ */
+export async function listLifecycles(params?: {
+  projectId?: string;
+  deploymentModel?: DeploymentModel;
+  limit?: number;
+  offset?: number;
+}): Promise<TaskLifecycle[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.projectId) searchParams.set("project_id", params.projectId);
+  if (params?.deploymentModel) searchParams.set("deployment_model", params.deploymentModel);
+  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.offset) searchParams.set("offset", params.offset.toString());
+
+  const query = searchParams.toString();
+  const response = await fetch(`${API_BASE}/lifecycle${query ? `?${query}` : ""}`);
+  return handleResponse<TaskLifecycle[]>(response);
+}
+
+/**
+ * Start a lifecycle step.
+ */
+export async function startLifecycleStep(
+  taskId: string,
+  stepName: LifecycleStepName,
+  metadata?: Record<string, unknown>
+): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}/steps/${stepName}/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Complete a lifecycle step.
+ */
+export async function completeLifecycleStep(
+  taskId: string,
+  stepName: LifecycleStepName,
+  metadata?: Record<string, unknown>
+): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}/steps/${stepName}/complete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Mark a lifecycle step as failed.
+ */
+export async function failLifecycleStep(
+  taskId: string,
+  stepName: LifecycleStepName,
+  error: string,
+  metadata?: Record<string, unknown>
+): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}/steps/${stepName}/fail?error=${encodeURIComponent(error)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Skip a lifecycle step.
+ */
+export async function skipLifecycleStep(
+  taskId: string,
+  stepName: LifecycleStepName,
+  reason?: string
+): Promise<TaskLifecycle> {
+  const url = reason
+    ? `${API_BASE}/lifecycle/${taskId}/steps/${stepName}/skip?reason=${encodeURIComponent(reason)}`
+    : `${API_BASE}/lifecycle/${taskId}/steps/${stepName}/skip`;
+  const response = await fetch(url, { method: "POST" });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Transition to a step, completing all previous steps.
+ */
+export async function transitionLifecycle(
+  taskId: string,
+  stepName: LifecycleStepName,
+  metadata?: Record<string, unknown>
+): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}/transition?step_name=${stepName}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Mark lifecycle as done.
+ */
+export async function markLifecycleDone(
+  taskId: string,
+  metadata?: Record<string, unknown>
+): Promise<TaskLifecycle> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}/done`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ metadata }),
+  });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Mark lifecycle as failed.
+ */
+export async function markLifecycleFailed(
+  taskId: string,
+  error: string,
+  failedStep?: LifecycleStepName
+): Promise<TaskLifecycle> {
+  let url = `${API_BASE}/lifecycle/${taskId}/failed?error=${encodeURIComponent(error)}`;
+  if (failedStep) url += `&failed_step=${failedStep}`;
+  const response = await fetch(url, { method: "POST" });
+  return handleResponse<TaskLifecycle>(response);
+}
+
+/**
+ * Delete lifecycle for a task.
+ */
+export async function deleteLifecycle(taskId: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/lifecycle/${taskId}`, {
+    method: "DELETE",
+  });
+  await handleResponse<{ status: string }>(response);
+}
+
+/**
+ * Get available deployment models and their steps.
+ */
+export async function getDeploymentModels(): Promise<DeploymentModelInfo[]> {
+  const response = await fetch(`${API_BASE}/lifecycle/models/available`);
+  return handleResponse<DeploymentModelInfo[]>(response);
+}
+
 export { ApiError };

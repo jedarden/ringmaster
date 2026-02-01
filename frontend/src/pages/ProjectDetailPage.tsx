@@ -12,6 +12,7 @@ import { QuestionPanel } from "../components/QuestionPanel";
 import { ValidationPanel } from "../components/ValidationPanel";
 import { TaskComplexityBadge } from "../components/TaskComplexityBadge";
 import { ProjectSettingsModal } from "../components/ProjectSettingsModal";
+import { TaskLifecycleView } from "../components/TaskLifecycleView";
 
 export function ProjectDetailPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -27,6 +28,7 @@ export function ProjectDetailPage() {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [bulkLoading, setBulkLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [lifecycleTaskId, setLifecycleTaskId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!projectId) return;
@@ -626,6 +628,13 @@ export function ProjectDetailPage() {
                                 </option>
                               ))}
                             </select>
+                            <button
+                              onClick={() => setLifecycleTaskId(lifecycleTaskId === task.id ? null : task.id)}
+                              className={`lifecycle-btn ${lifecycleTaskId === task.id ? "active" : ""}`}
+                              title="View lifecycle"
+                            >
+                              ⟳
+                            </button>
                             <button onClick={() => handleDeleteTask(task.id)} className="delete-btn">
                               X
                             </button>
@@ -713,6 +722,15 @@ export function ProjectDetailPage() {
         <div className="project-chat-sidebar">
           {projectId && (
             <>
+              {lifecycleTaskId && (
+                <TaskLifecycleView
+                  taskId={lifecycleTaskId}
+                  projectId={projectId}
+                  taskTitle={tasks.find(t => t.id === lifecycleTaskId)?.title}
+                  deploymentModel={(project?.settings as Record<string, unknown>)?.deployment_model as "none" | "hot_reload" | "ci_cd" | "gitops" | "manual" | "webhook" | undefined}
+                  onClose={() => setLifecycleTaskId(null)}
+                />
+              )}
               <ValidationPanel
                 tasks={tasks}
                 workingDir={project?.repo_url || undefined}

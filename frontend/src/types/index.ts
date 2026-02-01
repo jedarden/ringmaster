@@ -941,3 +941,58 @@ export interface AIStatusResponse {
   provider: string;
   has_api_key: boolean;
 }
+
+// Task Lifecycle types
+
+export type DeploymentModel = 'none' | 'hot_reload' | 'ci_cd' | 'gitops' | 'manual' | 'webhook';
+
+export type LifecycleStepName =
+  | 'created'
+  | 'assigned'
+  | 'prompt_built'
+  | 'executing'
+  | 'changes_made'
+  | 'committed'
+  | 'pushed'
+  | 'pr_created'
+  | 'ci_running'
+  | 'ci_passed'
+  | 'ci_failed'
+  | 'merged'
+  | 'reloading'
+  | 'health_check'
+  | 'deploying'
+  | 'deploy_success'
+  | 'deploy_failed'
+  | 'rolled_back'
+  | 'done'
+  | 'failed';
+
+export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+
+export interface LifecycleStep {
+  name: LifecycleStepName;
+  status: StepStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  metadata: Record<string, unknown>;
+  error: string | null;
+}
+
+export interface TaskLifecycle {
+  id: string;
+  task_id: string;
+  project_id: string;
+  deployment_model: DeploymentModel;
+  steps: LifecycleStep[];
+  created_at: string;
+  updated_at: string;
+  is_complete: boolean;
+  has_failed: boolean;
+  current_step: LifecycleStepName | null;
+}
+
+export interface DeploymentModelInfo {
+  model: DeploymentModel;
+  steps: LifecycleStepName[];
+}
