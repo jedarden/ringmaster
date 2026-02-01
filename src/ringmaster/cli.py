@@ -1239,7 +1239,23 @@ def report_result(
                         await task_repo.update_task(dep_task)
                         console.print(f"  [green]Unblocked dependent task: {dep_task.title}[/green]")
 
+            # Clean up task resources (worktree, branch, temp files)
+            await _cleanup_task_resources(task_id, worker.id if worker else None)
+
     run_async(do_report)
+
+
+async def _cleanup_task_resources(task_id: str, worker_id: str | None) -> None:
+    """Clean up resources after task completion."""
+    from ringmaster.cleanup import cleanup_task_resources
+
+    try:
+        stats = await cleanup_task_resources(task_id, worker_id)
+        if stats.worktrees_removed or stats.branches_removed or stats.temp_files_removed:
+            console.print(f"  [dim]Cleaned up: {stats.worktrees_removed} worktrees, "
+                         f"{stats.branches_removed} branches, {stats.temp_files_removed} temp files[/dim]")
+    except Exception as e:
+        console.print(f"  [yellow]Warning: cleanup failed: {e}[/yellow]")
 
 
 async def _handle_self_improvement(task_id: str) -> None:
@@ -1446,6 +1462,240 @@ def update_rollback(backup: str | None) -> None:
         console.print("[red]✗[/red] Rollback failed")
         console.print("[dim]No backup found or restore failed[/dim]")
         raise SystemExit(1)
+
+
+# =============================================================================
+# Cleanup Commands
+# =============================================================================
+
+
+@cli.group()
+def cleanup() -> None:
+    """Clean up resources (worktrees, branches, temp files)."""
+    pass
+
+
+@cleanup.command("status")
+def cleanup_status() -> None:
+    """Show current resource usage."""
+    from ringmaster.cleanup import ResourceCleaner
+
+    async def do_status() -> None:
+        cleaner = ResourceCleaner()
+        status = await cleaner.get_status()
+
+        console.print("[bold]Resource Usage[/bold]\n")
+
+        # Worktrees
+        wt = status["worktrees"]
+        wt_size = wt["bytes"] / (1024 * 1024)  # MB
+        console.print(f"  Worktrees:   {wt['count']:3d}  ({wt_size:.1f} MB)")
+
+        # Branches
+        br = status["branches"]
+        console.print(f"  Branches:    {br['count']:3d}")
+
+        # Temp files
+        tf = status["temp_files"]
+        tf_size = tf["bytes"] / 1024  # KB
+        console.print(f"  Temp files:  {tf['count']:3d}  ({tf_size:.1f} KB)")
+
+        # Scripts
+        sc = status["scripts"]
+        sc_size = sc["bytes"] / 1024  # KB
+        console.print(f"  Scripts:     {sc['count']:3d}  ({sc_size:.1f} KB)")
+
+        total_mb = (wt["bytes"] + tf["bytes"] + sc["bytes"]) / (1024 * 1024)
+        console.print(f"\n  [bold]Total:     {total_mb:.1f} MB[/bold]")
+
+    asyncio.run(do_status())
+
+
+@cleanup.command("worktrees")
+@click.option("--dry-run", is_flag=True, help="Show what would be removed")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def cleanup_worktrees(dry_run: bool, force: bool) -> None:
+    """Remove stale git worktrees."""
+    from ringmaster.cleanup import ResourceCleaner
+
+    async def do_cleanup() -> None:
+        cleaner = ResourceCleaner()
+        status = await cleaner.get_status()
+
+        if status["worktrees"]["count"] == 0:
+            console.print("[green]No worktrees to clean up[/green]")
+            return
+
+        size_mb = status["worktrees"]["bytes"] / (1024 * 1024)
+        console.print(f"Found {status['worktrees']['count']} worktrees ({size_mb:.1f} MB)")
+
+        if dry_run:
+            console.print("[dim]Dry run - no changes made[/dim]")
+            return
+
+        if not force and not click.confirm("Remove all stale worktrees?"):
+            console.print("Aborted")
+            return
+
+        stats = await cleaner.cleanup_stale_worktrees()
+        console.print(f"[green]Removed {stats.worktrees_removed} worktrees[/green]")
+        if stats.bytes_freed:
+            console.print(f"  Freed {stats.bytes_freed / (1024 * 1024):.1f} MB")
+        for error in stats.errors:
+            console.print(f"  [red]Error:[/red] {error}")
+
+    asyncio.run(do_cleanup())
+
+
+@cleanup.command("branches")
+@click.option("--dry-run", is_flag=True, help="Show what would be removed")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def cleanup_branches(dry_run: bool, force: bool) -> None:
+    """Remove orphaned ringmaster/bd-* branches."""
+    from ringmaster.cleanup import ResourceCleaner
+
+    async def do_cleanup() -> None:
+        cleaner = ResourceCleaner()
+        status = await cleaner.get_status()
+
+        if status["branches"]["count"] == 0:
+            console.print("[green]No orphan branches to clean up[/green]")
+            return
+
+        console.print(f"Found {status['branches']['count']} ringmaster branches")
+
+        if dry_run:
+            console.print("[dim]Dry run - no changes made[/dim]")
+            return
+
+        if not force and not click.confirm("Remove orphaned branches?"):
+            console.print("Aborted")
+            return
+
+        stats = await cleaner.cleanup_stale_branches()
+        console.print(f"[green]Removed {stats.branches_removed} branches[/green]")
+        for error in stats.errors:
+            console.print(f"  [red]Error:[/red] {error}")
+
+    asyncio.run(do_cleanup())
+
+
+@cleanup.command("temp")
+@click.option("--dry-run", is_flag=True, help="Show what would be removed")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def cleanup_temp(dry_run: bool, force: bool) -> None:
+    """Remove stale temporary files."""
+    from ringmaster.cleanup import ResourceCleaner
+
+    async def do_cleanup() -> None:
+        cleaner = ResourceCleaner()
+        status = await cleaner.get_status()
+
+        total = status["temp_files"]["count"] + status["scripts"]["count"]
+        if total == 0:
+            console.print("[green]No temp files to clean up[/green]")
+            return
+
+        console.print(f"Found {status['temp_files']['count']} temp files, {status['scripts']['count']} scripts")
+
+        if dry_run:
+            console.print("[dim]Dry run - no changes made[/dim]")
+            return
+
+        if not force and not click.confirm("Remove stale temp files?"):
+            console.print("Aborted")
+            return
+
+        stats1 = await cleaner.cleanup_stale_temp_files()
+        stats2 = await cleaner.cleanup_stale_scripts()
+        stats = stats1 + stats2
+
+        console.print(f"[green]Removed {stats.temp_files_removed} temp files, {stats.scripts_removed} scripts[/green]")
+        if stats.bytes_freed:
+            console.print(f"  Freed {stats.bytes_freed / 1024:.1f} KB")
+        for error in stats.errors:
+            console.print(f"  [red]Error:[/red] {error}")
+
+    asyncio.run(do_cleanup())
+
+
+@cleanup.command("all")
+@click.option("--dry-run", is_flag=True, help="Show what would be removed")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation")
+def cleanup_all(dry_run: bool, force: bool) -> None:
+    """Remove all stale resources."""
+    from ringmaster.cleanup import ResourceCleaner
+
+    async def do_cleanup() -> None:
+        cleaner = ResourceCleaner()
+        status = await cleaner.get_status()
+
+        total_count = (
+            status["worktrees"]["count"]
+            + status["branches"]["count"]
+            + status["temp_files"]["count"]
+            + status["scripts"]["count"]
+        )
+
+        if total_count == 0:
+            console.print("[green]No resources to clean up[/green]")
+            return
+
+        total_bytes = status["worktrees"]["bytes"] + status["temp_files"]["bytes"] + status["scripts"]["bytes"]
+        total_mb = total_bytes / (1024 * 1024)
+
+        console.print(f"Found {total_count} resources ({total_mb:.1f} MB)")
+        console.print(f"  - {status['worktrees']['count']} worktrees")
+        console.print(f"  - {status['branches']['count']} branches")
+        console.print(f"  - {status['temp_files']['count']} temp files")
+        console.print(f"  - {status['scripts']['count']} scripts")
+
+        if dry_run:
+            console.print("\n[dim]Dry run - no changes made[/dim]")
+            return
+
+        if not force and not click.confirm("\nRemove all stale resources?"):
+            console.print("Aborted")
+            return
+
+        stats = await cleaner.cleanup_all_stale()
+
+        console.print("\n[green]Cleanup complete:[/green]")
+        console.print(f"  - Worktrees removed: {stats.worktrees_removed}")
+        console.print(f"  - Branches removed:  {stats.branches_removed}")
+        console.print(f"  - Temp files removed: {stats.temp_files_removed}")
+        console.print(f"  - Scripts removed:   {stats.scripts_removed}")
+        if stats.bytes_freed:
+            console.print(f"  - Space freed: {stats.bytes_freed / (1024 * 1024):.1f} MB")
+        for error in stats.errors:
+            console.print(f"  [red]Error:[/red] {error}")
+
+    asyncio.run(do_cleanup())
+
+
+@cleanup.command("task")
+@click.argument("task_id")
+@click.option("--worker-id", "-w", help="Worker ID for worktree cleanup")
+def cleanup_task_cmd(task_id: str, worker_id: str | None) -> None:
+    """Clean up resources for a specific task."""
+    from ringmaster.cleanup import cleanup_task_resources
+
+    async def do_cleanup() -> None:
+        stats = await cleanup_task_resources(task_id, worker_id)
+
+        console.print(f"[green]Cleanup for task {task_id}:[/green]")
+        if stats.worktrees_removed:
+            console.print(f"  - Worktree removed")
+        if stats.branches_removed:
+            console.print(f"  - Branch removed")
+        if stats.temp_files_removed:
+            console.print(f"  - {stats.temp_files_removed} temp files removed")
+        if not (stats.worktrees_removed or stats.branches_removed or stats.temp_files_removed):
+            console.print("  - No resources found")
+        for error in stats.errors:
+            console.print(f"  [red]Error:[/red] {error}")
+
+    asyncio.run(do_cleanup())
 
 
 def main() -> None:
