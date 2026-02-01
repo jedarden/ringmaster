@@ -381,7 +381,15 @@ def worker_list() -> None:
 @click.argument("name")
 @click.option("--type", "-t", "worker_type", default="claude-code", help="Worker type")
 @click.option("--command", "-c", default="claude", help="Command to run")
-def worker_add(name: str, worker_type: str, command: str) -> None:
+@click.option("--launcher-script", "-L", type=click.Path(exists=True), help="Path to launcher script")
+@click.option("--launcher-args", "-A", multiple=True, help="Additional arguments for launcher script")
+def worker_add(
+    name: str,
+    worker_type: str,
+    command: str,
+    launcher_script: str | None,
+    launcher_args: tuple[str, ...],
+) -> None:
     """Add a new worker."""
     from ringmaster.db import WorkerRepository, get_database
     from ringmaster.domain import Worker
@@ -393,11 +401,223 @@ def worker_add(name: str, worker_type: str, command: str) -> None:
             name=name,
             type=worker_type,
             command=command,
+            launcher_script=launcher_script,
+            launcher_args=list(launcher_args) if launcher_args else None,
         )
         created = await repo.create(worker)
         console.print(f"[green]Added worker: {created.name} ({created.id})[/green]")
+        if created.uses_launcher_script:
+            console.print(f"  Launcher: {created.launcher_script}")
 
-    asyncio.run(do_add())
+    asyncio.run(do_add)
+
+
+@worker.command("create")
+@click.argument("description", required=False)
+@click.option("--worker-id", "-i", help="Custom worker ID")
+@click.option("--interactive", "-I", is_flag=True, help="Interactive mode")
+def worker_create(
+    description: str | None,
+    worker_id: str | None,
+    interactive: bool,
+) -> None:
+    """Create a worker from natural language description.
+
+    Examples:
+        ringmaster worker create "claude code with sonnet for python"
+        ringmaster worker create "aider using claude-3.5-sonnet, good at refactoring"
+        ringmaster worker create --interactive
+
+    Or use -I for interactive mode to describe your worker in plain English.
+    """
+    from ringmaster.db import get_database, WorkerRepository
+    from ringmaster.domain import Worker
+    from ringmaster.worker.natural import (
+        create_worker_from_description,
+        parse_worker_description,
+        suggest_worker_improvements,
+    )
+
+    if interactive:
+        # Interactive mode - prompt for description
+        console.print("\n[bold cyan]Describe your worker in natural language:[/bold cyan]")
+        console.print("  Example: 'claude code with sonnet for python and typescript tasks'")
+        console.print("  Example: 'aider using claude-3.5-sonnet for refactoring'\n")
+        description = click.prompt("Worker description")
+
+    if not description:
+        console.print("[red]Error: description is required (use -I for interactive mode)[/red]")
+        return
+
+    # Parse the description
+    console.print(f"\n[bold]Parsing:[/bold] {description}")
+    parse_result = parse_worker_description(description)
+
+    if not parse_result.success:
+        console.print(f"[red]Could not understand description:[/red] {parse_result.error}")
+        if parse_result.suggestions:
+            console.print("\n[bold]Suggestions:[/bold]")
+            for suggestion in parse_result.suggestions:
+                console.print(f"  • {suggestion}")
+        return
+
+    # Show what we understood
+    console.print(f"[green]Worker Type:[/green] {parse_result.worker_type}")
+    console.print(f"[green]Model:[/green] {parse_result.model or 'default'}")
+    if parse_result.capabilities:
+        console.print(f"[green]Capabilities:[/green] {', '.join(parse_result.capabilities)}")
+
+    # Generate worker ID if not provided
+    if not worker_id:
+        import uuid
+        worker_id = f"worker-{uuid.uuid4().hex[:8]}"
+
+    # Create the worker
+    async def do_create() -> None:
+        db = await get_database()
+        repo = WorkerRepository(db)
+
+        # Check if worker already exists
+        existing = await repo.get(worker_id)
+        if existing:
+            console.print(f"[yellow]Worker {worker_id} already exists. Updating...[/yellow]")
+            existing.type = parse_result.worker_type
+            existing.name = parse_result.description or existing.name
+            existing.description = parse_result.description
+            existing.capabilities = parse_result.capabilities
+            await repo.update(existing)
+            console.print(f"[green]Updated worker: {worker_id}[/green]")
+        else:
+            worker = Worker(
+                id=worker_id,
+                name=parse_result.description or f"{parse_result.worker_type} worker",
+                description=parse_result.description,
+                type=parse_result.worker_type,
+                capabilities=parse_result.capabilities,
+            )
+            created = await repo.create(worker)
+            console.print(f"[green]Created worker: {worker_id} ({created.name})[/green]")
+
+        # Show suggestions
+        suggestions = suggest_worker_improvements(description)
+        if suggestions:
+            console.print("\n[bold cyan]Tips for better descriptions:[/bold cyan]")
+            for suggestion in suggestions:
+                console.print(f"  • {suggestion}")
+
+    asyncio.run(do_create())
+
+
+@worker.command("types")
+def worker_types() -> None:
+    """List available worker types and their models."""
+    from ringmaster.worker.natural import list_available_workers
+
+    workers = list_available_workers()
+
+    if not workers:
+        console.print("[yellow]No workers found on this system[/yellow]")
+        console.print("\nInstall workers to use them with Ringmaster:")
+        console.print("  • Claude Code: https://github.com/anthropics/claude-code")
+        console.print("  • Aider: https://github.com/Aider-AI/aider")
+        return
+
+    table = Table(title="Available Worker Types")
+    table.add_column("Type", style="cyan")
+    table.add_column("Name", style="green")
+    table.add_column("Available", style="yellow")
+    table.add_column("Default Model")
+    table.add_column("Available Models")
+
+    for w in workers:
+        available_str = "[green]Yes[/green]" if w.is_available() else "[red]No[/red]"
+        default_model = w.default_model or "-"
+        models = ", ".join(w.available_models[:3])  # Show first 3
+        if len(w.available_models) > 3:
+            models += "..."
+
+        table.add_row(
+            w.name,
+            w.display_name,
+            available_str,
+            default_model,
+            models,
+        )
+
+    console.print(table)
+
+    console.print("\n[bold]Usage:[/bold]")
+    console.print("  ringmaster worker create \"claude code with sonnet for python\"")
+    console.print("  ringmaster worker create \"aider using claude-3.5-sonnet\"")
+
+
+@worker.command("update")
+@click.argument("worker_id")
+@click.option("--name", "-n", help="Worker name")
+@click.option("--type", "-t", "worker_type", help="Worker type")
+@click.option("--command", "-c", help="Command to run")
+@click.option("--launcher-script", "-L", type=click.Path(), help="Path to launcher script")
+@click.option("--launcher-script-inline", help="Inline launcher script content")
+@click.option("--launcher-args", "-A", multiple=True, help="Additional arguments for launcher script")
+@click.option("--capabilities", "-c", multiple=True, help="Worker capabilities")
+@click.option("--working-dir", "-w", type=click.Path(), help="Working directory")
+@click.option("--timeout", "-T", type=int, help="Timeout in seconds")
+def worker_update(
+    worker_id: str,
+    name: str | None,
+    worker_type: str | None,
+    command: str | None,
+    launcher_script: str | None,
+    launcher_script_inline: str | None,
+    launcher_args: tuple[str, ...],
+    capabilities: tuple[str, ...],
+    working_dir: str | None,
+    timeout: int | None,
+) -> None:
+    """Update an existing worker.
+
+    Only specified fields will be updated. Use this to change a worker's
+    configuration, capabilities, or launcher script.
+    """
+    from ringmaster.db import WorkerRepository, get_database
+    from ringmaster.domain import Worker
+
+    async def do_update() -> None:
+        db = await get_database()
+        repo = WorkerRepository(db)
+        worker = await repo.get(worker_id)
+        if not worker:
+            console.print(f"[red]Worker {worker_id} not found[/red]")
+            raise SystemExit(1)
+
+        # Update fields that were provided
+        if name is not None:
+            worker.name = name
+        if worker_type is not None:
+            worker.type = worker_type
+        if command is not None:
+            worker.command = command
+        if launcher_script is not None:
+            worker.launcher_script = launcher_script
+        if launcher_script_inline is not None:
+            worker.launcher_script_inline = launcher_script_inline
+        if launcher_args:
+            worker.launcher_args = list(launcher_args)
+        if capabilities:
+            worker.capabilities = list(capabilities)
+        if working_dir is not None:
+            worker.working_dir = working_dir
+        if timeout is not None:
+            worker.timeout_seconds = timeout
+
+        updated = await repo.update(worker)
+        console.print(f"[green]Updated worker: {updated.name} ({updated.id})[/green]")
+        if updated.uses_launcher_script:
+            console.print(f"  Launcher: {updated.launcher_script}")
+        console.print(f"  Type: {updated.type}")
+        console.print(f"  Capabilities: {', '.join(updated.capabilities) or 'None'}")
+
+    asyncio.run(do_update)
 
 
 @worker.command("activate")
@@ -427,6 +647,8 @@ def worker_activate(worker_id: str) -> None:
 @click.option("--capabilities", "-c", multiple=True, help="Worker capabilities")
 @click.option("--worktree", "-w", type=click.Path(), help="Git worktree path")
 @click.option("--command", help="Custom command (for generic workers)")
+@click.option("--launcher-script", "-L", type=click.Path(exists=True), help="Path to launcher script")
+@click.option("--launcher-args", "-A", multiple=True, help="Additional arguments for launcher script")
 @click.option("--log-dir", type=click.Path(), help="Log directory")
 def worker_spawn(
     worker_id: str,
@@ -434,6 +656,8 @@ def worker_spawn(
     capabilities: tuple[str, ...],
     worktree: str | None,
     command: str | None,
+    launcher_script: str | None,
+    launcher_args: tuple[str, ...],
     log_dir: str | None,
 ) -> None:
     """Spawn a worker in a tmux session.
@@ -441,10 +665,18 @@ def worker_spawn(
     Creates a new tmux session running a worker script that:
     - Polls for tasks via `ringmaster pull-bead`
     - Builds prompts via `ringmaster build-prompt`
-    - Executes the worker CLI (claude, aider, etc.)
+    - Executes the worker CLI (claude, aider, etc.) OR custom launcher script
     - Reports results via `ringmaster report-result`
 
-    Worker types: claude-code, aider, codex, goose, generic
+    Worker types: claude-code, aider, codex, goose, generic, launcher
+
+    Use --launcher-script to run a custom script instead of built-in commands.
+    The script will receive environment variables:
+    - RINGMASTER_PROMPT_FILE: Path to file with the enriched prompt
+    - RINGMASTER_WORKING_DIR: Working directory for the task
+    - RINGMASTER_TASK_ID: Task/bead identifier
+    - RINGMASTER_WORKER_ID: Worker identifier
+    - RINGMASTER_LOG_FILE: Path to worker log file
     """
     from ringmaster.db import WorkerRepository, get_database
     from ringmaster.domain import Worker, WorkerStatus
@@ -463,14 +695,20 @@ def worker_spawn(
                 type=worker_type,
                 command=command or worker_type,
                 capabilities=list(capabilities) if capabilities else [],
+                launcher_script=launcher_script,
+                launcher_args=list(launcher_args) if launcher_args else None,
             )
             await worker_repo.create(worker)
             console.print(f"[green]Created worker record: {worker_id}[/green]")
         else:
-            # Update capabilities if provided
+            # Update capabilities and launcher config if provided
             if capabilities:
                 worker.capabilities = list(capabilities)
-                await worker_repo.update(worker)
+            if launcher_script is not None:
+                worker.launcher_script = launcher_script
+            if launcher_args:
+                worker.launcher_args = list(launcher_args)
+            await worker_repo.update(worker)
 
         # Create spawner
         spawner = WorkerSpawner(
@@ -481,10 +719,10 @@ def worker_spawn(
         try:
             spawned = await spawner.spawn(
                 worker_id=worker_id,
+                worker_name=worker.name,
                 worker_type=worker_type,
-                capabilities=list(capabilities) if capabilities else None,
-                worktree_path=worktree,
-                custom_command=command,
+                capabilities=list(capabilities) if capabilities else worker.capabilities,
+                generated_script=worker.generated_script,
             )
 
             # Update worker status
@@ -495,6 +733,8 @@ def worker_spawn(
             console.print(f"  Type: {spawned.worker_type}")
             console.print(f"  Session: {spawned.tmux_session}")
             console.print(f"  Log: {spawned.log_path}")
+            if launcher_script or worker.launcher_script:
+                console.print(f"  Launcher: {launcher_script or worker.launcher_script}")
             console.print(f"\nTo attach: [cyan]{spawner.attach_command(worker_id)}[/cyan]")
 
         except RuntimeError as e:
@@ -893,16 +1133,20 @@ def build_prompt(task_id: str, output: str | None, project_dir: str | None, quie
 @click.option("--exit-code", "-e", type=int, default=0, help="Exit code from worker")
 @click.option("--output-path", "-o", type=click.Path(), help="Path to output file")
 @click.option("--reason", "-r", help="Failure reason (for failed status)")
+@click.option("--changes-committed", is_flag=True, help="Worker committed code changes")
 def report_result(
     task_id: str,
     status: str,
     exit_code: int,
     output_path: str | None,
     reason: str | None,
+    changes_committed: bool,
 ) -> None:
     """Report task completion result.
 
     Called by external workers to report success or failure.
+    If --changes-committed is set and changes affect ringmaster code,
+    triggers hot-reload for self-improvement.
     """
     from datetime import UTC, datetime
 
@@ -936,6 +1180,10 @@ def report_result(
             if worker:
                 worker.tasks_completed += 1
             console.print(f"[green]Task {task_id} marked as completed[/green]")
+
+            # Handle self-improvement if changes were committed
+            if changes_committed:
+                await _handle_self_improvement(task_id)
         else:
             task.attempts += 1
             task.last_failure_reason = reason
@@ -992,6 +1240,65 @@ def report_result(
                         console.print(f"  [green]Unblocked dependent task: {dep_task.title}[/green]")
 
     run_async(do_report)
+
+
+async def _handle_self_improvement(task_id: str) -> None:
+    """Handle self-improvement when code changes are committed.
+
+    Checks if changes affect ringmaster code and triggers hot-reload.
+    """
+    import subprocess
+    from pathlib import Path
+
+    from ringmaster.reload import HotReloader, FileChange
+
+    # Get the last commit's changed files
+    result = subprocess.run(
+        ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        console.print("[yellow]Could not determine changed files[/yellow]")
+        return
+
+    changed_files = result.stdout.strip().split("\n")
+    ringmaster_files = [f for f in changed_files if "ringmaster" in f and f.endswith(".py")]
+
+    if not ringmaster_files:
+        console.print("  No ringmaster code changes, skipping hot-reload")
+        return
+
+    console.print(f"  [cyan]Self-improvement detected: {len(ringmaster_files)} ringmaster files changed[/cyan]")
+    for f in ringmaster_files[:5]:  # Show first 5
+        console.print(f"    - {f}")
+    if len(ringmaster_files) > 5:
+        console.print(f"    ... and {len(ringmaster_files) - 5} more")
+
+    # Create file changes for hot-reload
+    changes = [
+        FileChange(path=Path(f), change_type="modified")
+        for f in ringmaster_files
+    ]
+
+    # Run hot-reload
+    reloader = HotReloader(project_root=Path.cwd())
+
+    console.print("  [cyan]Running tests before hot-reload...[/cyan]")
+    reload_result = await reloader.process_changes(changes)
+
+    if reload_result.status.value == "success":
+        console.print(f"  [green]Hot-reload successful: {len(reload_result.reloaded_modules)} modules reloaded[/green]")
+    elif reload_result.status.value == "rolled_back":
+        console.print(f"  [red]Tests failed, changes rolled back[/red]")
+        if reload_result.test_output:
+            # Show last few lines of test output
+            lines = reload_result.test_output.strip().split("\n")
+            for line in lines[-10:]:
+                console.print(f"    {line}")
+    else:
+        console.print(f"  [red]Hot-reload failed: {reload_result.error_message}[/red]")
 
 
 # =============================================================================
